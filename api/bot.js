@@ -107,6 +107,7 @@ async function sendMessage(chatId, text, extra = {}) {
 
 // ====================== USER MANAGEMENT ======================
 // ====================== USER MANAGEMENT ======================
+// ====================== USER MANAGEMENT ======================
 async function registerUserToFirebase(user) {
   const userRef = ref(rtdb, "users/" + user.id);
   const snapshot = await get(userRef);
@@ -114,20 +115,23 @@ async function registerUserToFirebase(user) {
   if (!snapshot.exists()) {
     const now = new Date().toISOString();
 
-    /** @type {User} */
     const newUser = {
       telegramId: user.id.toString(),
       username: user.username || `user_${user.id}`,
-      balance: 50,             // initial balance 
-      gamesPlayed: 0,          // start at 0
-      gamesWon: 0,             // start at 0
-      totalWinnings: 0,        // start at 0
-      language: "en",          // default language
+      balance: 50,             // initial balance
+      gamesPlayed: 0,
+      gamesWon: 0,
+      totalWinnings: 0,
+      lang: "en",              // keep this consistent with rest of code
       createdAt: now,
       updatedAt: now,
     };
 
     await set(userRef, newUser);
+    console.log(`✅ Registered new user: ${user.id} (${newUser.username})`);
+  } else {
+    const existingUser = snapshot.val();
+    console.log(`ℹ️ User already exists: ${user.id} (${existingUser.username}), balance = ${existingUser.balance}`);
   }
 }
 

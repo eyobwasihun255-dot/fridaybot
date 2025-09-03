@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getDatabase } from 'firebase/database';
 import { getAuth } from 'firebase/auth';
 
+// Firebase configuration with VITE_ for frontend
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBRxd0gLACHrmQ5Jk0RkaY-tjYz9LhKx7g",
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "jackpot-fd988.firebaseapp.com",

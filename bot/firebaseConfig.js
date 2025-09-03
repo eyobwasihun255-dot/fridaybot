@@ -15,6 +15,17 @@ const firebaseConfig = {
   appId: process.env.FIREBASE_APP_ID,
 };
 
+// Add error handling for missing configuration
+if (!firebaseConfig.projectId) {
+  console.error('FIREBASE FATAL ERROR: Missing Firebase Project ID. Please set FIREBASE_PROJECT_ID environment variable.');
+  throw new Error('Firebase Project ID is required');
+}
+
+if (!firebaseConfig.databaseURL) {
+  console.error('FIREBASE FATAL ERROR: Missing Firebase Database URL. Please set FIREBASE_DATABASE_URL environment variable.');
+  throw new Error('Firebase Database URL is required');
+}
+
 const app = initializeApp(firebaseConfig);
 export const rtdb = getDatabase(app);
 export default app;

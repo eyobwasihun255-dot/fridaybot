@@ -120,23 +120,44 @@ npm run bot
 
 ## 🌐 Environment Variables
 
+### For Vercel Deployment (Frontend)
+Set these in your Vercel dashboard under Project Settings > Environment Variables:
+
 ```env
-# Firebase
-VITE_FIREBASE_API_KEY=
-VITE_FIREBASE_AUTH_DOMAIN=
-VITE_FIREBASE_PROJECT_ID=
-VITE_FIREBASE_STORAGE_BUCKET=
-VITE_FIREBASE_MESSAGING_SENDER_ID=
-VITE_FIREBASE_APP_ID=
+# Firebase (Client-side - VITE_ prefix required)
+VITE_FIREBASE_API_KEY=your_api_key_here
+VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+VITE_FIREBASE_DATABASE_URL=https://your_project.firebaseio.com
+VITE_FIREBASE_PROJECT_ID=your_project_id
+VITE_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+VITE_FIREBASE_APP_ID=your_app_id
+```
+
+### For Bot Server (Railway/Heroku/VPS)
+Set these in your server environment:
+
+```env
+# Firebase (Server-side - no VITE_ prefix)
+FIREBASE_API_KEY=your_api_key_here
+FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+FIREBASE_DATABASE_URL=https://your_project.firebaseio.com
+FIREBASE_PROJECT_ID=your_project_id
+FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+FIREBASE_APP_ID=your_app_id
 
 # Telegram
-TELEGRAM_BOT_TOKEN=
-WEBAPP_URL=
-ADMIN_IDS=
+TELEGRAM_BOT_TOKEN=your_bot_token_here
+WEBAPP_URL=https://your_vercel_app.vercel.app
+ADMIN_IDS=123456789,987654321
 
 # Server
 PORT=3001
 ```
+
+### Local Development
+Create a `.env` file in your project root with both sets of variables.
 
 ## 📄 License
 

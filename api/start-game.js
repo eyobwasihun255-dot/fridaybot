@@ -50,15 +50,14 @@ function pickWinningNumbers(card) {
 
   // Pick a random winning pattern
   const winningPattern = patterns[Math.floor(Math.random() * patterns.length)];
-
   // Generate the rest of the numbers randomly
-  const allNumbers = new Set(winningPattern);
+   const allNumbers = new Set(winningPattern);
   while (allNumbers.size < 25) { // or up to 75 for full pool
     const num = Math.floor(Math.random() * 75) + 1;
     allNumbers.add(num);
   }
 
-  return Array.from(allNumbers);
+    return Array.from(allNumbers);
 }
 
 export default async function handler(req, res) {
@@ -106,7 +105,15 @@ if (playerIds.length > 0) {
       }
 
       // Remove 1–2 numbers from the final drawn set to make other cards miss
-      missNumbers.forEach(n => almostNumbers.delete(n));
+       missNumbers.forEach(n => almostNumbers.delete(n));
+
+    // Ensure minimum pool of numbers (25 or more)
+    while (almostNumbers.size < 25) {
+      const num = Math.floor(Math.random() * 75) + 1;
+      almostNumbers.add(num);
+    }
+
+    drawnNumbers = Array.from(almostNumbers);
     });
 
     drawnNumbers = Array.from(almostNumbers);

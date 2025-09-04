@@ -8,7 +8,7 @@ interface BingoCard {
   serialNumber: number;
   claimed: boolean;
   claimedBy?: string;
-  roomId?: string; // ✅ Add roomId property
+  roomId?: string; // 
 }
 
 interface Room {

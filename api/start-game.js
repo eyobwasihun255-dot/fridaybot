@@ -137,82 +137,72 @@ export default async function handler(req, res) {
   let gameData = null;
 
   try {
-    await runTransaction(roomRef, (room) => {
-      if (!room || room.gameStatus !== "countdown") return room;
+     await runTransaction(roomRef, (room) => {
+  if (!room || room.gameStatus !== "countdown") return room;
 
-      const gameId = uuidv4();
-      const playerIds = Object.keys(room.players || {});
-      let drawnNumbers = [];
-      let winnerCard = null;
+  const gameId = uuidv4();
+  const playerIds = Object.keys(room.players || {});
+  let drawnNumbers = [];
+  let winnerCard = null;
 
-      if (playerIds.length > 0) {
-        // Pick exactly one winner
-        const winnerId = playerIds[Math.floor(Math.random() * playerIds.length)];
-winnerCard = room.bingoCards && room.players[winnerId]
-  ? room.bingoCards[room.players[winnerId].cardId]
-  : null;
+  if (playerIds.length > 0) {
+    // Pick exactly one winner
+    const winnerId = playerIds[Math.floor(Math.random() * playerIds.length)];
+    winnerCard = room.bingoCards && room.players[winnerId]
+      ? room.bingoCards[room.players[winnerId].cardId]
+      : null;
 
-const allCards = room.bingoCards ? Object.values(room.bingoCards) : [];
+    const allCards = room.bingoCards ? Object.values(room.bingoCards) : [];
 
-var numbersForWinner = winnerCard
-  ? generateDrawnNumbersForWinner(winnerCard, allCards)
-  : generateNumbers();
+    const numbersForWinner = winnerCard
+      ? generateDrawnNumbersForWinner(winnerCard, allCards)
+      : generateNumbers();
 
-// Shuffle numbers before assigning
-drawnNumbers = shuffleArray(numbersForWinner);
+    // Shuffle numbers before assigning
+    drawnNumbers = shuffleArray(numbersForWinner);
+  } else {
+    drawnNumbers = generateNumbers();
+  }
 
-      } else {
-        drawnNumbers = generateNumbers();
-      }
+  const drawIntervalMs = 5000;
 
-      const drawIntervalMs = 5000;
+  // --- Update room state ---
+  room.gameStatus = "playing";
+  room.gameId = gameId;
+  room.calledNumbers = [];
+  room.countdownEndAt = null;
+  room.countdownStartedBy = null;
 
-      // --- Update room state ---
-      room.gameStatus = "playing";
-      room.gameId = gameId;
-      room.calledNumbers = [];
-      room.countdownEndAt = null;
-      room.countdownStartedBy = null;
+  const betAmount = room.betAmount || 0;
+  const playerCount = room.players ? Object.keys(room.players).length : 0;
+  const totalPayout = Math.floor(betAmount * playerCount * 0.9);
 
-      const betAmount = room.betAmount || 0;
-      const playerCount = room.players ? Object.keys(room.players).length : 0;
-      const totalPayout = Math.floor(betAmount * playerCount * 0.9);
+  // --- Deduct betAmount from each player's balance ---
+  if (room.players) {
+    for (const playerId of Object.keys(room.players)) {
+      const balanceRef = ref(rtdb, `users/${playerId}/balance`);
+      runTransaction(balanceRef, (current) => {
+        return (current || 0) - betAmount;
+      });
+    }
+  }
 
-      gameData = {
-        id: gameId,
-        roomId,
-        drawnNumbers,
-        winnerCard,
-        createdAt: Date.now(),
-        startedAt: Date.now(),
-        drawIntervalMs,
-        status: "active",
-        totalPayout,
-      };
+  gameData = {
+    id: gameId,
+    roomId,
+    drawnNumbers,
+    winnerCard,
+    createdAt: Date.now(),
+    startedAt: Date.now(),
+    drawIntervalMs,
+    status: "active",
+    totalPayout,
+  };
 
-      return room;
-    });
+  return room;
+});
+
     // --- Deduct betAmount from each player's balance ---
-if (room.players) {
-  const updates = {};
-  for (const playerId of Object.keys(room.players)) {
-    const player = room.players[playerId];
-    if (!player) continue;
-
-    const playerRefPath = `users/${playerId}/balance`;
-    // Prepare transaction-style update for atomic decrement
-    updates[playerRefPath] = (r) => (r || 0) - (room.betAmount || 0);
-  }
-
-  // Run transactions individually
-  for (const playerId of Object.keys(room.players)) {
-    const balanceRef = ref(rtdb, `users/${playerId}/balance`);
-    await runTransaction(balanceRef, (current) => {
-      return (current || 0) - (room.betAmount || 0);
-    });
-  }
-}
-
     if (!gameData) return res.status(400).json({ error: "Game already started or invalid state" });
 
     const gameRef = ref(rtdb, `games/${gameData.id}`);

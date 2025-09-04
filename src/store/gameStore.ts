@@ -84,7 +84,7 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
 
     const data = await res.json();
     console.log("✅ Game started:", data);
-   if (data.winnerCard && data.winnerCards.length > 0) {
+   if (data.winnerCard && data.winnerCard.length > 0) {
   get().setWinnerCard(data.winnerCards[0]); // take the first winner
 }
 

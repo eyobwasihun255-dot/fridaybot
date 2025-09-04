@@ -61,7 +61,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   loading: false,
   startingGame: false, // ✅ Initialize startingGame flag
  // add this
-setWinnerCard: (card) => set({ winnerCard: card, showWinnerPopup: true }),
+setWinnerCard: (card) => set({ winnerCard: card, showWinnerPopup: false }),
 closeWinnerPopup: () => set({ showWinnerPopup: false }),
 
 

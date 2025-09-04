@@ -272,12 +272,30 @@ return (
     {/* Main content row */}
     <div className="flex flex-row gap-2 w-full max-w-full h-full">
   {showWinnerPopup && winnerCard && (
-  <div className="winner-popup animate-jump">
-    <h2>🎉 Bingo! You won! 🎉</h2>
-    <p>Your card #{winnerCard.serialNumber}</p>
-    <button onClick={closeWinnerPopup}>Close</button>
+  <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+    <div className="bg-white text-black rounded-2xl shadow-xl p-6 w-80 max-w-full text-center relative animate-jump">
+      {/* Close button (top-right) */}
+      <button
+        onClick={closeWinnerPopup}
+        className="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
+      >
+        ✕
+      </button>
+
+      <h2 className="text-xl font-bold mb-3">🎉 Bingo! You won! 🎉</h2>
+      <p className="mb-4">Your card #{winnerCard.serialNumber}</p>
+
+      {/* Big close button */}
+      <button
+        onClick={closeWinnerPopup}
+        className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700"
+      >
+        Close
+      </button>
+    </div>
   </div>
 )}
+
 
       {/* Left side (Called numbers) */}
     <div className="relative w-2/5 h-full flex flex-col bg-white/10 p-2 rounded border border-white/20 text-xs">

@@ -121,20 +121,13 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
         clearInterval(interval);
 
         // ✅ Show popup after all numbers called
-        const { winnerCard } = get();
-        const { user } = useAuthStore.getState();
-
-        if (winnerCard) {
-          set({ showWinnerPopup: true });
+      const { user } = useAuthStore.getState();
+        if (winnerCard?.claimedBy === user?.telegramId) {
+          set({ winnerCard, showWinnerPopup: true });
 
           // ✅ Add payout to winner's balance
-          const winnerId = winnerCard.claimedBy;
-          if (winnerId) {
-            const balanceRef = ref(rtdb, `users/${winnerId}/balance`);
-            await runTransaction(balanceRef, (current) => {
-              return (current || 0) + (totalPayout || 0);
-            });
-          }
+          const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
+          await runTransaction(balanceRef, (current) => (current || 0) + (totalPayout || 0));
         }
 
         get().endGame(roomId); // optional: end game after popup

@@ -1,21 +1,36 @@
 import { rtdb } from "../bot/firebaseConfig.js";
 import { ref, runTransaction, set as fbset } from "firebase/database";
 import { v4 as uuidv4 } from "uuid";
-function generateNumbers(count = 25) {
-  const numbers = [];
-  while (numbers.length < count) {
-    const num = Math.floor(Math.random() * 75) + 1; // 1–75 only
-    if (!numbers.includes(num)) numbers.push(num);
+
+// --- Generate 25 unique numbers randomly within partitions ---
+function generateNumbers() {
+  const ranges = [
+    { min: 1, max: 15 },
+    { min: 16, max: 30 },
+    { min: 31, max: 45 },
+    { min: 46, max: 60 },
+    { min: 61, max: 75 },
+  ];
+
+  const finalNumbers = [];
+
+  for (const { min, max } of ranges) {
+    const partitionNumbers = new Set();
+    while (partitionNumbers.size < 5) {
+      const num = Math.floor(Math.random() * (max - min + 1)) + min;
+      partitionNumbers.add(num);
+    }
+    finalNumbers.push(...partitionNumbers);
   }
-  return numbers;
+
+  return finalNumbers;
 }
 
-// --- Winning patterns for a given card ---
+// --- Pick winning patterns from a card ---
 function pickPatternNumbers(card) {
   const numbers = card.numbers;
   const size = numbers.length;
   const center = Math.floor(size / 2);
-
   const patterns = [];
 
   // Rows
@@ -57,40 +72,9 @@ function pickPatternNumbers(card) {
   return patterns;
 }
 
-// --- Generate drawn numbers ensuring exactly one winner and others almost winning ---
+// --- Generate drawn numbers ensuring exactly one winner ---
 function generateDrawnNumbersForWinner(winnerCard, allCards) {
   const drawnNumbers = new Set();
-  const safeAdd = (n) => {
-    if (typeof n === "number" && n > 0 && n <= 75) drawnNumbers.add(n);
-  };
-
-  // Helper to get a random number from a range, excluding existing drawn numbers
-  const getRandomNumberFromRange = (min, max, excludeSet) => {
-    let num;
-    do {
-      num = Math.floor(Math.random() * (max - min + 1)) + min;
-    } while (excludeSet.has(num));
-    return num;
-  };
-
-  // --- 1. Determine winner pattern and add its numbers ---
-  const winnerPatterns = pickPatternNumbers(winnerCard);
-  const winnerPattern = winnerPatterns[Math.floor(Math.random() * winnerPatterns.length)];
-  winnerPattern.forEach(safeAdd);
-
-  // --- 2. For each loser card, select a pattern and add all but one number ---
-  const losers = allCards.filter(c => c.id !== winnerCard.id);
-  for (const card of losers) {
-    const patterns = pickPatternNumbers(card);
-    const pattern = patterns[Math.floor(Math.random() * patterns.length)];
-    const missingNumber = pattern[Math.floor(Math.random() * pattern.length)]; // One number will be missing
-    for (const n of pattern) {
-      if (n !== missingNumber) safeAdd(n);
-    }
-  }
-
-  // --- 3. Ensure 25 numbers with partitioning (5 from 1-15, 5 from 16-30, etc.) ---
-  const finalDrawnNumbers = new Set();
   const ranges = [
     { min: 1, max: 15 },
     { min: 16, max: 30 },
@@ -99,38 +83,39 @@ function generateDrawnNumbersForWinner(winnerCard, allCards) {
     { min: 61, max: 75 },
   ];
 
-  // Add numbers from drawnNumbers (winner/loser patterns) into partitioned sets
+  const safeAdd = (n) => {
+    if (n > 0 && n <= 75) drawnNumbers.add(n);
+  };
+
+  // --- Pick one winning pattern for the winner ---
+  const winnerPatterns = pickPatternNumbers(winnerCard);
+  const winnerPattern = winnerPatterns[Math.floor(Math.random() * winnerPatterns.length)];
+  winnerPattern.forEach(safeAdd);
+
+  // --- Fill each partition with 5 numbers exactly ---
   const partitionedNumbers = ranges.map(() => new Set());
+
+  // Add winner numbers to proper partitions
   drawnNumbers.forEach(num => {
     for (let i = 0; i < ranges.length; i++) {
-      if (num >= ranges[i].min && num <= ranges[i].max) {
-        partitionedNumbers[i].add(num);
-        break;
-      }
+      if (num >= ranges[i].min && num <= ranges[i].max) partitionedNumbers[i].add(num);
     }
   });
 
-  // Fill each partition to 5 numbers if possible, prioritizing numbers already in drawnNumbers
+  // Fill partitions to exactly 5 numbers
   for (let i = 0; i < ranges.length; i++) {
+    const { min, max } = ranges[i];
     while (partitionedNumbers[i].size < 5) {
-      const num = getRandomNumberFromRange(ranges[i].min, ranges[i].max, partitionedNumbers[i]);
+      const num = Math.floor(Math.random() * (max - min + 1)) + min;
       partitionedNumbers[i].add(num);
     }
   }
 
-  // Combine all partitioned numbers and ensure total is 25
-  partitionedNumbers.forEach(set => set.forEach(num => finalDrawnNumbers.add(num)));
+  // Combine all partitions
+  const finalNumbers = [];
+  partitionedNumbers.forEach(set => finalNumbers.push(...set));
 
-  // If for some reason we have less than 25 (e.g., overlapping numbers in patterns),
-  // fill with random numbers from appropriate ranges until 25.
-  while (finalDrawnNumbers.size < 25) {
-    const randomRangeIndex = Math.floor(Math.random() * ranges.length);
-    const num = getRandomNumberFromRange(ranges[randomRangeIndex].min, ranges[randomRangeIndex].max, finalDrawnNumbers);
-    finalDrawnNumbers.add(num);
-  }
-
-  // Trim to 25 numbers exactly if more were added (unlikely with the current logic but for safety)
-  return Array.from(finalDrawnNumbers).slice(0, 25);
+  return finalNumbers;
 }
 
 // --- API Handler ---
@@ -158,7 +143,7 @@ export default async function handler(req, res) {
         const allCards = Object.values(room.bingoCards || {});
         drawnNumbers = winnerCard ? generateDrawnNumbersForWinner(winnerCard, allCards) : generateNumbers();
       } else {
-        drawnNumbers = generateNumbers(); // fallback if no players
+        drawnNumbers = generateNumbers();
       }
 
       const drawIntervalMs = 3000;
@@ -204,4 +189,3 @@ export default async function handler(req, res) {
     res.status(500).json({ error: "Failed to start game" });
   }
 }
-

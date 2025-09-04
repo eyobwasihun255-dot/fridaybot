@@ -1,8 +1,6 @@
 import { rtdb } from "../bot/firebaseConfig.js";
 import { ref, runTransaction, set as fbset } from "firebase/database";
 import { v4 as uuidv4 } from "uuid";
-
-// --- Generate 25 unique random numbers for fallback ---
 function generateNumbers(count = 25) {
   const numbers = [];
   while (numbers.length < count) {
@@ -62,35 +60,77 @@ function pickPatternNumbers(card) {
 // --- Generate drawn numbers ensuring exactly one winner and others almost winning ---
 function generateDrawnNumbersForWinner(winnerCard, allCards) {
   const drawnNumbers = new Set();
-
   const safeAdd = (n) => {
     if (typeof n === "number" && n > 0 && n <= 75) drawnNumbers.add(n);
   };
 
-  // --- Winner pattern ---
+  // Helper to get a random number from a range, excluding existing drawn numbers
+  const getRandomNumberFromRange = (min, max, excludeSet) => {
+    let num;
+    do {
+      num = Math.floor(Math.random() * (max - min + 1)) + min;
+    } while (excludeSet.has(num));
+    return num;
+  };
+
+  // --- 1. Determine winner pattern and add its numbers ---
   const winnerPatterns = pickPatternNumbers(winnerCard);
   const winnerPattern = winnerPatterns[Math.floor(Math.random() * winnerPatterns.length)];
   winnerPattern.forEach(safeAdd);
 
-  // --- Losers almost win (miss 1 number from pattern) ---
+  // --- 2. For each loser card, select a pattern and add all but one number ---
   const losers = allCards.filter(c => c.id !== winnerCard.id);
   for (const card of losers) {
-    if (drawnNumbers.size >= 25) break;
     const patterns = pickPatternNumbers(card);
     const pattern = patterns[Math.floor(Math.random() * patterns.length)];
-    const missingNumber = pattern[Math.floor(Math.random() * pattern.length)]; // one number missing
+    const missingNumber = pattern[Math.floor(Math.random() * pattern.length)]; // One number will be missing
     for (const n of pattern) {
-      if (n !== missingNumber && drawnNumbers.size < 25) safeAdd(n);
+      if (n !== missingNumber) safeAdd(n);
     }
   }
 
-  // --- Fill remaining numbers randomly ---
-  while (drawnNumbers.size < 25) {
-    safeAdd(Math.floor(Math.random() * 75) + 1);
+  // --- 3. Ensure 25 numbers with partitioning (5 from 1-15, 5 from 16-30, etc.) ---
+  const finalDrawnNumbers = new Set();
+  const ranges = [
+    { min: 1, max: 15 },
+    { min: 16, max: 30 },
+    { min: 31, max: 45 },
+    { min: 46, max: 60 },
+    { min: 61, max: 75 },
+  ];
+
+  // Add numbers from drawnNumbers (winner/loser patterns) into partitioned sets
+  const partitionedNumbers = ranges.map(() => new Set());
+  drawnNumbers.forEach(num => {
+    for (let i = 0; i < ranges.length; i++) {
+      if (num >= ranges[i].min && num <= ranges[i].max) {
+        partitionedNumbers[i].add(num);
+        break;
+      }
+    }
+  });
+
+  // Fill each partition to 5 numbers if possible, prioritizing numbers already in drawnNumbers
+  for (let i = 0; i < ranges.length; i++) {
+    while (partitionedNumbers[i].size < 5) {
+      const num = getRandomNumberFromRange(ranges[i].min, ranges[i].max, partitionedNumbers[i]);
+      partitionedNumbers[i].add(num);
+    }
   }
 
-  // --- Trim to 25 numbers exactly ---
-  return Array.from(drawnNumbers).slice(0, 25);
+  // Combine all partitioned numbers and ensure total is 25
+  partitionedNumbers.forEach(set => set.forEach(num => finalDrawnNumbers.add(num)));
+
+  // If for some reason we have less than 25 (e.g., overlapping numbers in patterns),
+  // fill with random numbers from appropriate ranges until 25.
+  while (finalDrawnNumbers.size < 25) {
+    const randomRangeIndex = Math.floor(Math.random() * ranges.length);
+    const num = getRandomNumberFromRange(ranges[randomRangeIndex].min, ranges[randomRangeIndex].max, finalDrawnNumbers);
+    finalDrawnNumbers.add(num);
+  }
+
+  // Trim to 25 numbers exactly if more were added (unlikely with the current logic but for safety)
+  return Array.from(finalDrawnNumbers).slice(0, 25);
 }
 
 // --- API Handler ---
@@ -164,3 +204,4 @@ export default async function handler(req, res) {
     res.status(500).json({ error: "Failed to start game" });
   }
 }
+

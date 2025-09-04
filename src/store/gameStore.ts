@@ -92,48 +92,43 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ startingGame: false });
   }
 },
-   startNumberStream: (roomId, gameId) => {
-  const gameRef = ref(rtdb, `games/${gameId}`);
-  
-  onValue(gameRef, (snapshot) => {
-    const data = snapshot.val();
-    if (!data || !data.drawnNumbers || !data.startedAt) return;
+    startNumberStream: (roomId, gameId) => {
+    const gameRef = ref(rtdb, `games/${gameId}`);
+    
+    onValue(gameRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data || !data.drawnNumbers || !data.startedAt) return;
 
-    const { drawnNumbers, startedAt, drawIntervalMs } = data;
-    const elapsed = Date.now() - startedAt;
-    let currentIndex = Math.floor(elapsed / drawIntervalMs);
+      const { drawnNumbers, startedAt, drawIntervalMs } = data;
+      const elapsed = Date.now() - startedAt;
+      let currentIndex = Math.floor(elapsed / drawIntervalMs);
 
-    if (currentIndex > drawnNumbers.length) currentIndex = drawnNumbers.length;
-
-    set((state) => ({
-      displayedCalledNumbers: {
-        ...state.displayedCalledNumbers,
-        [roomId]: drawnNumbers.slice(0, currentIndex),
-      },
-    }));
-
-    let i = currentIndex;
-    const interval = setInterval(() => {
-      if (i >= drawnNumbers.length) {
-        clearInterval(interval);
-        get().endGame(roomId);
-        const { winnerCard } = get();
-         if (winnerCard && user?.telegramId === winnerCard.claimedBy) {
-      set({ showWinnerPopup: true });
-    }
-        return;
-      }
+      if (currentIndex > drawnNumbers.length) currentIndex = drawnNumbers.length;
 
       set((state) => ({
         displayedCalledNumbers: {
           ...state.displayedCalledNumbers,
-          [roomId]: [...(state.displayedCalledNumbers[roomId] || []), drawnNumbers[i]],
+          [roomId]: drawnNumbers.slice(0, currentIndex),
         },
       }));
-      i++;
-    }, drawIntervalMs);
-  });
-},
+
+      let i = currentIndex;
+      const interval = setInterval(() => {
+        if (i >= drawnNumbers.length) {
+          clearInterval(interval);
+          get().endGame(roomId);
+          const { winnerCard } = get();
+          if (winnerCard && user?.telegramId === winnerCard.claimedBy) {
+        set({ showWinnerPopup: true });
+      }
+          return;
+        }
+
+       
+        i++;
+      }, drawIntervalMs);
+    });
+  },
   
   endGame: async (roomId: string) => {
   try {

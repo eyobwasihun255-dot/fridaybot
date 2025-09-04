@@ -159,16 +159,17 @@ export const useGameStore = create<GameState>((set, get) => ({
     setTimeout(async () => {
   try {
     // ✅ Reset the room back to waiting
-    const cardsSnap = await get(bingoCardsRef);
-        if (cardsSnap.exists()) {
-          const updates: any = {};
-          cardsSnap.forEach((cardSnap) => {
-            updates[`${cardSnap.key}/claimed`] = false;
-            updates[`${cardSnap.key}/claimedBy`] = null;
-          });
-          await update(bingoCardsRef, updates);
-          console.log("✅ All cards unclaimed.");
-        }
+   const cardsSnap = await get(bingoCardsRef);
+if (cardsSnap.exists()) {
+  const updates = {};
+  cardsSnap.forEach((cardSnap) => {
+    updates[`${cardSnap.key}/claimed`] = false;
+    updates[`${cardSnap.key}/claimedBy`] = null;
+  });
+  await update(bingoCardsRef, updates);
+  console.log("✅ All cards unclaimed.");
+}
+
 
         // ✅ 2.2 Remove all players
         await remove(playersRef);

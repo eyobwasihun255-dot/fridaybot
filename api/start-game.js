@@ -56,7 +56,7 @@ function pickPatternNumbers(card) {
 
 // Generate drawn numbers ensuring winners get their patterns
 function generateDrawnNumbersForWinners(winnerCards, allCards) {
-  const drawnNumbers = new Set<number>();
+  const drawnNumbers = new Set();
 
   // Add winning patterns for winners
   winnerCards.forEach(card => {
@@ -97,14 +97,14 @@ export default async function handler(req, res) {
 
       const gameId = uuidv4();
       const playerIds = Object.keys(room.players || {});
-      let drawnNumbers: number[] = [];
-      let winnerCards: any[] = []; // ✅ collect winner cards
+      let drawnNumbers = [];
+      let winnerCards = [];
 
       if (playerIds.length > 0) {
         const numWinners = playerIds.length > 50 ? 2 : 1;
 
         // Pick unique winner(s)
-        const winnerIds: string[] = [];
+        const winnerIds = [];
         while (winnerIds.length < numWinners) {
           const candidate = playerIds[Math.floor(Math.random() * playerIds.length)];
           if (!winnerIds.includes(candidate)) winnerIds.push(candidate);
@@ -139,7 +139,7 @@ export default async function handler(req, res) {
         id: gameId,
         roomId,
         drawnNumbers,
-        winnerCards, // ✅ include winner cards
+        winnerCards,
         createdAt: Date.now(),
         startedAt: Date.now(),
         drawIntervalMs,

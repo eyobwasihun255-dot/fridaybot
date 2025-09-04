@@ -137,85 +137,80 @@ export default async function handler(req, res) {
   let gameData = null;
 
   try {
-     await runTransaction(roomRef, (room) => {
-  if (!room || room.gameStatus !== "countdown") return room;
+    // --- Run transaction to start the game ---
+    await runTransaction(roomRef, (room) => {
+      if (!room || room.gameStatus !== "countdown") return room;
 
-  const gameId = uuidv4();
-  const playerIds = Object.keys(room.players || {});
-  let drawnNumbers = [];
-  let winnerCard = null;
+      const gameId = uuidv4();
+      const playerIds = Object.keys(room.players || {});
+      let drawnNumbers: number[] = [];
+      let winnerCard = null;
 
-  if (playerIds.length > 0) {
-    // Pick exactly one winner
-    const winnerId = playerIds[Math.floor(Math.random() * playerIds.length)];
-    winnerCard = room.bingoCards && room.players[winnerId]
-      ? room.bingoCards[room.players[winnerId].cardId]
-      : null;
+      if (playerIds.length > 0) {
+        const winnerId = playerIds[Math.floor(Math.random() * playerIds.length)];
+        winnerCard = room.bingoCards && room.players[winnerId]
+          ? room.bingoCards[room.players[winnerId].cardId]
+          : null;
 
-    const allCards = room.bingoCards ? Object.values(room.bingoCards) : [];
+        const allCards = room.bingoCards ? Object.values(room.bingoCards) : [];
+        const numbersForWinner = winnerCard
+          ? generateDrawnNumbersForWinner(winnerCard, allCards)
+          : generateNumbers();
 
-    const numbersForWinner = winnerCard
-      ? generateDrawnNumbersForWinner(winnerCard, allCards)
-      : generateNumbers();
+        drawnNumbers = shuffleArray(numbersForWinner);
+      } else {
+        drawnNumbers = generateNumbers();
+      }
 
-    // Shuffle numbers before assigning
-    drawnNumbers = shuffleArray(numbersForWinner);
-  } else {
-    drawnNumbers = generateNumbers();
-  }
+      const betAmount = room.betAmount || 0;
+      const totalPayout = Math.floor(betAmount * playerIds.length * 0.9);
 
-  const drawIntervalMs = 5000;
+      gameData = {
+        id: gameId,
+        roomId,
+        drawnNumbers,
+        winnerCard,
+        createdAt: Date.now(),
+        startedAt: Date.now(),
+        drawIntervalMs: 5000,
+        status: "active",
+        totalPayout,
+        betsDeducted: false, // ✅ track once-per-game deduction
+      };
 
-  // --- Update room state ---
-  room.gameStatus = "playing";
-  room.gameId = gameId;
-  room.calledNumbers = [];
-  room.countdownEndAt = null;
-  room.countdownStartedBy = null;
+      // Update room
+      room.gameStatus = "playing";
+      room.gameId = gameId;
+      room.calledNumbers = [];
+      room.countdownEndAt = null;
+      room.countdownStartedBy = null;
 
-  const betAmount = room.betAmount || 0;
-  const playerCount = room.players ? Object.keys(room.players).length : 0;
-  const totalPayout = Math.floor(betAmount * playerCount * 0.9);
+      return room;
+    });
 
-  // --- Deduct betAmount from each player's balance ---
-  gameData = {
-    id: gameId,
-    roomId,
-    drawnNumbers,
-    winnerCard,
-    createdAt: Date.now(),
-    startedAt: Date.now(),
-    drawIntervalMs,
-    status: "active",
-    totalPayout,
-    betsDeducted: false,
-  };
-
-  return room;
-});
-const gameRefs = ref(rtdb, `games/${gameId}`);
-const gameSnap = await get(gameRefs);
-const existingGame = gameSnap.val();
-
-if (!existingGame?.betsDeducted) {
-  // Deduct balances
-  const roomSnap = await get(roomRef);
-  const roomValue = roomSnap.val();
-
-  if (roomValue?.players) {
-    for (const playerId of Object.keys(roomValue.players)) {
-      const balanceRef = ref(rtdb, `users/${playerId}/balance`);
-      await runTransaction(balanceRef, (current) => (current || 0) - (roomValue.betAmount || 0));
-    }
-  }
-
-  // Mark bets as deducted
-  await update(gameRef, { betsDeducted: true });
-}
-    // --- Deduct betAmount from each player's balance ---
     if (!gameData) return res.status(400).json({ error: "Game already started or invalid state" });
 
     const gameRef = ref(rtdb, `games/${gameData.id}`);
+    const gameSnap = await get(gameRef);
+    const existingGame = gameSnap.val();
+
+    // --- Deduct bets only once ---
+    if (!existingGame?.betsDeducted) {
+      const roomSnap = await get(roomRef);
+      const roomValue = roomSnap.val();
+
+      if (roomValue?.players) {
+        for (const playerId of Object.keys(roomValue.players)) {
+          const balanceRef = ref(rtdb, `users/${playerId}/balance`);
+          await runTransaction(balanceRef, (current) => (current || 0) - (roomValue.betAmount || 0));
+        }
+      }
+
+      // Mark bets as deducted
+      await update(gameRef, { betsDeducted: true });
+    }
+
+    // --- Save game data ---
     await fbset(gameRef, gameData);
 
     res.json({
@@ -223,6 +218,7 @@ if (!existingGame?.betsDeducted) {
       drawnNumbers: gameData.drawnNumbers,
       winnerCard: gameData.winnerCard,
     });
+
   } catch (err) {
     console.error("❌ Error starting game:", err);
     res.status(500).json({ error: "Failed to start game" });

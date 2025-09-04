@@ -84,8 +84,8 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
 
     const data = await res.json();
     console.log("✅ Game started:", data);
-   if (data.winnerCard && data.winnerCard.length > 0) {
-  get().setWinnerCard(data.winnerCard[0]); // take the first winner
+   if (data.winnerCard && data.winnerCards.length > 0) {
+  get().setWinnerCard(data.winnerCards[0]); // take the first winner
 }
 
   } catch (err) {
@@ -94,7 +94,7 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
     set({ startingGame: false });
   }
 },
-   startNumberStream: (roomId, gameId) => {
+    startNumberStream: (roomId, gameId) => {
   const gameRef = ref(rtdb, `games/${gameId}`);
   
   onValue(gameRef, (snapshot) => {
@@ -140,9 +140,7 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
       i++;
     }, drawIntervalMs);
   });
-}
-
-  
+},
   endGame: async (roomId: string) => {
   try {
     const roomRef = ref(rtdb, `rooms/${roomId}`);

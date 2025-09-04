@@ -258,7 +258,7 @@ return (
     {/* Header Info Dashboard */}
     <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 mb-3 w-full text-xs">
       <div className="bg-white/10 rounded text-center py-1 border border-white/20">
-        {t('room_details')}: {currentRoom.betAmount}
+        {t('bet')}: {currentRoom.betAmount}
       </div>
       <div className="bg-white/10 rounded text-center py-1 border border-white/20">
         {t('payout')}: {Math.floor(

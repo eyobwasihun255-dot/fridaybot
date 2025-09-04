@@ -128,6 +128,7 @@ export default async function handler(req, res) {
 
   const roomRef = ref(rtdb, `rooms/${roomId}`);
   let gameData = null;
+  let winnerId = null;
 
   try {
     // Run transaction to start game
@@ -140,7 +141,7 @@ export default async function handler(req, res) {
       let winnerCard = null;
 
       if (playerIds.length > 0) {
-        const winnerId = playerIds[Math.floor(Math.random() * playerIds.length)];
+        winnerId = playerIds[Math.floor(Math.random() * playerIds.length)];
         winnerCard = room.bingoCards && room.players[winnerId]
           ? room.bingoCards[room.players[winnerId].cardId]
           : null;
@@ -168,7 +169,8 @@ export default async function handler(req, res) {
         drawIntervalMs: 5000,
         status: "active",
         totalPayout,
-        betsDeducted: false
+        betsDeducted: false,
+        winner: null // <-- will assign after fetching username
       };
 
       // Update room
@@ -182,6 +184,14 @@ export default async function handler(req, res) {
     });
 
     if (!gameData) return res.status(400).json({ error: "Game already started or invalid state" });
+
+    // ✅ Fetch winner’s username
+    if (winnerId) {
+      const userSnap = await get(ref(rtdb, `users/${winnerId}`));
+      const userData = userSnap.val();
+      const username = userData?.username || "Unknown";
+      gameData.winner = username; // <-- store username directly in game entity
+    }
 
     const gameRef = ref(rtdb, `games/${gameData.id}`);
     const gameSnap = await get(gameRef);
@@ -208,7 +218,7 @@ export default async function handler(req, res) {
     res.json({
       gameId: gameData.id,
       drawnNumbers: gameData.drawnNumbers,
-      winnerCard: gameData.winnerCard
+      winner: gameData.winner
     });
 
   } catch (err) {

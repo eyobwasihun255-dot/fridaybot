@@ -149,7 +149,7 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
   try {
     const roomRef = ref(rtdb, `rooms/${roomId}`);
     const bingoCardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
-    const cooldownDuration = 1 * 60 * 1000; // ✅ 1 min cooldown
+    const cooldownDuration = 0.5 * 60 * 1000; // ✅ 1 min cooldown
     const nextGameCountdownEndAt = Date.now() + cooldownDuration;
    const playersRef = ref(rtdb, `rooms/${roomId}/players`);
 

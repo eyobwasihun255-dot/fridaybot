@@ -165,7 +165,7 @@ drawnNumbers = shuffleArray(numbersForWinner);
         drawnNumbers = generateNumbers();
       }
 
-      const drawIntervalMs = 3000;
+      const drawIntervalMs = 5000;
 
       // --- Update room state ---
       room.gameStatus = "playing";
@@ -192,6 +192,26 @@ drawnNumbers = shuffleArray(numbersForWinner);
 
       return room;
     });
+    // --- Deduct betAmount from each player's balance ---
+if (room.players) {
+  const updates = {};
+  for (const playerId of Object.keys(room.players)) {
+    const player = room.players[playerId];
+    if (!player) continue;
+
+    const playerRefPath = `users/${playerId}/balance`;
+    // Prepare transaction-style update for atomic decrement
+    updates[playerRefPath] = (r) => (r || 0) - (room.betAmount || 0);
+  }
+
+  // Run transactions individually
+  for (const playerId of Object.keys(room.players)) {
+    const balanceRef = ref(rtdb, `users/${playerId}/balance`);
+    await runTransaction(balanceRef, (current) => {
+      return (current || 0) - (room.betAmount || 0);
+    });
+  }
+}
 
     if (!gameData) return res.status(400).json({ error: "Game already started or invalid state" });
 

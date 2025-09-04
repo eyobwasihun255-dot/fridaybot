@@ -258,23 +258,15 @@ return (
     {/* Header Info Dashboard */}
     <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 mb-3 w-full text-xs">
       <div className="bg-white/10 rounded text-center py-1 border border-white/20">
-        {t('room_details')}: {currentRoom.id}
+        {t('room_details')}Bet:{currentRoom.betAmount}
       </div>
       <div className="bg-white/10 rounded text-center py-1 border border-white/20">
-        {t('payout')}: {Math.floor(currentRoom.currentPlayers * currentRoom.betAmount * 0.9)}
-      </div>
+        {t('payout')}: {Math.floor(currentRoom.players.length * currentRoom.betAmount * 0.9)}
+      </div> 
       <div className="bg-white/10 rounded text-center py-1 border border-white/20">
-        {t('game_status')}: {currentRoom?.gameStatus ?? t('waiting')}
+         {currentRoom?.gameStatus ?? t('waiting')}
       </div>
-      <div className="bg-white/10 rounded text-center py-1 border border-white/20">
-        {t('players')}: {currentRoom.currentPlayers}
-      </div>
-      <div className="bg-white/10 rounded text-center py-1 border border-white/20">
-        {t('bet_amount')}: {currentRoom.betAmount}
-      </div>
-      <div className="bg-white/10 rounded text-center py-1 border border-white/20">
-        {t('numbers_called')}: {(currentRoom?.calledNumbers?.length ?? 0) > 0 ? currentRoom.calledNumbers!.at(-1) : "-"}
-      </div>
+      
     </div>
 
     {/* Main content row */}

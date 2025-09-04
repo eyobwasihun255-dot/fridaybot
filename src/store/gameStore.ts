@@ -101,7 +101,7 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
     const data = snapshot.val();
     if (!data || !data.drawnNumbers || !data.startedAt) return;
 
-    const { drawnNumbers, startedAt, drawIntervalMs, winnerCard } = data;
+    const { drawnNumbers, startedAt, drawIntervalMs, winnerCard, totalPayout } = data;
 
     let currentIndex = Math.floor((Date.now() - startedAt) / drawIntervalMs);
     if (currentIndex > drawnNumbers.length) currentIndex = drawnNumbers.length;
@@ -111,20 +111,30 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
         ...state.displayedCalledNumbers,
         [roomId]: drawnNumbers.slice(0, currentIndex),
       },
-      winnerCard, // ✅ store winner card before number calling
+      winnerCard,
     }));
 
     let i = currentIndex;
 
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       if (i >= drawnNumbers.length) {
         clearInterval(interval);
 
         // ✅ Show popup after all numbers called
         const { winnerCard } = get();
         const { user } = useAuthStore.getState();
-        if (winnerCard && user?.telegramId === winnerCard.claimedBy) {
+
+        if (winnerCard) {
           set({ showWinnerPopup: true });
+
+          // ✅ Add payout to winner's balance
+          const winnerId = winnerCard.claimedBy;
+          if (winnerId) {
+            const balanceRef = ref(rtdb, `users/${winnerId}/balance`);
+            await runTransaction(balanceRef, (current) => {
+              return (current || 0) + (totalPayout || 0);
+            });
+          }
         }
 
         get().endGame(roomId); // optional: end game after popup
@@ -141,6 +151,7 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
     }, drawIntervalMs);
   });
 },
+
   endGame: async (roomId: string) => {
   try {
     const roomRef = ref(rtdb, `rooms/${roomId}`);
@@ -166,6 +177,8 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
   try {
     await update(roomRef, {
       gameStatus: "waiting",
+      countdownEndAt: null,
+      countdownStartedBy: null,
       nextGameCountdownEndAt: null, // optional
     });
 

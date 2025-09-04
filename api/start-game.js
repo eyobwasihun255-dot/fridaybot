@@ -58,30 +58,34 @@ function pickPatternNumbers(card) {
 function generateDrawnNumbersForWinners(winnerCards, allCards) {
   const drawnNumbers = new Set();
 
-  // Add winning patterns for winners
+  // --- 1. Add winning patterns fully ---
   winnerCards.forEach(card => {
     const patterns = pickPatternNumbers(card);
     const pattern = patterns[Math.floor(Math.random() * patterns.length)];
     pattern.forEach(n => drawnNumbers.add(n));
   });
 
-  // Make losers almost win
+  // --- 2. Add "almost winning" loser patterns (only if room left) ---
   const losers = allCards.filter(c => !winnerCards.includes(c));
-  losers.forEach(card => {
+  for (const card of losers) {
+    if (drawnNumbers.size >= 25) break;
     const patterns = pickPatternNumbers(card);
     const pattern = patterns[Math.floor(Math.random() * patterns.length)];
     const missingNumber = pattern[Math.floor(Math.random() * pattern.length)];
-    pattern.forEach(n => {
-      if (n !== missingNumber) drawnNumbers.add(n);
-    });
-  });
+    for (const n of pattern) {
+      if (n !== missingNumber && drawnNumbers.size < 25) {
+        drawnNumbers.add(n);
+      }
+    }
+  }
 
-  // Fill with random numbers until at least 25
+  // --- 3. Fill randomly until exactly 25 ---
   while (drawnNumbers.size < 25) {
     drawnNumbers.add(Math.floor(Math.random() * 75) + 1);
   }
 
-  return Array.from(drawnNumbers);
+  // --- 4. If overshoot, trim back to exactly 25 ---
+  return Array.from(drawnNumbers).slice(0, 25);
 }
 
 export default async function handler(req, res) {

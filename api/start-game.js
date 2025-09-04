@@ -59,44 +59,37 @@ function pickPatternNumbers(card) {
   return patterns;
 }
 
-// --- Generate drawn numbers ensuring winners get their patterns ---
-function generateDrawnNumbersForWinners(winnerCards, allCards) {
+// --- Generate drawn numbers ensuring exactly one winner and others almost winning ---
+function generateDrawnNumbersForWinner(winnerCard, allCards) {
   const drawnNumbers = new Set();
 
-  // ✅ helper to safely add numbers (ignore 0/free/null/out of range)
   const safeAdd = (n) => {
-    if (typeof n === "number" && n > 0 && n <= 75) {
-      drawnNumbers.add(n);
-    }
+    if (typeof n === "number" && n > 0 && n <= 75) drawnNumbers.add(n);
   };
 
-  // 1. Add winning patterns fully
-  winnerCards.forEach(card => {
-    const patterns = pickPatternNumbers(card);
-    const pattern = patterns[Math.floor(Math.random() * patterns.length)];
-    pattern.forEach(safeAdd);
-  });
+  // --- Winner pattern ---
+  const winnerPatterns = pickPatternNumbers(winnerCard);
+  const winnerPattern = winnerPatterns[Math.floor(Math.random() * winnerPatterns.length)];
+  winnerPattern.forEach(safeAdd);
 
-  // 2. Add "almost winning" loser patterns (only if room left)
-  const losers = allCards.filter(c => !winnerCards.includes(c));
+  // --- Losers almost win (miss 1 number from pattern) ---
+  const losers = allCards.filter(c => c.id !== winnerCard.id);
   for (const card of losers) {
     if (drawnNumbers.size >= 25) break;
     const patterns = pickPatternNumbers(card);
     const pattern = patterns[Math.floor(Math.random() * patterns.length)];
-    const missingNumber = pattern[Math.floor(Math.random() * pattern.length)];
+    const missingNumber = pattern[Math.floor(Math.random() * pattern.length)]; // one number missing
     for (const n of pattern) {
-      if (n !== missingNumber && drawnNumbers.size < 25) {
-        safeAdd(n);
-      }
+      if (n !== missingNumber && drawnNumbers.size < 25) safeAdd(n);
     }
   }
 
-  // 3. Fill randomly until exactly 25
+  // --- Fill remaining numbers randomly ---
   while (drawnNumbers.size < 25) {
     safeAdd(Math.floor(Math.random() * 75) + 1);
   }
 
-  // 4. Trim if overshoot
+  // --- Trim to 25 numbers exactly ---
   return Array.from(drawnNumbers).slice(0, 25);
 }
 
@@ -115,33 +108,22 @@ export default async function handler(req, res) {
       const gameId = uuidv4();
       const playerIds = Object.keys(room.players || {});
       let drawnNumbers = [];
-      let winnerCards = [];
+      let winnerCard = null;
 
       if (playerIds.length > 0) {
-        const numWinners = playerIds.length > 50 ? 2 : 1;
-
-        // Pick unique winner(s)
-        const winnerIds = [];
-        while (winnerIds.length < numWinners) {
-          const candidate = playerIds[Math.floor(Math.random() * playerIds.length)];
-          if (!winnerIds.includes(candidate)) winnerIds.push(candidate);
-        }
-
-        // Collect winner cards
-        winnerCards = winnerIds.map(id => {
-          const cardId = room.players[id].cardId;
-          return room.bingoCards?.[cardId];
-        }).filter(Boolean);
+        // Pick exactly one winner
+        const winnerId = playerIds[Math.floor(Math.random() * playerIds.length)];
+        winnerCard = room.bingoCards?.[room.players[winnerId].cardId];
 
         const allCards = Object.values(room.bingoCards || {});
-        drawnNumbers = generateDrawnNumbersForWinners(winnerCards, allCards);
+        drawnNumbers = winnerCard ? generateDrawnNumbersForWinner(winnerCard, allCards) : generateNumbers();
       } else {
-        drawnNumbers = generateNumbers(); // fallback
+        drawnNumbers = generateNumbers(); // fallback if no players
       }
 
       const drawIntervalMs = 3000;
 
-      // Update room state
+      // --- Update room state ---
       room.gameStatus = "playing";
       room.gameId = gameId;
       room.calledNumbers = [];
@@ -156,7 +138,7 @@ export default async function handler(req, res) {
         id: gameId,
         roomId,
         drawnNumbers,
-        winnerCards,
+        winnerCard,
         createdAt: Date.now(),
         startedAt: Date.now(),
         drawIntervalMs,
@@ -172,11 +154,10 @@ export default async function handler(req, res) {
     const gameRef = ref(rtdb, `games/${gameData.id}`);
     await fbset(gameRef, gameData);
 
-    // Respond with winners and numbers
     res.json({
       gameId: gameData.id,
       drawnNumbers: gameData.drawnNumbers,
-      winnerCards: gameData.winnerCards,
+      winnerCard: gameData.winnerCard,
     });
   } catch (err) {
     console.error("❌ Error starting game:", err);

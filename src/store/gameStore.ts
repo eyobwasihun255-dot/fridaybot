@@ -54,7 +54,7 @@ interface GameState {
 
 export const useGameStore = create<GameState>((set, get) => ({
   rooms: [],
-  displayedCalledNumbers: [],
+  displayedCalledNumbers:[],
   currentRoom: null,
   selectedCard: null,
   bingoCards: [],
@@ -84,8 +84,8 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
 
     const data = await res.json();
     console.log("✅ Game started:", data);
-   if (data.winnerCards && data.winnerCards.length > 0) {
-  get().setWinnerCard(data.winnerCards[0]); // take the first winner
+   if (data.winnerCard && data.winnerCard.length > 0) {
+  get().setWinnerCard(data.winnerCard[0]); // take the first winner
 }
 
   } catch (err) {

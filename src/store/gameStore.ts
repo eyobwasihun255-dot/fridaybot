@@ -61,7 +61,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   loading: false,
   startingGame: false, // ✅ Initialize startingGame flag
  // add this
- setWinnerCard: (card) => set({ winnerCard: card, showWinnerPopup: false }),
+setWinnerCard: (card) => set({ winnerCard: card, showWinnerPopup: true }),
+closeWinnerPopup: () => set({ showWinnerPopup: false }),
+
 
   startGameIfCountdownEnded: async () => {
   const { currentRoom, startingGame } = get();
@@ -82,10 +84,10 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     const data = await res.json();
     console.log("✅ Game started:", data);
-    if (data.winnerCards) {
-      // Save winner card immediately
-      get().setWinnerCard(data.winnerCard);
-    }
+   if (data.winnerCards && data.winnerCards.length > 0) {
+  get().setWinnerCard(data.winnerCards[0]); // take the first winner
+}
+
   } catch (err) {
     console.error("❌ Failed to start game:", err);
   } finally {
@@ -118,9 +120,11 @@ export const useGameStore = create<GameState>((set, get) => ({
           clearInterval(interval);
           get().endGame(roomId);
           const { winnerCard } = get();
-          if (winnerCard && user?.telegramId === winnerCard.claimedBy) {
-        set({ showWinnerPopup: true });
-      }
+         const { user } = useAuthStore.getState();
+if (winnerCard && user?.telegramId === winnerCard.claimedBy) {
+  set({ showWinnerPopup: true });
+}
+
           return;
         }
 

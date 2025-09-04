@@ -61,7 +61,8 @@ const Room: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useLanguageStore();
    
-   const { winnerCard, showWinnerPopup, set } = useGameStore();
+   const { winnerCard, showWinnerPopup, closeWinnerPopup } = useGameStore();
+
   const { currentRoom, bingoCards, joinRoom, selectCard, placeBet, checkBingo , selectedCard } = useGameStore();
   const { user, updateBalance } = useAuthStore();
  const userCard = bingoCards.find(
@@ -270,13 +271,14 @@ return (
 
     {/* Main content row */}
     <div className="flex flex-row gap-2 w-full max-w-full h-full">
-    {showWinnerPopup && winnerCard && (
-      <div className="winner-popup animate-jump">
-        <h2>🎉 Bingo! You won! 🎉</h2>
-        <p>Your card #{winnerCard.serialNumber}</p>
-        <button onClick={() => set({ showWinnerPopup: false })}>Close</button>
-      </div>
-    )}
+  {showWinnerPopup && winnerCard && (
+  <div className="winner-popup animate-jump">
+    <h2>🎉 Bingo! You won! 🎉</h2>
+    <p>Your card #{winnerCard.serialNumber}</p>
+    <button onClick={closeWinnerPopup}>Close</button>
+  </div>
+)}
+
       {/* Left side (Called numbers) */}
     <div className="relative w-2/5 h-full flex flex-col bg-white/10 p-2 rounded border border-white/20 text-xs">
   {/* Bingo Header */}

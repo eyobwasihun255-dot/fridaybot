@@ -141,6 +141,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const bingoCardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
     const cooldownDuration = 1 * 60 * 1000; // ✅ 1 min cooldown
     const nextGameCountdownEndAt = Date.now() + cooldownDuration;
+   const playersRef = ref(rtdb, `rooms/${roomId}/players`);
 
     // Step 1: End the game
     await update(roomRef, {

@@ -61,7 +61,7 @@ const Room: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useLanguageStore();
    
-  
+   const { winnerCard, showWinnerPopup, set } = useGameStore();
   const { currentRoom, bingoCards, joinRoom, selectCard, placeBet, checkBingo , selectedCard } = useGameStore();
   const { user, updateBalance } = useAuthStore();
  const userCard = bingoCards.find(
@@ -74,7 +74,6 @@ const Room: React.FC = () => {
 const [remaining, setRemaining] = useState<number | null>(null);
      const displayedCard = userCard || selectedCard ;
  const cardNumbers = displayedCard?.numbers ?? [];
-  const [markedNumbers, setMarkedNumbers] = useState<number[]>([]);
   const [hasBet, setHasBet] = useState(false);
   const [gameMessage, setGameMessage] = useState('');
   
@@ -91,6 +90,16 @@ React.useEffect(() => {
     startNumberStream(currentRoom.id, currentRoom.gameId);
   }
 }, [currentRoom?.gameStatus, currentRoom?.gameId]);
+ // Inside Room.tsx
+
+const [markedNumbers, setMarkedNumbers] = React.useState<number[]>([]);
+
+// ✅ Reset right card marks when countdown ends and game starts
+React.useEffect(() => {
+  if (currentRoom?.gameStatus === "playing") {
+    setMarkedNumbers([]);
+  }
+}, [currentRoom?.gameStatus]);
 
 
   React.useEffect(() => {
@@ -261,7 +270,13 @@ return (
 
     {/* Main content row */}
     <div className="flex flex-row gap-2 w-full max-w-full h-full">
-
+    {showWinnerPopup && winnerCard && (
+      <div className="winner-popup animate-jump">
+        <h2>🎉 Bingo! You won! 🎉</h2>
+        <p>Your card #{winnerCard.serialNumber}</p>
+        <button onClick={() => set({ showWinnerPopup: false })}>Close</button>
+      </div>
+    )}
       {/* Left side (Called numbers) */}
     <div className="relative w-2/5 h-full flex flex-col bg-white/10 p-2 rounded border border-white/20 text-xs">
   {/* Bingo Header */}

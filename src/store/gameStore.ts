@@ -45,6 +45,11 @@ interface GameState {
   checkBingo: () => Promise<boolean>;
   displayedCalledNumbers: { [roomId: string]: number[] };
   startNumberStream: (roomId: string, gameId: string) => void;
+   winnerCard: BingoCard | null;      // Winner card for the current game
+  showWinnerPopup: boolean; 
+           // Flag to trigger popup
+  setWinnerCard: (card: BingoCard) => void; // Setter for winner card
+
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -56,7 +61,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   loading: false,
   startingGame: false, // ✅ Initialize startingGame flag
  // add this
- 
+ setWinnerCard: (card) => set({ winnerCard: card, showWinnerPopup: false }),
+
   startGameIfCountdownEnded: async () => {
   const { currentRoom, startingGame } = get();
   if (!currentRoom || startingGame) return;
@@ -76,6 +82,10 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     const data = await res.json();
     console.log("✅ Game started:", data);
+    if (data.winnerCards) {
+      // Save winner card immediately
+      get().setWinnerCard(data.winnerCard);
+    }
   } catch (err) {
     console.error("❌ Failed to start game:", err);
   } finally {
@@ -107,6 +117,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (i >= drawnNumbers.length) {
         clearInterval(interval);
         get().endGame(roomId);
+        const { winnerCard } = get();
+         if (winnerCard && user?.telegramId === winnerCard.claimedBy) {
+      set({ showWinnerPopup: true });
+    }
         return;
       }
 
@@ -120,7 +134,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     }, drawIntervalMs);
   });
 },
-
+  
   endGame: async (roomId: string) => {
   try {
     const roomRef = ref(rtdb, `rooms/${roomId}`);
@@ -144,6 +158,20 @@ export const useGameStore = create<GameState>((set, get) => ({
     setTimeout(async () => {
   try {
     // ✅ Reset the room back to waiting
+    const cardsSnap = await get(bingoCardsRef);
+        if (cardsSnap.exists()) {
+          const updates: any = {};
+          cardsSnap.forEach((cardSnap) => {
+            updates[`${cardSnap.key}/claimed`] = false;
+            updates[`${cardSnap.key}/claimedBy`] = null;
+          });
+          await update(bingoCardsRef, updates);
+          console.log("✅ All cards unclaimed.");
+        }
+
+        // ✅ 2.2 Remove all players
+        await remove(playersRef);
+        console.log("✅ All players removed.");
     await update(roomRef, {
       gameStatus: "waiting",
       nextGameCountdownEndAt: null, // optional

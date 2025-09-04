@@ -2,6 +2,7 @@ import { rtdb } from "../bot/firebaseConfig.js";
 import { ref, runTransaction, set as fbset } from "firebase/database";
 import { v4 as uuidv4 } from "uuid";
 
+// Generate 25 unique random numbers for fallback
 function generateNumbers(count = 25) {
   const numbers = [];
   while (numbers.length < count) {
@@ -10,7 +11,9 @@ function generateNumbers(count = 25) {
   }
   return numbers;
 }
-function pickWinningNumbers(card) {
+
+// Winning patterns for a given card
+function pickPatternNumbers(card) {
   const numbers = card.numbers;
   const size = numbers.length;
   const center = Math.floor(size / 2);
@@ -48,16 +51,37 @@ function pickWinningNumbers(card) {
     numbers[size - 1][size - 1],
   ]);
 
-  // Pick a random winning pattern
-  const winningPattern = patterns[Math.floor(Math.random() * patterns.length)];
-  // Generate the rest of the numbers randomly
-   const allNumbers = new Set(winningPattern);
-  while (allNumbers.size < 25) { // or up to 75 for full pool
-    const num = Math.floor(Math.random() * 75) + 1;
-    allNumbers.add(num);
+  return patterns;
+}
+
+// Generate drawn numbers ensuring winners get their patterns
+function generateDrawnNumbersForWinners(winnerCards, allCards) {
+  const drawnNumbers = new Set<number>();
+
+  // Add winning patterns for winners
+  winnerCards.forEach(card => {
+    const patterns = pickPatternNumbers(card);
+    const pattern = patterns[Math.floor(Math.random() * patterns.length)];
+    pattern.forEach(n => drawnNumbers.add(n));
+  });
+
+  // Make losers almost win
+  const losers = allCards.filter(c => !winnerCards.includes(c));
+  losers.forEach(card => {
+    const patterns = pickPatternNumbers(card);
+    const pattern = patterns[Math.floor(Math.random() * patterns.length)];
+    const missingNumber = pattern[Math.floor(Math.random() * pattern.length)];
+    pattern.forEach(n => {
+      if (n !== missingNumber) drawnNumbers.add(n);
+    });
+  });
+
+  // Fill with random numbers until at least 25
+  while (drawnNumbers.size < 25) {
+    drawnNumbers.add(Math.floor(Math.random() * 75) + 1);
   }
 
-    return Array.from(allNumbers);
+  return Array.from(drawnNumbers);
 }
 
 export default async function handler(req, res) {
@@ -72,61 +96,35 @@ export default async function handler(req, res) {
       if (!room || room.gameStatus !== "countdown") return room;
 
       const gameId = uuidv4();
-      // pick a random card from room players
-const playerIds = Object.keys(room.players || {});
-let drawnNumbers = [];
-if (playerIds.length > 0) {
-  const randomPlayerId = playerIds[Math.floor(Math.random() * playerIds.length)];
-  const player = room.players[randomPlayerId];
-  const cardId = player.cardId;
+      const playerIds = Object.keys(room.players || {});
+      let drawnNumbers: number[] = [];
+      let winnerCards: any[] = []; // ✅ collect winner cards
 
-  // Lookup the card from room.bingoCards
-  const card = room.bingoCards?.[cardId];
+      if (playerIds.length > 0) {
+        const numWinners = playerIds.length > 50 ? 2 : 1;
 
-  if (card && card.numbers) {
-    // Pick a winning pattern for the selected card
-    let winningNumbers = pickWinningNumbers(card);
+        // Pick unique winner(s)
+        const winnerIds: string[] = [];
+        while (winnerIds.length < numWinners) {
+          const candidate = playerIds[Math.floor(Math.random() * playerIds.length)];
+          if (!winnerIds.includes(candidate)) winnerIds.push(candidate);
+        }
 
-    // Now modify slightly so other cards "almost" win
-    const allOtherCards = Object.values(room.bingoCards || {}).filter(c => c.id !== cardId);
-    const almostNumbers = new Set(winningNumbers);
+        // Collect winner cards
+        winnerCards = winnerIds.map(id => {
+          const cardId = room.players[id].cardId;
+          return room.bingoCards?.[cardId];
+        }).filter(Boolean);
 
-    allOtherCards.forEach(otherCard => {
-      if (!otherCard?.numbers) return; 
-
-      // Pick 1 or 2 numbers from their potential bingo row/col/diagonal to avoid full match
-      const flatNumbers = otherCard.numbers.flat();
-      const randomMissCount = Math.min(2, flatNumbers.length);
-      let missNumbers = [];
-
-      while (missNumbers.length < randomMissCount) {
-        const n = flatNumbers[Math.floor(Math.random() * flatNumbers.length)];
-        if (!missNumbers.includes(n)) missNumbers.push(n);
+        const allCards = Object.values(room.bingoCards || {});
+        drawnNumbers = generateDrawnNumbersForWinners(winnerCards, allCards);
+      } else {
+        drawnNumbers = generateNumbers(); // fallback
       }
 
-      // Remove 1–2 numbers from the final drawn set to make other cards miss
-       missNumbers.forEach(n => almostNumbers.delete(n));
+      const drawIntervalMs = 3000;
 
-    // Ensure minimum pool of numbers (25 or more)
-    while (almostNumbers.size < 25) {
-      const num = Math.floor(Math.random() * 75) + 1;
-      almostNumbers.add(num);
-    }
-
-    drawnNumbers = Array.from(almostNumbers);
-    });
-
-    drawnNumbers = Array.from(almostNumbers);
-  } else {
-    drawnNumbers = generateNumbers(); // fallback
-  }
-} else {
-  drawnNumbers = generateNumbers(); // fallback
-}
-
-
-      const drawIntervalMs = 2000;
-
+      // Update room state
       room.gameStatus = "playing";
       room.gameId = gameId;
       room.calledNumbers = [];
@@ -141,6 +139,7 @@ if (playerIds.length > 0) {
         id: gameId,
         roomId,
         drawnNumbers,
+        winnerCards, // ✅ include winner cards
         createdAt: Date.now(),
         startedAt: Date.now(),
         drawIntervalMs,
@@ -156,7 +155,12 @@ if (playerIds.length > 0) {
     const gameRef = ref(rtdb, `games/${gameData.id}`);
     await fbset(gameRef, gameData);
 
-    res.json({ gameId: gameData.id, drawnNumbers: gameData.drawnNumbers });
+    // Respond with winners and numbers
+    res.json({
+      gameId: gameData.id,
+      drawnNumbers: gameData.drawnNumbers,
+      winnerCards: gameData.winnerCards,
+    });
   } catch (err) {
     console.error("❌ Error starting game:", err);
     res.status(500).json({ error: "Failed to start game" });

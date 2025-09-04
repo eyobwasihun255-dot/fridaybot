@@ -178,15 +178,6 @@ export default async function handler(req, res) {
   const totalPayout = Math.floor(betAmount * playerCount * 0.9);
 
   // --- Deduct betAmount from each player's balance ---
-  if (room.players) {
-    for (const playerId of Object.keys(room.players)) {
-      const balanceRef = ref(rtdb, `users/${playerId}/balance`);
-      runTransaction(balanceRef, (current) => {
-        return (current || 0) - betAmount;
-      });
-    }
-  }
-
   gameData = {
     id: gameId,
     roomId,
@@ -197,15 +188,33 @@ export default async function handler(req, res) {
     drawIntervalMs,
     status: "active",
     totalPayout,
+    betsDeducted: false,
   };
 
   return room;
 });
+const gameRef = ref(rtdb, `games/${gameData.id}`);
+const gameSnap = await get(gameRef);
+const existingGame = gameSnap.val();
 
+if (!existingGame?.betsDeducted) {
+  // Deduct balances
+  const roomSnap = await get(roomRef);
+  const roomValue = roomSnap.val();
+
+  if (roomValue?.players) {
+    for (const playerId of Object.keys(roomValue.players)) {
+      const balanceRef = ref(rtdb, `users/${playerId}/balance`);
+      await runTransaction(balanceRef, (current) => (current || 0) - (roomValue.betAmount || 0));
+    }
+  }
+
+  // Mark bets as deducted
+  await update(gameRef, { betsDeducted: true });
+}
     // --- Deduct betAmount from each player's balance ---
     if (!gameData) return res.status(400).json({ error: "Game already started or invalid state" });
 
-    const gameRef = ref(rtdb, `games/${gameData.id}`);
     await fbset(gameRef, gameData);
 
     res.json({

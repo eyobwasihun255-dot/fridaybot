@@ -2,17 +2,17 @@ import { rtdb } from "../bot/firebaseConfig.js";
 import { ref, runTransaction, set as fbset } from "firebase/database";
 import { v4 as uuidv4 } from "uuid";
 
-// Generate 25 unique random numbers for fallback
+// --- Generate 25 unique random numbers for fallback ---
 function generateNumbers(count = 25) {
   const numbers = [];
   while (numbers.length < count) {
-    const num = Math.floor(Math.random() * 75) + 1;
+    const num = Math.floor(Math.random() * 75) + 1; // 1–75 only
     if (!numbers.includes(num)) numbers.push(num);
   }
   return numbers;
 }
 
-// Winning patterns for a given card
+// --- Winning patterns for a given card ---
 function pickPatternNumbers(card) {
   const numbers = card.numbers;
   const size = numbers.length;
@@ -22,11 +22,14 @@ function pickPatternNumbers(card) {
 
   // Rows
   for (let r = 0; r < size; r++) patterns.push(numbers[r]);
+
   // Columns
   for (let c = 0; c < size; c++) patterns.push(numbers.map(row => row[c]));
+
   // Diagonals
   patterns.push(numbers.map((row, i) => row[i]));
   patterns.push(numbers.map((row, i) => row[size - 1 - i]));
+
   // Small cross
   patterns.push([
     numbers[center][center],
@@ -35,6 +38,7 @@ function pickPatternNumbers(card) {
     numbers[center][center - 1],
     numbers[center][center + 1],
   ]);
+
   // Small X
   patterns.push([
     numbers[center][center],
@@ -43,6 +47,7 @@ function pickPatternNumbers(card) {
     numbers[center + 1][center - 1],
     numbers[center + 1][center + 1],
   ]);
+
   // Four corners
   patterns.push([
     numbers[0][0],
@@ -54,18 +59,25 @@ function pickPatternNumbers(card) {
   return patterns;
 }
 
-// Generate drawn numbers ensuring winners get their patterns
+// --- Generate drawn numbers ensuring winners get their patterns ---
 function generateDrawnNumbersForWinners(winnerCards, allCards) {
   const drawnNumbers = new Set();
 
-  // --- 1. Add winning patterns fully ---
+  // ✅ helper to safely add numbers (ignore 0/free/null/out of range)
+  const safeAdd = (n) => {
+    if (typeof n === "number" && n > 0 && n <= 75) {
+      drawnNumbers.add(n);
+    }
+  };
+
+  // 1. Add winning patterns fully
   winnerCards.forEach(card => {
     const patterns = pickPatternNumbers(card);
     const pattern = patterns[Math.floor(Math.random() * patterns.length)];
-    pattern.forEach(n => drawnNumbers.add(n));
+    pattern.forEach(safeAdd);
   });
 
-  // --- 2. Add "almost winning" loser patterns (only if room left) ---
+  // 2. Add "almost winning" loser patterns (only if room left)
   const losers = allCards.filter(c => !winnerCards.includes(c));
   for (const card of losers) {
     if (drawnNumbers.size >= 25) break;
@@ -74,20 +86,21 @@ function generateDrawnNumbersForWinners(winnerCards, allCards) {
     const missingNumber = pattern[Math.floor(Math.random() * pattern.length)];
     for (const n of pattern) {
       if (n !== missingNumber && drawnNumbers.size < 25) {
-        drawnNumbers.add(n);
+        safeAdd(n);
       }
     }
   }
 
-  // --- 3. Fill randomly until exactly 25 ---
+  // 3. Fill randomly until exactly 25
   while (drawnNumbers.size < 25) {
-    drawnNumbers.add(Math.floor(Math.random() * 75) + 1);
+    safeAdd(Math.floor(Math.random() * 75) + 1);
   }
 
-  // --- 4. If overshoot, trim back to exactly 25 ---
+  // 4. Trim if overshoot
   return Array.from(drawnNumbers).slice(0, 25);
 }
 
+// --- API Handler ---
 export default async function handler(req, res) {
   const { roomId } = req.body;
   if (!roomId) return res.status(400).json({ error: "Missing roomId" });

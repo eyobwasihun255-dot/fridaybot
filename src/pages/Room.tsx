@@ -180,6 +180,14 @@ React.useEffect(() => {
    
   }
 };
+const getPartitionColor = (num: number) => {
+  if (num >= 1 && num <= 15) return "from-blue-400 to-blue-600";
+  if (num >= 16 && num <= 30) return "from-green-400 to-green-600";
+  if (num >= 31 && num <= 45) return "from-yellow-400 to-yellow-600";
+  if (num >= 46 && num <= 60) return "from-orange-400 to-orange-600";
+  if (num >= 61 && num <= 75) return "from-red-400 to-red-600";
+  return "from-gray-400 to-gray-600"; // fallback
+};
 
 const handleCancelBet = async () => {
   const cardId = userCard?.id || selectedCard?.id;
@@ -348,9 +356,16 @@ return (
         <div className="relative flex flex-col items-center justify-center bg-white/10 p-2 rounded border border-white/20 min-h-[100px]">
   <span className="text-[10px] mb-1">Current</span>
 
-  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-500 to-yellow-500 flex items-center justify-center text-lg font-bold shadow">
-    {displayedCalledNumbers.length > 0 ? displayedCalledNumbers.at(-1) : "-"}
-  </div>
+  <div
+  className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold shadow bg-gradient-to-br ${
+    displayedCalledNumbers.length > 0
+      ? getPartitionColor(displayedCalledNumbers.at(-1)!)
+      : "from-gray-400 to-gray-600"
+  }`}
+>
+  {displayedCalledNumbers.length > 0 ? displayedCalledNumbers.at(-1) : "-"}
+</div>
+
 
   {/* ✅ Numbers counter bottom-right */}
   <span className="absolute bottom-1 right-2 text-[10px] text-gray-300">

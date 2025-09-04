@@ -117,6 +117,16 @@ function generateDrawnNumbersForWinner(winnerCard, allCards) {
 
   return finalNumbers;
 }
+function shuffleArray(array) {
+  const arr = array.slice(); // copy
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const temp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = temp;
+  }
+  return arr;
+}
 
 // --- API Handler ---
 export default async function handler(req, res) {
@@ -138,10 +148,19 @@ export default async function handler(req, res) {
       if (playerIds.length > 0) {
         // Pick exactly one winner
         const winnerId = playerIds[Math.floor(Math.random() * playerIds.length)];
-        winnerCard = room.bingoCards?.[room.players[winnerId].cardId];
+winnerCard = room.bingoCards && room.players[winnerId]
+  ? room.bingoCards[room.players[winnerId].cardId]
+  : null;
 
-        const allCards = Object.values(room.bingoCards || {});
-        drawnNumbers = winnerCard ? generateDrawnNumbersForWinner(winnerCard, allCards) : generateNumbers();
+const allCards = room.bingoCards ? Object.values(room.bingoCards) : [];
+
+var numbersForWinner = winnerCard
+  ? generateDrawnNumbersForWinner(winnerCard, allCards)
+  : generateNumbers();
+
+// Shuffle numbers before assigning
+drawnNumbers = shuffleArray(numbersForWinner);
+
       } else {
         drawnNumbers = generateNumbers();
       }

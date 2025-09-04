@@ -258,7 +258,7 @@ return (
     {/* Header Info Dashboard */}
     <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 mb-3 w-full text-xs">
       <div className="bg-white/10 rounded text-center py-1 border border-white/20">
-        {t('room_details')}Bet:{currentRoom.betAmount}
+        {t('room_details')}: {currentRoom.betAmount}
       </div>
       <div className="bg-white/10 rounded text-center py-1 border border-white/20">
         {t('payout')}: {Math.floor(
@@ -458,18 +458,19 @@ return (
       </div>
     </div>
 
-    {/* Bottom buttons */}
-    <div className="flex flex-row gap-2 mt-3 w-full">
-      <button className="flex-1 bg-gradient-to-r from-orange-500 to-yellow-500 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition">
-        {t('bingo')}
-      </button>
-      <button className="flex-1 bg-gradient-to-r from-blue-500 to-cyan-500 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition">
-        {t('refresh')}
-      </button>
-      <button className="flex-1 bg-gradient-to-r from-red-500 to-pink-500 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition">
-        {t('leave')}
-      </button>
-    </div>
+   {/* Bottom buttons */}
+<div className="flex flex-row gap-2 mt-3 w-full">
+  <button className="flex-1 bg-gradient-to-r from-orange-500 to-yellow-500 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition">
+    {t('bingo')}
+  </button>
+  <button
+    onClick={() => navigate("/")} // Navigate to landing page
+    className="flex-1 bg-gradient-to-r from-red-500 to-pink-500 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition"
+  >
+    {t('home')} {/* You can change the translation key or just write "Home" */}
+  </button>
+</div>
+
 
     {/* Footer: Betted Players */}
     <div className="w-full mt-6 bg-white/10 rounded border border-white/20 p-3">

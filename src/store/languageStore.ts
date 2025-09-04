@@ -31,6 +31,7 @@ const translations = {
     
     // Room
     'room_details': 'Room',
+    'bet': 'Bet',
     'payout': 'Payout',
     'max_players': 'Max Players',
     'game_area': 'Game Area',
@@ -63,7 +64,7 @@ const translations = {
     // Header
     'friday_bingo': 'Friday Bingo',
     'balance': 'ሂሳብ',
-    
+    'bet': 'መደብ',
     // Landing
     'welcome': 'ወደ Friday Bingo እንኳን በደህና መጡ!',
     'available_rooms': 'ያሉ ክፍሎች',

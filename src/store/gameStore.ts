@@ -105,7 +105,12 @@ export const useGameStore = create<GameState>((set, get) => ({
 
       if (currentIndex > drawnNumbers.length) currentIndex = drawnNumbers.length;
 
-      
+      set((state) => ({
+        displayedCalledNumbers: {
+          ...state.displayedCalledNumbers,
+          [roomId]: drawnNumbers.slice(0, currentIndex),
+        },
+      }));
 
       let i = currentIndex;
       const interval = setInterval(() => {

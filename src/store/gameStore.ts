@@ -94,7 +94,7 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
     set({ startingGame: false });
   }
 },
-    startNumberStream: (roomId, gameId) => {
+   startNumberStream: (roomId, gameId) => {
   const gameRef = ref(rtdb, `games/${gameId}`);
   
   onValue(gameRef, (snapshot) => {
@@ -142,20 +142,6 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
   });
 }
 
-
-          return;
-        }
-
-        set((state) => ({
-          displayedCalledNumbers: {
-            ...state.displayedCalledNumbers,
-            [roomId]: [...(state.displayedCalledNumbers[roomId] || []), drawnNumbers[i]],
-          },
-        }));
-        i++;
-      }, drawIntervalMs);
-    });
-  },
   
   endGame: async (roomId: string) => {
   try {

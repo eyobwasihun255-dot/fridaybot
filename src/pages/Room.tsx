@@ -261,7 +261,10 @@ return (
         {t('room_details')}Bet:{currentRoom.betAmount}
       </div>
       <div className="bg-white/10 rounded text-center py-1 border border-white/20">
-        {t('payout')}: {Math.floor(currentRoom.players.length * currentRoom.betAmount * 0.9)}
+        {t('payout')}: {Math.floor(
+  (Object.keys(currentRoom.players || {}).length || 0) * currentRoom.betAmount * 0.9
+)}
+
       </div> 
       <div className="bg-white/10 rounded text-center py-1 border border-white/20">
          {currentRoom?.gameStatus ?? t('waiting')}

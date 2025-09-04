@@ -1,5 +1,5 @@
 import { rtdb } from "../bot/firebaseConfig.js";
-import { ref, runTransaction, set as fbset } from "firebase/database";
+import { ref, runTransaction, set as fbset, get, update } from "firebase/database";
 import { v4 as uuidv4 } from "uuid";
 
 // --- Generate 25 unique numbers randomly within partitions ---
@@ -83,26 +83,22 @@ function generateDrawnNumbersForWinner(winnerCard, allCards) {
     { min: 61, max: 75 },
   ];
 
-  const safeAdd = (n) => {
+  const safeAdd = n => {
     if (n > 0 && n <= 75) drawnNumbers.add(n);
   };
 
-  // --- Pick one winning pattern for the winner ---
   const winnerPatterns = pickPatternNumbers(winnerCard);
   const winnerPattern = winnerPatterns[Math.floor(Math.random() * winnerPatterns.length)];
   winnerPattern.forEach(safeAdd);
 
-  // --- Fill each partition with 5 numbers exactly ---
   const partitionedNumbers = ranges.map(() => new Set());
 
-  // Add winner numbers to proper partitions
   drawnNumbers.forEach(num => {
     for (let i = 0; i < ranges.length; i++) {
       if (num >= ranges[i].min && num <= ranges[i].max) partitionedNumbers[i].add(num);
     }
   });
 
-  // Fill partitions to exactly 5 numbers
   for (let i = 0; i < ranges.length; i++) {
     const { min, max } = ranges[i];
     while (partitionedNumbers[i].size < 5) {
@@ -111,19 +107,16 @@ function generateDrawnNumbersForWinner(winnerCard, allCards) {
     }
   }
 
-  // Combine all partitions
   const finalNumbers = [];
   partitionedNumbers.forEach(set => finalNumbers.push(...set));
-
   return finalNumbers;
 }
+
 function shuffleArray(array) {
-  const arr = array.slice(); // copy
+  const arr = array.slice();
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    const temp = arr[i];
-    arr[i] = arr[j];
-    arr[j] = temp;
+    [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   return arr;
 }
@@ -137,13 +130,13 @@ export default async function handler(req, res) {
   let gameData = null;
 
   try {
-    // --- Run transaction to start the game ---
-    await runTransaction(roomRef, (room) => {
+    // Run transaction to start game
+    await runTransaction(roomRef, room => {
       if (!room || room.gameStatus !== "countdown") return room;
 
       const gameId = uuidv4();
       const playerIds = Object.keys(room.players || {});
-      let drawnNumbers: number[] = [];
+      let drawnNumbers = [];
       let winnerCard = null;
 
       if (playerIds.length > 0) {
@@ -175,7 +168,7 @@ export default async function handler(req, res) {
         drawIntervalMs: 5000,
         status: "active",
         totalPayout,
-        betsDeducted: false, // ✅ track once-per-game deduction
+        betsDeducted: false
       };
 
       // Update room
@@ -194,7 +187,7 @@ export default async function handler(req, res) {
     const gameSnap = await get(gameRef);
     const existingGame = gameSnap.val();
 
-    // --- Deduct bets only once ---
+    // Deduct bets only once
     if (!existingGame?.betsDeducted) {
       const roomSnap = await get(roomRef);
       const roomValue = roomSnap.val();
@@ -202,21 +195,20 @@ export default async function handler(req, res) {
       if (roomValue?.players) {
         for (const playerId of Object.keys(roomValue.players)) {
           const balanceRef = ref(rtdb, `users/${playerId}/balance`);
-          await runTransaction(balanceRef, (current) => (current || 0) - (roomValue.betAmount || 0));
+          await runTransaction(balanceRef, current => (current || 0) - (roomValue.betAmount || 0));
         }
       }
 
-      // Mark bets as deducted
       await update(gameRef, { betsDeducted: true });
     }
 
-    // --- Save game data ---
+    // Save game data
     await fbset(gameRef, gameData);
 
     res.json({
       gameId: gameData.id,
       drawnNumbers: gameData.drawnNumbers,
-      winnerCard: gameData.winnerCard,
+      winnerCard: gameData.winnerCard
     });
 
   } catch (err) {

@@ -193,8 +193,8 @@ export default async function handler(req, res) {
 
   return room;
 });
-const gameRef = ref(rtdb, `games/${gameData.id}`);
-const gameSnap = await get(gameRef);
+const gameRefs = ref(rtdb, `games/${gameId}`);
+const gameSnap = await get(gameRefs);
 const existingGame = gameSnap.val();
 
 if (!existingGame?.betsDeducted) {
@@ -215,6 +215,7 @@ if (!existingGame?.betsDeducted) {
     // --- Deduct betAmount from each player's balance ---
     if (!gameData) return res.status(400).json({ error: "Game already started or invalid state" });
 
+    const gameRef = ref(rtdb, `games/${gameData.id}`);
     await fbset(gameRef, gameData);
 
     res.json({

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { rtdb } from '../firebase/config';
-import { ref, onValue, get, set as fbset, update, remove, push, runTransaction } from 'firebase/database';
+import { ref, onValue, get, set as fbset, update, remove, push, runTransaction,child } from 'firebase/database';
 import { useAuthStore } from '../store/authStore';
 interface BingoCard {
   id: string;
@@ -170,25 +170,28 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
       
   try {
     const snapshot = await get(bingoCardsRef);
-    if (snapshot.exists()) {
-      const updates: Record<string, any> = {};
-      snapshot.forEach((cardSnap) => {
-        const cardId = cardSnap.key;
-        updates[`${cardId}/claimed`] = false;
-        updates[`${cardId}/claimedBy`] = null;
-      });
-      await update(bingoCardsRef, updates);
-      console.log("✅ All bingo cards reset.");
-    }
-    await update(roomRef, {
-      gameStatus: "waiting",
-      countdownEndAt: null,
-      countdownStartedBy: null,
-      players : null,
-      nextGameCountdownEndAt: null, // optional
-    });
+const cards = snapshot.val();
 
-    console.log("✅ Room reset to waiting after cooldown.");
+if (cards) {
+  const updates: Record<string, any> = {};
+  Object.keys(cards).forEach((cardId) => {
+    updates[`${cardId}/claimed`] = false;
+    updates[`${cardId}/claimedBy`] = null;
+  });
+
+  await update(bingoCardsRef, updates);
+  console.log("✅ All bingo cards reset.");
+}
+
+await update(roomRef, {
+  gameStatus: "waiting",
+  countdownEndAt: null,
+  countdownStartedBy: null,
+  players: null,
+  currentPlayers: 0,
+  nextGameCountdownEndAt: null,
+});
+
   } catch (err) {
     console.error("❌ Failed to reset cards/room:", err);
   }

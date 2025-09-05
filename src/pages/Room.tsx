@@ -347,9 +347,9 @@ return (
   </div>
 )}
 {showPatterns && displayedCard && (
-  <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-    <div className="bg-white text-black rounded-2xl shadow-xl p-6 w-[90%] max-w-4xl max-h-[90%] overflow-y-auto">
-      <div className="flex justify-between items-center mb-4">
+  <div className="absolute top-0 left-0 w-full h-full bg-black/70 flex items-center justify-center z-50">
+    <div className="bg-white text-black rounded-2xl shadow-xl p-4 w-[95%] max-w-4xl max-h-[85vh] overflow-y-auto">
+      <div className="flex justify-between items-center mb-3">
         <h2 className="text-lg font-bold">🎯 Bingo Winning Patterns</h2>
         <button
           onClick={() => setShowPatterns(false)}
@@ -384,6 +384,7 @@ return (
     </div>
   </div>
 )}
+
 
 
       {/* Left side (Called numbers) */}
@@ -545,22 +546,30 @@ return (
     </div>
 
    {/* Bottom buttons */}
-<div className="flex flex-row gap-2 mt-3 w-full">
-  <button className="flex-1 bg-gradient-to-r from-orange-500 to-yellow-500 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition">
-    {t('bingo')}
-  </button>
-  <button
-    onClick={() => navigate("/")} // Navigate to landing page
-    className="flex-1 bg-gradient-to-r from-red-500 to-pink-500 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition"
-  >
-    {t('home')} {/* You can change the translation key or just write "Home" */}
-  </button>
-  {/* NEW: Bingo Laws button */}
+{/* Bottom buttons */}
+<div className="flex flex-col gap-2 mt-3 w-full">
+  {/* Row with Bingo + Home */}
+  <div className="flex flex-row gap-2">
+    <button 
+      onClick={handleBingoClick}
+      className="flex-1 bg-gradient-to-r from-orange-500 to-yellow-500 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition"
+    >
+      {t('bingo')}
+    </button>
+    <button
+      onClick={() => navigate("/")}
+      className="flex-1 bg-gradient-to-r from-red-500 to-pink-500 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition"
+    >
+      {t('home')}
+    </button>
+  </div>
+
+  {/* Row with Bingo Laws */}
   <button
     onClick={() => setShowPatterns(true)}
     className="w-full bg-gradient-to-r from-blue-600 to-purple-600 py-2 rounded-lg font-bold text-sm shadow hover:opacity-90 transition"
   >
-   {t('pattern')}
+    {t('pattern')}
   </button>
 </div>
 

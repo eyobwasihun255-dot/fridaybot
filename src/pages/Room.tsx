@@ -192,50 +192,60 @@ const getPartitionColor = (num: number) => {
 const [showPatterns, setShowPatterns] = useState(false);
 
 // Utility to pick patterns (you already have this function)
-function pickPatternNumbers(card: any) {
-  const numbers = card.numbers;
-  const size = numbers.length;
-  const center = Math.floor(size / 2);
-  const patterns: number[][] = [];
+function getPatterns() {
+  const size = 5;
+  const center = 12; // middle index in 25 grid
+  const patterns: { name: string; indexes: number[] }[] = [];
 
   // Rows
-  for (let r = 0; r < size; r++) patterns.push(numbers[r]);
+  for (let r = 0; r < size; r++) {
+    patterns.push({
+      name: `Row ${r + 1}`,
+      indexes: Array.from({ length: size }, (_, c) => r * size + c),
+    });
+  }
 
   // Columns
-  for (let c = 0; c < size; c++) patterns.push(numbers.map((row: number[]) => row[c]));
+  for (let c = 0; c < size; c++) {
+    patterns.push({
+      name: `Column ${c + 1}`,
+      indexes: Array.from({ length: size }, (_, r) => r * size + c),
+    });
+  }
 
-  // Diagonals
-  patterns.push(numbers.map((row: number[], i: number) => row[i]));
-  patterns.push(numbers.map((row: number[], i: number) => row[size - 1 - i]));
+  // Diagonal ↘
+  patterns.push({
+    name: "Diagonal ↘",
+    indexes: Array.from({ length: size }, (_, i) => i * size + i),
+  });
 
-  // Small cross
-  patterns.push([
-    numbers[center][center],
-    numbers[center - 1][center],
-    numbers[center + 1][center],
-    numbers[center][center - 1],
-    numbers[center][center + 1],
-  ]);
+  // Diagonal ↙
+  patterns.push({
+    name: "Diagonal ↙",
+    indexes: Array.from({ length: size }, (_, i) => i * size + (size - 1 - i)),
+  });
+
+  // Small Cross
+  patterns.push({
+    name: "Small Cross",
+    indexes: [center, center - 5, center + 5, center - 1, center + 1],
+  });
 
   // Small X
-  patterns.push([
-    numbers[center][center],
-    numbers[center - 1][center - 1],
-    numbers[center - 1][center + 1],
-    numbers[center + 1][center - 1],
-    numbers[center + 1][center + 1],
-  ]);
+  patterns.push({
+    name: "Small X",
+    indexes: [center, center - 6, center - 4, center + 4, center + 6],
+  });
 
-  // Four corners
-  patterns.push([
-    numbers[0][0],
-    numbers[0][size - 1],
-    numbers[size - 1][0],
-    numbers[size - 1][size - 1],
-  ]);
+  // Four Corners
+  patterns.push({
+    name: "Four Corners",
+    indexes: [0, 4, 20, 24],
+  });
 
   return patterns;
 }
+
 
 const handleCancelBet = async () => {
   const cardId = userCard?.id || selectedCard?.id;
@@ -346,7 +356,7 @@ return (
     </div>
   </div>
 )}
-{showPatterns && displayedCard && (
+{showPatterns && (
   <div className="absolute top-0 left-0 w-full h-full bg-black/70 flex items-center justify-center z-50">
     <div className="bg-white text-black rounded-2xl shadow-xl p-4 w-[95%] max-w-4xl max-h-[85vh] overflow-y-auto">
       <div className="flex justify-between items-center mb-3">
@@ -360,20 +370,20 @@ return (
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {pickPatternNumbers(displayedCard).map((pattern, idx) => (
+        {getPatterns().map((pattern, idx) => (
           <div key={idx} className="p-2 border rounded-lg shadow">
-            <h3 className="text-sm font-bold mb-2">Pattern {idx + 1}</h3>
+            <h3 className="text-sm font-bold mb-2">{pattern.name}</h3>
             <div className="grid grid-cols-5 gap-1">
-              {displayedCard.numbers.flat().map((num: number, i: number) => {
-                const isHighlighted = pattern.includes(num);
+              {Array.from({ length: 25 }, (_, i) => {
+                const isHighlighted = pattern.indexes.includes(i);
                 return (
                   <div
                     key={i}
-                    className={`w-6 h-6 flex items-center justify-center rounded text-[10px] font-bold 
+                    className={`w-6 h-6 flex items-center justify-center rounded text-[10px] font-bold
                       ${isHighlighted ? "bg-green-500 text-white" : "bg-gray-200 text-black"}
                     `}
                   >
-                    {num === 0 ? "★" : num}
+                    {i === 12 ? "★" : ""} {/* center free space */}
                   </div>
                 );
               })}
@@ -384,8 +394,6 @@ return (
     </div>
   </div>
 )}
-
-
 
       {/* Left side (Called numbers) */}
     <div className="relative w-2/5 h-full flex flex-col bg-white/10 p-2 rounded border border-white/20 text-xs">

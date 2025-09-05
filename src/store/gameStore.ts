@@ -145,16 +145,15 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
   });
 },
 
-endGame: async (roomId: string) => {
+  endGame: async (roomId: string) => {
   try {
     const roomRef = ref(rtdb, `rooms/${roomId}`);
     const bingoCardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
-    const playersRef = ref(rtdb, `rooms/${roomId}/players`);
-
-    const cooldownDuration = 0.5 * 60 * 1000; // 30 sec cooldown
+    const cooldownDuration = 0.5 * 60 * 1000; // ✅ 1 min cooldown
     const nextGameCountdownEndAt = Date.now() + cooldownDuration;
+   const playersRef = ref(rtdb, `rooms/${roomId}/players`);
 
-    // Step 1: End the game (set status + cooldown timer)
+    // Step 1: End the game
     await update(roomRef, {
       gameStatus: "ended",
       gameId: null,
@@ -162,48 +161,26 @@ endGame: async (roomId: string) => {
       countdownEndAt: null,
       countdownStartedBy: null,
       nextGameCountdownEndAt,
-      winner: null,
-      payout: null,
     });
 
-    console.log("✅ Game ended. Cooldown started.");
+    console.log("✅ Game ended. Next round countdown started.");
 
-    // Step 2: After cooldown → reset cards + clear players + set waiting
+    // Step 2: After cooldown, reset room + unclaim all cards
     setTimeout(async () => {
-      try {
-        // Reset bingo cards
-        const snapshot = await get(bingoCardsRef);
-        const cards = snapshot.val();
+  try {
+    await update(roomRef, {
+      gameStatus: "waiting",
+      countdownEndAt: null,
+      countdownStartedBy: null,
+      nextGameCountdownEndAt: null, // optional
+    });
 
-        if (cards) {
-          const updates: Record<string, any> = {};
-          Object.keys(cards).forEach((cardId) => {
-            updates[`${cardId}/claimed`] = false;
-            updates[`${cardId}/claimedBy`] = null;
-          });
-          await update(bingoCardsRef, updates);
-          console.log("✅ Bingo cards reset.");
-        }
+    console.log("✅ Room reset to waiting after cooldown.");
+  } catch (err) {
+    console.error("❌ Failed to reset cards/room:", err);
+  }
+}, cooldownDuration);
 
-        // Clear players
-        await update(playersRef, {}); // wipes the players node
-        console.log("✅ Players cleared.");
-
-        // Reset room state
-        await update(roomRef, {
-          gameStatus: "waiting",
-          countdownEndAt: null,
-          countdownStartedBy: null,
-          nextGameCountdownEndAt: null,
-          currentPlayers: 0,
-          players: null, // also null the field in room
-        });
-
-        console.log("✅ Room reset to waiting after cooldown.");
-      } catch (err) {
-        console.error("❌ Failed to reset room after cooldown:", err);
-      }
-    }, cooldownDuration);
   } catch (err) {
     console.error("❌ Failed to end game:", err);
   }

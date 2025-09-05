@@ -192,58 +192,30 @@ const getPartitionColor = (num: number) => {
 const [showPatterns, setShowPatterns] = useState(false);
 
 // Utility to pick patterns (you already have this function)
-function getPatterns() {
+function generatePatterns() {
   const size = 5;
-  const center = 12; // middle index in 25 grid
-  const patterns: { name: string; indexes: number[] }[] = [];
+  const indices: number[][] = [];
 
   // Rows
-  for (let r = 0; r < size; r++) {
-    patterns.push({
-      name: `Row ${r + 1}`,
-      indexes: Array.from({ length: size }, (_, c) => r * size + c),
-    });
-  }
+  for (let r = 0; r < size; r++) indices.push([...Array(size)].map((_, c) => r * size + c));
 
   // Columns
-  for (let c = 0; c < size; c++) {
-    patterns.push({
-      name: `Column ${c + 1}`,
-      indexes: Array.from({ length: size }, (_, r) => r * size + c),
-    });
-  }
+  for (let c = 0; c < size; c++) indices.push([...Array(size)].map((_, r) => r * size + c));
 
-  // Diagonal ↘
-  patterns.push({
-    name: "Diagonal ↘",
-    indexes: Array.from({ length: size }, (_, i) => i * size + i),
-  });
+  // Diagonals
+  indices.push([...Array(size)].map((_, i) => i * size + i));
+  indices.push([...Array(size)].map((_, i) => i * size + (size - 1 - i)));
 
-  // Diagonal ↙
-  patterns.push({
-    name: "Diagonal ↙",
-    indexes: Array.from({ length: size }, (_, i) => i * size + (size - 1 - i)),
-  });
-
-  // Small Cross
-  patterns.push({
-    name: "Small Cross",
-    indexes: [center, center - 5, center + 5, center - 1, center + 1],
-  });
+  // Small cross
+  indices.push([12, 7, 17, 11, 13]); // center + up/down/left/right
 
   // Small X
-  patterns.push({
-    name: "Small X",
-    indexes: [center, center - 6, center - 4, center + 4, center + 6],
-  });
+  indices.push([12, 6, 8, 16, 18]); // center + four diagonals near center
 
-  // Four Corners
-  patterns.push({
-    name: "Four Corners",
-    indexes: [0, 4, 20, 24],
-  });
+  // Four corners
+  indices.push([0, 4, 20, 24]);
 
-  return patterns;
+  return indices;
 }
 
 
@@ -369,13 +341,15 @@ return (
         </button>
       </div>
 
+      {/* Demo 5x5 card */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {getPatterns().map((pattern, idx) => (
+        {generatePatterns().map((pattern, idx) => (
           <div key={idx} className="p-2 border rounded-lg shadow">
-            <h3 className="text-sm font-bold mb-2">{pattern.name}</h3>
+            <h3 className="text-sm font-bold mb-2">Pattern {idx + 1}</h3>
             <div className="grid grid-cols-5 gap-1">
               {Array.from({ length: 25 }, (_, i) => {
-                const isHighlighted = pattern.indexes.includes(i);
+                const num = i + 1;
+                const isHighlighted = pattern.includes(i);
                 return (
                   <div
                     key={i}
@@ -383,7 +357,7 @@ return (
                       ${isHighlighted ? "bg-green-500 text-white" : "bg-gray-200 text-black"}
                     `}
                   >
-                    {i === 12 ? "★" : ""} {/* center free space */}
+                    {num === 13 ? "★" : num}
                   </div>
                 );
               })}
@@ -394,6 +368,7 @@ return (
     </div>
   </div>
 )}
+
 
       {/* Left side (Called numbers) */}
     <div className="relative w-2/5 h-full flex flex-col bg-white/10 p-2 rounded border border-white/20 text-xs">

@@ -188,6 +188,54 @@ const getPartitionColor = (num: number) => {
   if (num >= 61 && num <= 75) return "from-red-400 to-red-600";
   return "from-gray-400 to-gray-600"; // fallback
 };
+// --- Add state at the top inside Room component ---
+const [showPatterns, setShowPatterns] = useState(false);
+
+// Utility to pick patterns (you already have this function)
+function pickPatternNumbers(card: any) {
+  const numbers = card.numbers;
+  const size = numbers.length;
+  const center = Math.floor(size / 2);
+  const patterns: number[][] = [];
+
+  // Rows
+  for (let r = 0; r < size; r++) patterns.push(numbers[r]);
+
+  // Columns
+  for (let c = 0; c < size; c++) patterns.push(numbers.map((row: number[]) => row[c]));
+
+  // Diagonals
+  patterns.push(numbers.map((row: number[], i: number) => row[i]));
+  patterns.push(numbers.map((row: number[], i: number) => row[size - 1 - i]));
+
+  // Small cross
+  patterns.push([
+    numbers[center][center],
+    numbers[center - 1][center],
+    numbers[center + 1][center],
+    numbers[center][center - 1],
+    numbers[center][center + 1],
+  ]);
+
+  // Small X
+  patterns.push([
+    numbers[center][center],
+    numbers[center - 1][center - 1],
+    numbers[center - 1][center + 1],
+    numbers[center + 1][center - 1],
+    numbers[center + 1][center + 1],
+  ]);
+
+  // Four corners
+  patterns.push([
+    numbers[0][0],
+    numbers[0][size - 1],
+    numbers[size - 1][0],
+    numbers[size - 1][size - 1],
+  ]);
+
+  return patterns;
+}
 
 const handleCancelBet = async () => {
   const cardId = userCard?.id || selectedCard?.id;
@@ -295,6 +343,44 @@ return (
       >
         Close
       </button>
+    </div>
+  </div>
+)}
+{showPatterns && displayedCard && (
+  <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+    <div className="bg-white text-black rounded-2xl shadow-xl p-6 w-[90%] max-w-4xl max-h-[90%] overflow-y-auto">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-bold">🎯 Bingo Winning Patterns</h2>
+        <button
+          onClick={() => setShowPatterns(false)}
+          className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+        >
+          Close
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        {pickPatternNumbers(displayedCard).map((pattern, idx) => (
+          <div key={idx} className="p-2 border rounded-lg shadow">
+            <h3 className="text-sm font-bold mb-2">Pattern {idx + 1}</h3>
+            <div className="grid grid-cols-5 gap-1">
+              {displayedCard.numbers.flat().map((num: number, i: number) => {
+                const isHighlighted = pattern.includes(num);
+                return (
+                  <div
+                    key={i}
+                    className={`w-6 h-6 flex items-center justify-center rounded text-[10px] font-bold 
+                      ${isHighlighted ? "bg-green-500 text-white" : "bg-gray-200 text-black"}
+                    `}
+                  >
+                    {num === 0 ? "★" : num}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   </div>
 )}
@@ -468,6 +554,13 @@ return (
     className="flex-1 bg-gradient-to-r from-red-500 to-pink-500 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition"
   >
     {t('home')} {/* You can change the translation key or just write "Home" */}
+  </button>
+  {/* NEW: Bingo Laws button */}
+  <button
+    onClick={() => setShowPatterns(true)}
+    className="w-full bg-gradient-to-r from-blue-600 to-purple-600 py-2 rounded-lg font-bold text-sm shadow hover:opacity-90 transition"
+  >
+   {t('pattern')}
   </button>
 </div>
 

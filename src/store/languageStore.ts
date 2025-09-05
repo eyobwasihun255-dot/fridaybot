@@ -58,13 +58,15 @@ const translations = {
     'error': 'An error occurred',
     'success': 'Success!',
     'confirm': 'Confirm',
-    'cancel': 'Cancel'
+    'cancel': 'Cancel',
+    'pattern': 'Winning Patterns'
   },
   am: {
     // Header
     'friday_bingo': 'Friday Bingo',
     'balance': 'ሂሳብ',
     'bet': 'መደብ',
+    'pattern': 'የማሸነፍ መንገዶች',
     // Landing
     'welcome': 'ወደ Friday Bingo እንኳን በደህና መጡ!',
     'available_rooms': 'ያሉ ክፍሎች',

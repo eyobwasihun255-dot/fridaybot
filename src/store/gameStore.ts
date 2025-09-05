@@ -167,11 +167,24 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
 
     // Step 2: After cooldown, reset room + unclaim all cards
     setTimeout(async () => {
+      
   try {
+    const snapshot = await get(bingoCardsRef);
+    if (snapshot.exists()) {
+      const updates: Record<string, any> = {};
+      snapshot.forEach((cardSnap) => {
+        const cardId = cardSnap.key;
+        updates[`${cardId}/claimed`] = false;
+        updates[`${cardId}/claimedBy`] = null;
+      });
+      await update(bingoCardsRef, updates);
+      console.log("✅ All bingo cards reset.");
+    }
     await update(roomRef, {
       gameStatus: "waiting",
       countdownEndAt: null,
       countdownStartedBy: null,
+      players : null,
       nextGameCountdownEndAt: null, // optional
     });
 

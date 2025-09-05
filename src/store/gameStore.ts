@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { rtdb } from '../firebase/config';
-import { ref, onValue, get, set as fbset, update, remove, push, runTransaction,child } from 'firebase/database';
+import { ref, onValue, get, set as fbset, update, remove, push, runTransaction } from 'firebase/database';
 import { useAuthStore } from '../store/authStore';
 interface BingoCard {
   id: string;
@@ -167,31 +167,15 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
 
     // Step 2: After cooldown, reset room + unclaim all cards
     setTimeout(async () => {
-      
   try {
-    const snapshot = await get(bingoCardsRef);
-const cards = snapshot.val();
+    await update(roomRef, {
+      gameStatus: "waiting",
+      countdownEndAt: null,
+      countdownStartedBy: null,
+      nextGameCountdownEndAt: null, // optional
+    });
 
-if (cards) {
-  const updates: Record<string, any> = {};
-  Object.keys(cards).forEach((cardId) => {
-    updates[`${cardId}/claimed`] = false;
-    updates[`${cardId}/claimedBy`] = null;
-  });
-
-  await update(bingoCardsRef, updates);
-  console.log("✅ All bingo cards reset.");
-}
-
-await update(roomRef, {
-  gameStatus: "waiting",
-  countdownEndAt: null,
-  countdownStartedBy: null,
-  players: null,
-  currentPlayers: 0,
-  nextGameCountdownEndAt: null,
-});
-
+    console.log("✅ Room reset to waiting after cooldown.");
   } catch (err) {
     console.error("❌ Failed to reset cards/room:", err);
   }

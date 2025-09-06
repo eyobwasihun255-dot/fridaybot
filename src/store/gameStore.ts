@@ -212,7 +212,9 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
 const { user } = useAuthStore.getState();
 if (user?.telegramId) {
   await resetClaimedCards(roomId, user.telegramId);
+  set({ selectedCard: null }); // ✅ force local reset
 }
+
 
 
     // Step 3: After cooldown, reset the room state

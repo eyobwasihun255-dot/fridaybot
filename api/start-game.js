@@ -181,7 +181,9 @@ export default async function handler(req, res) {
       const userSnap = await get(ref(rtdb, `users/${winnerId}`));
       const userData = userSnap.val();
       const username = userData?.username || "Unknown";
-      gameData.winner = username; // <-- store username directly in game entity
+      gameData.winner = username;
+      room.currentwinner = username;
+      room.payed = false; // <-- store username directly in game entity
     }
 
     const gameRef = ref(rtdb, `games/${gameData.id}`);

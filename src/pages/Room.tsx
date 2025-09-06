@@ -250,39 +250,6 @@ function checkCardBingo(cardNumbers: number[][], calledNumbers: number[]) {
   );
 }
 
-const handleBingoClick = async () => {
-  console.log("✅ Bingo button clicked"); 
-  if (!displayedCard) {
-    setGameMessage("No card selected!");
-    return;
-  }
-
-  const calledNumbers = displayedCalledNumbers[currentRoom?.id || ""] || [];
-const isWinner = checkCardBingo(displayedCard.numbers, calledNumbers);
-
-
-  if (isWinner) {
-  setGameMessage(t("you_won"));
-
-  if (currentRoom) {
-    const payout = currentRoom.currentPlayers * currentRoom.betAmount * 0.9;
-    if (!currentRoom.isDemoRoom) {
-      await updateBalance(payout);
-    }
-  }
-
-  useGameStore.getState().setWinnerCard(displayedCard);
-  useGameStore.getState().setWinnerPopup(true); // ✅ manual popup
-
-} else {
-  setGameMessage(t("not_a_winner"));
-}
-
-  setTimeout(() => {
-    setGameMessage("");
-  }, 3000);
-};
-
   if (!currentRoom) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -292,10 +259,7 @@ const isWinner = checkCardBingo(displayedCard.numbers, calledNumbers);
         </div>
       </div>
     );
-  }
-
-  // Demo called numbers for visualization
-  const demoCalledNumbers = [7, 23, 45, 62, 8, 19, 31, 58, 14];
+  };
 
 
 // Find this player's data inside the room

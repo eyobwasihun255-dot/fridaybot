@@ -24,7 +24,9 @@ interface Room {
   calledNumbers: number[];
   winner?: string;
   payout?: number;
-  countdownEndAt: number, 
+  payed: boolean;
+  currentWinner?: string; 
+  countdownEndAt: number;
   players?: { [id: string]: { id: string; username: string; betAmount: number; cardId: string } };
   gameId?: string;
   nextGameCountdownEndAt?: number;
@@ -168,6 +170,8 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
   try {
     await update(roomRef, {
       gameStatus: "waiting",
+      currentwinner: null,
+      payed:false,
       countdownEndAt: null,
       countdownStartedBy: null,
       nextGameCountdownEndAt: null, // optional
@@ -368,74 +372,44 @@ cancelBet: async (cardId?: string) => {
 },
 
 checkBingo: async () => {
-  const { selectedCard, currentRoom, displayedCalledNumbers, setWinnerCard, setShowWinnerPopup } = get();
+  const { selectedCard, currentRoom, setWinnerCard, setShowWinnerPopup } = get();
   const { user } = useAuthStore.getState();
 
   if (!selectedCard || !currentRoom || !user) return false;
 
-  const numbers = selectedCard.numbers;
-  const calledNumbers = displayedCalledNumbers[currentRoom.id] || [];
-  const size = numbers.length;
-  const center = Math.floor(size / 2);
-
-  const patterns: number[][] = [];
-
-  // Rows
-  for (let r = 0; r < size; r++) patterns.push(numbers[r]);
-
-  // Columns
-  for (let c = 0; c < size; c++) patterns.push(numbers.map(row => row[c]));
-
-  // Diagonals
-  patterns.push(numbers.map((row, i) => row[i]));
-  patterns.push(numbers.map((row, i) => row[size - 1 - i]));
-
-  // X pattern
-  patterns.push([
-    numbers[center][center],
-    numbers[center - 1][center - 1],
-    numbers[center - 1][center + 1],
-    numbers[center + 1][center - 1],
-    numbers[center + 1][center + 1],
-  ]);
-
-  // Four corners
-  patterns.push([
-    numbers[0][0],
-    numbers[0][size - 1],
-    numbers[size - 1][0],
-    numbers[size - 1][size - 1],
-  ]);
-
-  // ✅ Check if any pattern is fully covered
-  const isWinner = patterns.some(pattern => pattern.every(num => calledNumbers.includes(num)));
-
-  if (!isWinner) {
-    alert("❌ Not a winning card yet!");
-    return false;
-  }
-
   try {
+    // ✅ Check if current user is the declared room winner
+    if (currentRoom.winner !== user.telegramId) {
+      alert("❌ You are not the winner for this round!");
+      return false;
+    }
+
+    // ✅ Check if payout already done
+    if (currentRoom.payed) {
+      alert("⚠️ Payout already processed!");
+      return false;
+    }
+
     // ✅ Calculate payout: players × betAmount × 0.9
     const activePlayers = currentRoom.players ? Object.keys(currentRoom.players).length : 0;
     const payout = activePlayers * currentRoom.betAmount * 0.9;
 
-    // ✅ Add balance to winner
+    // ✅ Add balance atomically
     const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
     await runTransaction(balanceRef, (current) => (current || 0) + payout);
 
-    // ✅ Mark as winner in DB
+    // ✅ Update room to mark payed = true
     const roomRef = ref(rtdb, `rooms/${currentRoom.id}`);
     await update(roomRef, {
-      winner: user.telegramId,
       payout,
+      payed: true,   // 👈 mark payout done
     });
 
     // ✅ Update local state
     setWinnerCard(selectedCard);
     setShowWinnerPopup(true);
 
-    console.log(`🎉 Bingo! You win: ${payout}`);
+    console.log(`🎉 Bingo! ${user.username} wins: ${payout}`);
     return true;
   } catch (err) {
     console.error("❌ Error processing bingo win:", err);

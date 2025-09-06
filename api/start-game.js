@@ -170,10 +170,8 @@ export default async function handler(req, res) {
       room.calledNumbers = [];
       room.countdownEndAt = null;
       room.countdownStartedBy = null;
-      const userSnap =  get(ref(rtdb, `users/${winnerId}`));
-      const userData = userSnap.val();
-      const username = userData?.username || "Unknown";
-      room.currentwinner = username;
+      
+      room.currentwinner = winnerId ? winnerId : null;
       room.payed = false; 
 
       return room;

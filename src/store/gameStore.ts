@@ -49,7 +49,10 @@ interface GameState {
   showWinnerPopup: boolean; 
    closeWinnerPopup: () => void; // <-- missing before
   setWinnerCard: (card: BingoCard) => void; // Setter for winner card
-
+  setShowWinnerPopup: (show: boolean) => void; // Setter for popup visibility
+  endGame: (roomId: string) => void;
+  fetchBingoCards: () => void;
+  cancelBet: (cardId?: string) => Promise<boolean>;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -62,6 +65,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   startingGame: false, // ✅ Initialize startingGame flag
  // add this
 setWinnerCard: (card) => set({ winnerCard: card, showWinnerPopup: false }),
+setShowWinnerPopup: (show: boolean) => set({ showWinnerPopup: show }),
+
 closeWinnerPopup: () => set({ showWinnerPopup: false }),
 
 
@@ -123,7 +128,7 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
         // ✅ Show popup after all numbers called
       const { user } = useAuthStore.getState();
         if (winnerCard?.claimedBy === user?.telegramId) {
-          set({ winnerCard, showWinnerPopup: true });
+          set({ winnerCard });
 
           // ✅ Add payout to winner's balance
           const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);

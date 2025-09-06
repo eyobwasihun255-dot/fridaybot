@@ -262,20 +262,21 @@ const isWinner = checkCardBingo(displayedCard.numbers, calledNumbers);
 
 
   if (isWinner) {
-    setGameMessage(t("you_won"));
+  setGameMessage(t("you_won"));
 
-    if (currentRoom) {
-      const payout = currentRoom.currentPlayers * currentRoom.betAmount * 0.9;
-      if (!currentRoom.isDemoRoom) {
-        await updateBalance(payout);
-      }
+  if (currentRoom) {
+    const payout = currentRoom.currentPlayers * currentRoom.betAmount * 0.9;
+    if (!currentRoom.isDemoRoom) {
+      await updateBalance(payout);
     }
-
-    useGameStore.getState().setWinner(displayedCard);
-
-  } else {
-    setGameMessage(t("not_a_winner"));
   }
+
+  useGameStore.getState().setWinnerCard(displayedCard);
+  useGameStore.getState().setWinnerPopup(true); // ✅ manual popup
+
+} else {
+  setGameMessage(t("not_a_winner"));
+}
 
   setTimeout(() => {
     setGameMessage("");

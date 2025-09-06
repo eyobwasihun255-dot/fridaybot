@@ -375,8 +375,10 @@ cancelBet: async (cardId?: string) => {
 },
 
 checkBingo: async () => {
-  const { selectedCard, currentRoom, displayedCalledNumbers } = get();
-  if (!selectedCard || !currentRoom) return false;
+  const { selectedCard, currentRoom, displayedCalledNumbers, setWinnerCard, setShowWinnerPopup } = get();
+  const { user } = useAuthStore.getState();
+
+  if (!selectedCard || !currentRoom || !user) return false;
 
   const numbers = selectedCard.numbers;
   const calledNumbers = displayedCalledNumbers[currentRoom.id] || [];
@@ -413,8 +415,39 @@ checkBingo: async () => {
   ]);
 
   // ✅ Check if any pattern is fully covered
-  return patterns.some(pattern => pattern.every(num => calledNumbers.includes(num)));
+  const isWinner = patterns.some(pattern => pattern.every(num => calledNumbers.includes(num)));
+
+  if (!isWinner) {
+    alert("❌ Not a winning card yet!");
+    return false;
+  }
+
+  try {
+    // ✅ Add balance to winner
+    const payout = currentRoom.payout || currentRoom.betAmount * (currentRoom.currentPlayers || 1);
+
+    const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
+    await runTransaction(balanceRef, (current) => (current || 0) + payout);
+
+    // ✅ Mark as winner in DB
+    const roomRef = ref(rtdb, `rooms/${currentRoom.id}`);
+    await update(roomRef, {
+      winner: user.telegramId,
+      payout,
+    });
+
+    // ✅ Update local state
+    setWinnerCard(selectedCard);
+    setShowWinnerPopup(true);
+
+    console.log("🎉 Bingo! You win:", payout);
+    return true;
+  } catch (err) {
+    console.error("❌ Error processing bingo win:", err);
+    return false;
+  }
 },
+
 
   fetchBingoCards: () => {
       const { currentRoom } = get();

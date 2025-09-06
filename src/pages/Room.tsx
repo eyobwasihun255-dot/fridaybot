@@ -558,7 +558,7 @@ return (
   {/* Row with Bingo + Home */}
   <div className="flex flex-row gap-2">
     <button 
-      onClick={handleBingoClick}
+       onClick={() => useGameStore.getState().checkBingo()}
       className="flex-1 bg-gradient-to-r from-orange-500 to-yellow-500 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition"
     >
       {t('bingo')}

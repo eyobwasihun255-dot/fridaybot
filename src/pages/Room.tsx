@@ -269,7 +269,8 @@ const playerData = currentRoom?.players?.[user?.telegramId];
 const alreadyBetted = !!playerData?.betAmount && playerData.betAmount > 0;
 
 // Combine with local state for smoother UX
-const isBetActive = hasBet || alreadyBetted;
+const isBetActive = useGameStore((state) => state.isBetActive);
+
 
 
 

@@ -33,7 +33,7 @@ interface Room {
   players?: { [id: string]: { id: string; username: string; betAmount: number; cardId: string } };
   gameId?: string;
   nextGameCountdownEndAt?: number;
-
+  
 }
 
 interface GameState {
@@ -58,6 +58,7 @@ interface GameState {
   endGame: (roomId: string) => void;
   fetchBingoCards: () => void;
   cancelBet: (cardId?: string) => Promise<boolean>;
+  isBetActive: false,
 }
 
 async function resetClaimedCards(roomId: string, userId: string) {
@@ -212,7 +213,7 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
 const { user } = useAuthStore.getState();
 if (user?.telegramId) {
   await resetClaimedCards(roomId, user.telegramId);
-  set({ selectedCard: null }); // ✅ force local reset
+   set({ isBetActive: false });
 }
 
 
@@ -379,7 +380,7 @@ placeBet: async () => {
       betAmount: currentRoom.betAmount,
       cardId: selectedCard.id,
     });
-
+    set({ isBetActive: true });
     return true;
   } catch (err) {
     console.error("❌ Error placing bet:", err);
@@ -417,7 +418,7 @@ cancelBet: async (cardId?: string) => {
     if (selectedCard?.id === targetCardId) {
       set({ selectedCard: null });
     }
-
+     set({ isBetActive: false });
     console.log("✅ Bet canceled successfully");
     return true;
   } catch (err) {

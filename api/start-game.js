@@ -43,7 +43,7 @@ function pickPatternNumbers(card) {
   patterns.push(numbers.map((row, i) => row[i]));
   patterns.push(numbers.map((row, i) => row[size - 1 - i]));
 
-X
+
   patterns.push([
     numbers[center][center],
     numbers[center - 1][center - 1],

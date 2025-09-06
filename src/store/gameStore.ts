@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { rtdb } from '../firebase/config';
-import { ref, onValue, get, set as fbset, update, remove, push, runTransaction } from 'firebase/database';
+import { ref, onValue, get as fbget,, set as fbset, update, remove, push, runTransaction } from 'firebase/database';
 import { useAuthStore } from '../store/authStore';
 interface BingoCard {
   id: string;
@@ -165,8 +165,9 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
     console.log("✅ Game ended. Next round countdown started.");
 
     // Step 2: Unclaim only the current user's card
-const snapshot = await get(bingoCardsRef);
+const snapshot = await fbget(bingoCardsRef);
 const cards = snapshot.val();
+
 const { user } = useAuthStore.getState(); // current user
 
 if (cards && user) {

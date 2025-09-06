@@ -238,23 +238,49 @@ const handleCancelBet = async () => {
       prev.includes(num) ? prev.filter((n) => n !== num) : [...prev, num]
     );
   };
+// Check if a card has bingo
+function checkCardBingo(cardNumbers: number[][], calledNumbers: number[]) {
+  const flatCard = cardNumbers.flat();
+  const calledSet = new Set(calledNumbers);
 
-  const handleBingoClick = async () => {
-    const isBingo = await checkBingo();
-    if (isBingo && currentRoom) {
+  return generatePatterns().some((pattern) =>
+    pattern.every((index) => {
+      const num = flatCard[index];
+      return num === 0 || calledSet.has(num); // 0 = Free space
+    })
+  );
+}
+
+ const handleBingoClick = async () => {
+  if (!displayedCard) {
+    setGameMessage("No card selected!");
+    return;
+  }
+
+  const isWinner = checkCardBingo(displayedCard.numbers, displayedCalledNumbers);
+
+  if (isWinner) {
+    setGameMessage(t("you_won"));
+
+    if (currentRoom) {
       const payout = currentRoom.currentPlayers * currentRoom.betAmount * 0.9;
-      setGameMessage(t('you_won'));
       if (!currentRoom.isDemoRoom) {
         await updateBalance(payout);
       }
-    } else {
-      setGameMessage(t('not_a_winner'));
     }
-    
-    setTimeout(() => {
-      setGameMessage('');
-    }, 3000);
-  };
+
+    // ✅ Optionally trigger the popup
+    useGameStore.getState().setWinner(displayedCard);
+
+  } else {
+    setGameMessage(t("not_a_winner"));
+  }
+
+  setTimeout(() => {
+    setGameMessage("");
+  }, 3000);
+};
+
 
   if (!currentRoom) {
     return (
@@ -432,10 +458,7 @@ return (
 </div>
 
 
-  {/* ✅ Numbers counter bottom-right */}
-  <span className="absolute bottom-1 right-2 text-[10px] text-gray-300">
-    {displayedCalledNumbers.length}/25
-  </span>
+  
 
   {currentRoom?.gameStatus === "ended" && currentRoom.nextGameCountdownEndAt && (
     <CountdownOverlay

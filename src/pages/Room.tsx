@@ -250,13 +250,16 @@ function checkCardBingo(cardNumbers: number[][], calledNumbers: number[]) {
   );
 }
 
- const handleBingoClick = async () => {
+const handleBingoClick = async () => {
+  console.log("✅ Bingo button clicked"); 
   if (!displayedCard) {
     setGameMessage("No card selected!");
     return;
   }
 
-  const isWinner = checkCardBingo(displayedCard.numbers, displayedCalledNumbers);
+  const calledNumbers = displayedCalledNumbers[currentRoom?.id || ""] || [];
+const isWinner = checkCardBingo(displayedCard.numbers, calledNumbers);
+
 
   if (isWinner) {
     setGameMessage(t("you_won"));
@@ -268,7 +271,6 @@ function checkCardBingo(cardNumbers: number[][], calledNumbers: number[]) {
       }
     }
 
-    // ✅ Optionally trigger the popup
     useGameStore.getState().setWinner(displayedCard);
 
   } else {
@@ -279,7 +281,6 @@ function checkCardBingo(cardNumbers: number[][], calledNumbers: number[]) {
     setGameMessage("");
   }, 3000);
 };
-
 
   if (!currentRoom) {
     return (

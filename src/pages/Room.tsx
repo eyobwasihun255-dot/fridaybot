@@ -85,7 +85,19 @@ const displayedCalledNumbers = useGameStore(
 );
 
 const startNumberStream = useGameStore((s) => s.startNumberStream);
+// Find this player's data inside the room
+const playerData = currentRoom?.players?.[user?.telegramId];
 
+// True if backend says this player already bet
+const alreadyBetted = !!playerData?.betAmount && playerData.betAmount > 0;
+
+// ✅ Always at top of component
+const storeIsBetActive = useGameStore((s) => s.isBetActive);
+
+
+
+// Combine with local state for smoother UX
+const isBetActive = hasBet || alreadyBetted || storeIsBetActive;
 React.useEffect(() => {
   if (currentRoom?.gameStatus === "playing" && currentRoom.gameId) {
     startNumberStream(currentRoom.id, currentRoom.gameId);
@@ -262,19 +274,7 @@ function checkCardBingo(cardNumbers: number[][], calledNumbers: number[]) {
   };
 
 
-// Find this player's data inside the room
-const playerData = currentRoom?.players?.[user?.telegramId];
 
-// True if backend says this player already bet
-const alreadyBetted = !!playerData?.betAmount && playerData.betAmount > 0;
-
-// ✅ Always at top of component
-const storeIsBetActive = useGameStore((s) => s.isBetActive);
-
-
-
-// Combine with local state for smoother UX
-const isBetActive = hasBet || alreadyBetted || storeIsBetActive;
 
 
 

@@ -58,7 +58,7 @@ interface GameState {
   endGame: (roomId: string) => void;
   fetchBingoCards: () => void;
   cancelBet: (cardId?: string) => Promise<boolean>;
-  isBetActive: false,
+  isBetActive: boolean;
 }
 
 async function resetClaimedCards(roomId: string, userId: string) {
@@ -107,6 +107,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   rooms: [],
   displayedCalledNumbers:[],
   currentRoom: null,
+  isBetActive: false,
   selectedCard: null,
   bingoCards: [],
   loading: false,

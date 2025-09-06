@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import { rtdb } from '../firebase/config';
-import { ref, onValue, get as fbget,, set as fbset, update, remove, push, runTransaction } from 'firebase/database';
+import { ref, onValue, get as fbget, set as fbset, update, remove, push, query, orderByChild, equalTo , runTransaction } from 'firebase/database';
+
+
+
 import { useAuthStore } from '../store/authStore';
 interface BingoCard {
   id: string;
@@ -56,7 +59,41 @@ interface GameState {
   fetchBingoCards: () => void;
   cancelBet: (cardId?: string) => Promise<boolean>;
 }
+async function resetClaimedCards(roomId: string, userId: string) {
+  return new Promise<void>((resolve, reject) => {
+    try {
+      const cardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
+      const q = query(cardsRef, orderByChild("claimedBy"), equalTo(userId));
 
+      // Get a single snapshot
+      onValue(
+        q,
+        async (snapshot) => {
+          if (!snapshot.exists()) {
+            resolve();
+            return;
+          }
+
+          const updates: any = {};
+          snapshot.forEach((cardSnap) => {
+            updates[`${cardSnap.key}/claimed`] = false;
+            updates[`${cardSnap.key}/claimedBy`] = null;
+          });
+
+          if (Object.keys(updates).length > 0) {
+            await update(cardsRef, updates);
+            console.log("♻️ Player's claimed cards were reset without using get()");
+          }
+
+          resolve();
+        },
+        { onlyOnce: true }
+      );
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
 export const useGameStore = create<GameState>((set, get) => ({
   rooms: [],
   displayedCalledNumbers:[],
@@ -164,26 +201,11 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
 
     console.log("✅ Game ended. Next round countdown started.");
 
-    // Step 2: Unclaim only the current user's card
-const snapshot = await fbget(bingoCardsRef);
-const cards = snapshot.val();
-
-const { user } = useAuthStore.getState(); // current user
-
-if (cards && user) {
-  const updates: any = {};
-  Object.entries(cards).forEach(([id, card]: [string, any]) => {
-    if (card.claimed && card.claimedBy === user.telegramId) {
-      updates[`${id}/claimed`] = false;
-      updates[`${id}/claimedBy`] = null;
-    }
-  });
-
-  if (Object.keys(updates).length > 0) {
-    await update(bingoCardsRef, updates);
-    console.log("♻️ Current player's claimed cards were reset.");
-  }
+const { user } = useAuthStore.getState();
+if (user?.telegramId) {
+  await resetClaimedCards(roomId, user.telegramId);
 }
+
 
     // Step 3: After cooldown, reset the room state
     setTimeout(async () => {

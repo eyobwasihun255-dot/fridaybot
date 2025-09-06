@@ -47,7 +47,7 @@ interface GameState {
   startNumberStream: (roomId: string, gameId: string) => void;
    winnerCard: BingoCard | null;      // Winner card for the current game
   showWinnerPopup: boolean; 
-           // Flag to trigger popup
+   closeWinnerPopup: () => void; // <-- missing before
   setWinnerCard: (card: BingoCard) => void; // Setter for winner card
 
 }
@@ -85,7 +85,7 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
     const data = await res.json();
     console.log("✅ Game started:", data);
    if (data.winnerCard && data.winnerCard.length > 0) {
-  get().setWinnerCard(data.winnerCards[0]); // take the first winner
+  get().setWinnerCard(data.winnerCard[0]); // take the first winner
 }
 
   } catch (err) {
@@ -370,39 +370,47 @@ cancelBet: async (cardId?: string) => {
 },
 
   checkBingo: async () => {
-    const { selectedCard, currentRoom } = get();
-    if (!selectedCard || !currentRoom) return false;
-    
-    // Check for bingo patterns
-    const { numbers } = selectedCard;
-    const { calledNumbers } = currentRoom;
-    
-    // Check rows
-    for (let row = 0; row < 5; row++) {
-      if (numbers[row].every(num => calledNumbers.includes(num))) {
-        return true;
-      }
-    }
-    
-    // Check columns
-    for (let col = 0; col < 5; col++) {
-      if (numbers.every(row => calledNumbers.includes(row[col]))) {
-        return true;
-      }
-    }
-    
-    // Check diagonals
-    const diagonal1 = [numbers[0][0], numbers[1][1], numbers[2][2], numbers[3][3], numbers[4][4]];
-    const diagonal2 = [numbers[0][4], numbers[1][3], numbers[2][2], numbers[3][1], numbers[4][0]];
-    
-    if (diagonal1.every(num => calledNumbers.includes(num)) ||
-        diagonal2.every(num => calledNumbers.includes(num))) {
-      return true;
-    }
-    
-    return false;
-  },
-  
+  const { selectedCard, currentRoom } = get();
+  if (!selectedCard || !currentRoom) return false;
+
+  const numbers = selectedCard.numbers;
+  const calledNumbers = currentRoom.calledNumbers || [];
+  const size = numbers.length;
+  const center = Math.floor(size / 2);
+
+  const patterns: number[][] = [];
+
+  // Rows
+  for (let r = 0; r < size; r++) patterns.push(numbers[r]);
+
+  // Columns
+  for (let c = 0; c < size; c++) patterns.push(numbers.map(row => row[c]));
+
+  // Diagonals
+  patterns.push(numbers.map((row, i) => row[i]));
+  patterns.push(numbers.map((row, i) => row[size - 1 - i]));
+
+  // X pattern
+  patterns.push([
+    numbers[center][center],
+    numbers[center - 1][center - 1],
+    numbers[center - 1][center + 1],
+    numbers[center + 1][center - 1],
+    numbers[center + 1][center + 1],
+  ]);
+
+  // Four corners
+  patterns.push([
+    numbers[0][0],
+    numbers[0][size - 1],
+    numbers[size - 1][0],
+    numbers[size - 1][size - 1],
+  ]);
+
+  // ✅ Check if any pattern is fully covered
+  return patterns.some(pattern => pattern.every(num => calledNumbers.includes(num)));
+},
+
   fetchBingoCards: () => {
       const { currentRoom } = get();
   if (!currentRoom) return;

@@ -206,8 +206,7 @@ function generatePatterns() {
   indices.push([...Array(size)].map((_, i) => i * size + i));
   indices.push([...Array(size)].map((_, i) => i * size + (size - 1 - i)));
 
-  // Small cross
-  indices.push([12, 7, 17, 11, 13]); // center + up/down/left/right
+
 
   // Small X
   indices.push([12, 6, 8, 16, 18]); // center + four diagonals near center

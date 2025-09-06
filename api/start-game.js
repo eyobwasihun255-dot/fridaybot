@@ -43,16 +43,7 @@ function pickPatternNumbers(card) {
   patterns.push(numbers.map((row, i) => row[i]));
   patterns.push(numbers.map((row, i) => row[size - 1 - i]));
 
-  // Small cross
-  patterns.push([
-    numbers[center][center],
-    numbers[center - 1][center],
-    numbers[center + 1][center],
-    numbers[center][center - 1],
-    numbers[center][center + 1],
-  ]);
-
-  // Small X
+X
   patterns.push([
     numbers[center][center],
     numbers[center - 1][center - 1],
@@ -218,7 +209,8 @@ export default async function handler(req, res) {
     res.json({
       gameId: gameData.id,
       drawnNumbers: gameData.drawnNumbers,
-      winner: gameData.winner
+      winner: gameData.winner,
+      winnerCard: gameData.winnerCard ? [gameData.winnerCard] : [],
     });
 
   } catch (err) {

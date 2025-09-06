@@ -369,12 +369,12 @@ cancelBet: async (cardId?: string) => {
   }
 },
 
-  checkBingo: async () => {
-  const { selectedCard, currentRoom } = get();
+checkBingo: async () => {
+  const { selectedCard, currentRoom, displayedCalledNumbers } = get();
   if (!selectedCard || !currentRoom) return false;
 
   const numbers = selectedCard.numbers;
-  const calledNumbers = currentRoom.calledNumbers || [];
+  const calledNumbers = displayedCalledNumbers[currentRoom.id] || [];
   const size = numbers.length;
   const center = Math.floor(size / 2);
 

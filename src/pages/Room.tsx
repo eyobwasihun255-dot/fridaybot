@@ -268,8 +268,14 @@ const playerData = currentRoom?.players?.[user?.telegramId];
 // True if backend says this player already bet
 const alreadyBetted = !!playerData?.betAmount && playerData.betAmount > 0;
 
+// ✅ Always at top of component
+const storeIsBetActive = useGameStore((s) => s.isBetActive);
+
+
+
 // Combine with local state for smoother UX
-const isBetActive = useGameStore((state) => state.isBetActive);
+const isBetActive = hasBet || alreadyBetted || storeIsBetActive;
+
 
 
 

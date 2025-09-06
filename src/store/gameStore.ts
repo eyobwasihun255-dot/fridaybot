@@ -126,14 +126,7 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
         clearInterval(interval);
 
         // ✅ Show popup after all numbers called
-      const { user } = useAuthStore.getState();
-        if (winnerCard?.claimedBy === user?.telegramId) {
-          set({ winnerCard });
-
-          // ✅ Add payout to winner's balance
-          const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
-          await runTransaction(balanceRef, (current) => (current || 0) + (totalPayout || 0));
-        }
+   
 
         get().endGame(roomId); // optional: end game after popup
         return;
@@ -423,9 +416,11 @@ checkBingo: async () => {
   }
 
   try {
-    // ✅ Add balance to winner
-    const payout = currentRoom.payout || currentRoom.betAmount * (currentRoom.currentPlayers || 1);
+    // ✅ Calculate payout: players × betAmount × 0.9
+    const activePlayers = currentRoom.players ? Object.keys(currentRoom.players).length : 0;
+    const payout = activePlayers * currentRoom.betAmount * 0.9;
 
+    // ✅ Add balance to winner
     const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
     await runTransaction(balanceRef, (current) => (current || 0) + payout);
 
@@ -440,14 +435,13 @@ checkBingo: async () => {
     setWinnerCard(selectedCard);
     setShowWinnerPopup(true);
 
-    console.log("🎉 Bingo! You win:", payout);
+    console.log(`🎉 Bingo! You win: ${payout}`);
     return true;
   } catch (err) {
     console.error("❌ Error processing bingo win:", err);
     return false;
   }
 },
-
 
   fetchBingoCards: () => {
       const { currentRoom } = get();

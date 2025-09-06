@@ -170,6 +170,8 @@ export default async function handler(req, res) {
       room.calledNumbers = [];
       room.countdownEndAt = null;
       room.countdownStartedBy = null;
+      room.currentwinner = username;
+      room.payed = false; 
 
       return room;
     });
@@ -182,8 +184,7 @@ export default async function handler(req, res) {
       const userData = userSnap.val();
       const username = userData?.username || "Unknown";
       gameData.winner = username;
-      room.currentwinner = username;
-      room.payed = false; // <-- store username directly in game entity
+      // <-- store username directly in game entity
     }
 
     const gameRef = ref(rtdb, `games/${gameData.id}`);

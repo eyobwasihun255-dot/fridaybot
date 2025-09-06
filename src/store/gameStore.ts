@@ -149,9 +149,8 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
   try {
     const roomRef = ref(rtdb, `rooms/${roomId}`);
     const bingoCardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
-    const cooldownDuration = 0.5 * 60 * 1000; // ✅ 1 min cooldown
+    const cooldownDuration = 0.5 * 60 * 1000; // 30 sec (0.5 min)
     const nextGameCountdownEndAt = Date.now() + cooldownDuration;
-   const playersRef = ref(rtdb, `rooms/${roomId}/players`);
 
     // Step 1: End the game
     await update(roomRef, {
@@ -165,28 +164,47 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
 
     console.log("✅ Game ended. Next round countdown started.");
 
-    // Step 2: After cooldown, reset room + unclaim all cards
-    setTimeout(async () => {
-  try {
-    await update(roomRef, {
-      gameStatus: "waiting",
-      currentwinner: null,
-      payed:false,
-      countdownEndAt: null,
-      countdownStartedBy: null,
-      nextGameCountdownEndAt: null, // optional
-    });
+    // Step 2: Unclaim all cards immediately
+    const snapshot = await get(bingoCardsRef);
+    if (snapshot.exists()) {
+      const updates: any = {};
+      snapshot.forEach((child) => {
+        const card = child.val();
+        if (card.claimed) {
+          updates[`${child.key}/claimed`] = false;
+          updates[`${child.key}/claimedBy`] = null;
+        }
+      });
 
-    console.log("✅ Room reset to waiting after cooldown.");
-  } catch (err) {
-    console.error("❌ Failed to reset cards/room:", err);
-  }
-}, cooldownDuration);
+      if (Object.keys(updates).length > 0) {
+        await update(bingoCardsRef, updates);
+        console.log("♻️ All claimed cards were reset.");
+      }
+    }
+
+    // Step 3: After cooldown, reset the room state
+    setTimeout(async () => {
+      try {
+        await update(roomRef, {
+          gameStatus: "waiting",
+          currentwinner: null,
+          payed: false,
+          countdownEndAt: null,
+          countdownStartedBy: null,
+          nextGameCountdownEndAt: null,
+        });
+
+        console.log("✅ Room reset to waiting after cooldown.");
+      } catch (err) {
+        console.error("❌ Failed to reset cards/room:", err);
+      }
+    }, cooldownDuration);
 
   } catch (err) {
     console.error("❌ Failed to end game:", err);
   }
 },
+
 
   fetchRooms: () => {
     const roomsRef = ref(rtdb, 'rooms');

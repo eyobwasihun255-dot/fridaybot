@@ -59,6 +59,7 @@ interface GameState {
   fetchBingoCards: () => void;
   cancelBet: (cardId?: string) => Promise<boolean>;
 }
+
 async function resetClaimedCards(roomId: string, userId: string) {
   return new Promise<void>((resolve, reject) => {
     try {
@@ -70,6 +71,8 @@ async function resetClaimedCards(roomId: string, userId: string) {
         q,
         async (snapshot) => {
           if (!snapshot.exists()) {
+            // Still remove from players if no claimed card
+            await remove(ref(rtdb, `rooms/${roomId}/players/${userId}`));
             resolve();
             return;
           }
@@ -82,8 +85,12 @@ async function resetClaimedCards(roomId: string, userId: string) {
 
           if (Object.keys(updates).length > 0) {
             await update(cardsRef, updates);
-            console.log("♻️ Player's claimed cards were reset without using get()");
+            console.log("♻️ Player's claimed cards reset");
           }
+
+          // ✅ Remove from players list
+          await remove(ref(rtdb, `rooms/${roomId}/players/${userId}`));
+          console.log("🗑️ Player removed from room players list");
 
           resolve();
         },
@@ -94,6 +101,7 @@ async function resetClaimedCards(roomId: string, userId: string) {
     }
   });
 }
+
 export const useGameStore = create<GameState>((set, get) => ({
   rooms: [],
   displayedCalledNumbers:[],

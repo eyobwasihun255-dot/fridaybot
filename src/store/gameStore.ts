@@ -222,6 +222,8 @@ if (user?.telegramId) {
           gameStatus: "waiting",
           currentwinner: null,
           payed: false,
+          winner:null,
+          payout: null,
           countdownEndAt: null,
           countdownStartedBy: null,
           nextGameCountdownEndAt: null,

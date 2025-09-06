@@ -210,17 +210,14 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
 
     console.log("✅ Game ended. Next round countdown started.");
 
-const { user } = useAuthStore.getState();
+    // Step 3: After cooldown, reset the room state
+    setTimeout(async () => {
+      try {
+        const { user } = useAuthStore.getState();
 if (user?.telegramId) {
   await resetClaimedCards(roomId, user.telegramId);
    set({ isBetActive: false });
 }
-
-
-
-    // Step 3: After cooldown, reset the room state
-    setTimeout(async () => {
-      try {
         await update(roomRef, {
           gameStatus: "waiting",
           currentwinner: null,

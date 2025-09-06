@@ -429,7 +429,7 @@ return (
   {currentRoom?.gameStatus === "ended" && currentRoom.nextGameCountdownEndAt && (
     <CountdownOverlay
       countdownEndAt={currentRoom.nextGameCountdownEndAt}
-      label="Next round starting in"
+      label="በታች ያለውን ቢንጎ በመጫን ሽልማትዎን በጊዜ ይወስዱ"
     />
   )}
 </div>

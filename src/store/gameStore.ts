@@ -164,23 +164,25 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
 
     console.log("✅ Game ended. Next round countdown started.");
 
-    // Step 2: Unclaim all cards immediately
-    const snapshot = await get(bingoCardsRef);
-    if (snapshot.exists()) {
-      const updates: any = {};
-      snapshot.forEach((child) => {
-        const card = child.val();
-        if (card.claimed) {
-          updates[`${child.key}/claimed`] = false;
-          updates[`${child.key}/claimedBy`] = null;
-        }
-      });
+    // Step 2: Unclaim only the current user's card
+const snapshot = await get(bingoCardsRef);
+const cards = snapshot.val();
+const { user } = useAuthStore.getState(); // current user
 
-      if (Object.keys(updates).length > 0) {
-        await update(bingoCardsRef, updates);
-        console.log("♻️ All claimed cards were reset.");
-      }
+if (cards && user) {
+  const updates: any = {};
+  Object.entries(cards).forEach(([id, card]: [string, any]) => {
+    if (card.claimed && card.claimedBy === user.telegramId) {
+      updates[`${id}/claimed`] = false;
+      updates[`${id}/claimedBy`] = null;
     }
+  });
+
+  if (Object.keys(updates).length > 0) {
+    await update(bingoCardsRef, updates);
+    console.log("♻️ Current player's claimed cards were reset.");
+  }
+}
 
     // Step 3: After cooldown, reset the room state
     setTimeout(async () => {
@@ -396,6 +398,11 @@ checkBingo: async () => {
   if (!selectedCard || !currentRoom || !user) return false;
 
   try {
+     if (currentRoom.gameStatus !== "ended") {
+      alert("⚠️ You can only claim Bingo after all numbers are called!");
+      return false;
+    }
+
     // ✅ Check if current user is the declared room winner
     if (currentRoom.winner !== user.telegramId) {
       alert("❌ You are not the winner for this round!");

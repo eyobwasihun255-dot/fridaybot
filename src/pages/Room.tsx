@@ -83,6 +83,39 @@ const [markedNumbers, setMarkedNumbers] = React.useState<number[]>([]);
 const displayedCalledNumbers = useGameStore(
   (s) => s.displayedCalledNumbers[currentRoom?.id ?? ""] || []
 );
+const [showBingoErrorPopup, setShowBingoErrorPopup] = useState(false);
+const [bingoErrorMessage, setBingoErrorMessage] = useState("");
+const handleBingoClick = async () => {
+  if (!displayedCard) {
+    setGameMessage("Select a card first.");
+    return;
+  }
+
+  // 1) Check if player's marks cover any pattern
+  const covered = findCoveredPatternByMarks();
+  if (!covered) {
+    setBingoErrorMessage("በቢንጎ ካርድዎ ምንም የሚሸነፍ አቀማመጥ የለም። ይቀርቡ!");
+    setShowBingoErrorPopup(true);
+    return;
+  }
+
+  // 2) Check pattern against called numbers
+  const isValidAgainstCalled = patternExistsInCalled(covered.patternNumbers);
+  if (!isValidAgainstCalled) {
+    setBingoErrorMessage("የምስሉ ቁጥሮች ከተጠሩት ቁጥሮች ጋር አይዛመዱም። ይቀርቡ!");
+    setShowBingoErrorPopup(true);
+    return;
+  }
+
+  // ✅ Valid Bingo → submit
+  try {
+    await useGameStore.getState().checkBingo();
+    setGameMessage("Bingo submitted! Waiting for verification…");
+  } catch (e) {
+    console.error(e);
+    setGameMessage("Failed to submit bingo. Try again.");
+  }
+};
 
 const startNumberStream = useGameStore((s) => s.startNumberStream);
 // Find this player's data inside the room
@@ -142,11 +175,6 @@ const patternValidAgainstCalled = coveredPattern
 // - Room is not in "playing", OR
 // - (Room is playing AND they have a valid pattern & it's in called numbers)
 // AND they are not in the winners list
-const canCallBingo =
-  !isInWinnerList &&
-  (
-   coveredPattern && patternValidAgainstCalled
-  );
 
 // Combine with local state for smoother UX
 const isBetActive = hasBet || alreadyBetted || storeIsBetActive;
@@ -609,17 +637,20 @@ return (
 <div className="flex flex-col gap-2 mt-3 w-full">
   {/* Row with Bingo + Home */}
   <div className="flex flex-row gap-2">
- <button
-  onClick={handleBingoClick}
-  disabled={!canCallBingo}
-  className={`flex-1 py-2 rounded font-bold text-sm shadow transition ${
-    canCallBingo
-      ? "bg-gradient-to-r from-orange-500 to-yellow-500 hover:opacity-90"
-      : "bg-gray-500 cursor-not-allowed"
-  }`}
->
-  {t('bingo')}
-</button>
+{showBingoErrorPopup && (
+  <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+    <div className="bg-white text-black rounded-2xl shadow-xl p-6 w-80 max-w-full text-center animate-jump">
+      <h2 className="text-xl font-bold mb-3">❌ ተቀባይነት አልተሰጠም!</h2>
+      <p className="mb-4">{bingoErrorMessage}</p>
+      <button
+        onClick={() => setShowBingoErrorPopup(false)}
+        className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700"
+      >
+        {t('bingo')}
+      </button>
+    </div>
+  </div>
+)}
 
 
     <button

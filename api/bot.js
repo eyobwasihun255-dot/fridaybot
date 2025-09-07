@@ -401,7 +401,7 @@ async function handleCallback(callbackQuery) {
   }
 
   // ================== DEPOSIT ==================
- if (data === "deposit_cbe" || data === "deposit_telebirr") {
+if (data === "deposit_cbe" || data === "deposit_telebirr") {
   const method = data === "deposit_cbe" ? "CBE" : "Telebirr";
 
   // Save deposit method in pendingActions
@@ -422,9 +422,10 @@ async function handleCallback(callbackQuery) {
     ? { inline_keyboard: [[{ text: "Copy Account Number", callback_data: "copy_acc" }]] }
     : { inline_keyboard: [[{ text: "📱 Dial / Copy", url: `tel:${accountDetails.phone}` }]] };
 
+  // Send account / phone details first
   await sendMessage(chatId, infoText, { reply_markup: keyboard });
 
-  // Ask user for deposit amount next
+  // Then ask user for deposit amount
   await sendMessage(chatId, t(lang, "enter_deposit_amount", method));
   return;
 }

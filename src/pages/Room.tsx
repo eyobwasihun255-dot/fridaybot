@@ -129,7 +129,7 @@ function patternExistsInCalled(patternNumbers: number[]) {
 
 // Find if player is in winners list
 const isInWinnerList = currentRoom?.winners?.some(
-  (w: any) => !w.checked
+  (w: any) => w.cardId === displayedCard?.id && !w.checked
 ) ?? false;
 
 // Reuse your existing covered pattern logic
@@ -138,11 +138,14 @@ const patternValidAgainstCalled = coveredPattern
   ? patternExistsInCalled(coveredPattern.patternNumbers)
   : false;
 
+// Only allow Bingo if:
+// - Room is not in "playing", OR
+// - (Room is playing AND they have a valid pattern & it's in called numbers)
+// AND they are not in the winners list
 const canCallBingo =
   !isInWinnerList &&
   (
- 
-    coveredPattern && patternValidAgainstCalled
+   coveredPattern && patternValidAgainstCalled
   );
 
 // Combine with local state for smoother UX

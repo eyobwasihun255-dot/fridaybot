@@ -403,7 +403,6 @@ async function handleCallback(callbackQuery) {
     await sendMessage(chatId, t(lang, "welcome"));
     return;
   }
-
 if (data === "deposit_cbe" || data === "deposit_telebirr") {
   const method = data === "deposit_cbe" ? "CBE" : "Telebirr";
 
@@ -415,17 +414,18 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
     ? { accNumber: "1234567890", accHolder: "Friday Bingo" }
     : { phone: "0948404314", holder: "Friday Bingo" };
 
-  // Message with MarkdownV2 formatting (triple backticks for copy box)
-  const infoText = method === "CBE"
-    ? `💳 Deposit to CBE Account:\n\`\`\`\nCOMING SOON\n\`\`\`\nAccount Holder: ${accountDetails.accHolder}`
-    : `📱 Deposit via Telebirr:\n\`\`\`\n${accountDetails.phone}\n\`\`\`\nAccount Holder: ${accountDetails.holder}`;
+  // Escape Markdown special chars
+  const escapeMD = (text) => text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
+
+  const infoText =
+    method === "CBE"
+      ? `💳 *Deposit to CBE Account:*\n\`\`\`\n${escapeMD(accountDetails.accNumber)}\n\`\`\`\n*Account Holder:* ${escapeMD(accountDetails.accHolder)}\n\n💰 Enter deposit amount for ${escapeMD(method)}:`
+      : `📱 *Deposit via Telebirr:*\n\`\`\`\n${escapeMD(accountDetails.phone)}\n\`\`\`\n*Account Holder:* ${escapeMD(accountDetails.holder)}\n\n💰 Enter deposit amount for ${escapeMD(method)}:`;
 
   await sendMessage(chatId, infoText, { parse_mode: "MarkdownV2" });
-
-  // Ask for amount
-  await sendMessage(chatId, t(lang, "deposit_amount")(method));
   return;
 }
+
 
 
 

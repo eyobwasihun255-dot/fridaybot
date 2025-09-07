@@ -62,46 +62,36 @@ interface GameState {
   isBetActive: boolean;
 }
 
-async function resetClaimedCards(roomId: string, userId: string) {
-  return new Promise<void>((resolve, reject) => {
-    try {
-      const cardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
-      const q = query(cardsRef, orderByChild("claimedBy"), equalTo(userId));
+async function resetAllCardsAndPlayers(roomId: string) {
+  try {
+    const cardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
+    const playersRef = ref(rtdb, `rooms/${roomId}/players`);
 
-      // Get a single snapshot
-      onValue(
-        q,
-        async (snapshot) => {
-          if (!snapshot.exists()) {
-            // Still remove from players if no claimed card
-            await remove(ref(rtdb, `rooms/${roomId}/players/${userId}`));
-            resolve();
-            return;
-          }
+    // 1️⃣ Get all cards in the room
+    const snapshot = await get(cardsRef);
+    if (snapshot.exists()) {
+      const updates: Record<string, any> = {};
+      snapshot.forEach((cardSnap) => {
+        updates[`${cardSnap.key}/claimed`] = false;
+        updates[`${cardSnap.key}/claimedBy`] = null;
+      });
 
-          const updates: any = {};
-          snapshot.forEach((cardSnap) => {
-            updates[`${cardSnap.key}/claimed`] = false;
-            updates[`${cardSnap.key}/claimedBy`] = null;
-          });
-
-          if (Object.keys(updates).length > 0) {
-            await update(cardsRef, updates);
-            console.log("♻️ Player's claimed cards reset");
-          }
-
-          // ✅ Remove from players list
-          await remove(ref(rtdb, `rooms/${roomId}/players/${userId}`));
-          console.log("🗑️ Player removed from room players list");
-
-          resolve();
-        },
-        { onlyOnce: true }
-      );
-    } catch (err) {
-      reject(err);
+      if (Object.keys(updates).length > 0) {
+        await update(cardsRef, updates);
+        console.log("♻️ All cards unclaimed in room:", roomId);
+      }
+    } else {
+      console.log("ℹ️ No cards found for room:", roomId);
     }
-  });
+
+    // 2️⃣ Remove all players
+    await remove(playersRef);
+    console.log("🗑️ All players removed from room:", roomId);
+
+  } catch (err) {
+    console.error("❌ Error resetting cards and players:", err);
+    throw err;
+  }
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -215,7 +205,7 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
       try {
         const { user } = useAuthStore.getState();
 if (user?.telegramId) {
-  await resetClaimedCards(roomId, user.telegramId);
+  await resetAllCardsAndPlayers(roomId);
    set({ isBetActive: false });
 }
         await update(roomRef, {

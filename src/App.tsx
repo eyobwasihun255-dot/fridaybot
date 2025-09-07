@@ -46,7 +46,7 @@ const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeU
 
       let telegramId = userId ?? user?.telegramId ?? "demo123";
       let username = user?.username ?? `user_${telegramId}`;
-      let language = user?.language ?? "en";
+      let language = user?.language ?? "am";
 
       // ✅ If telegramId + sig is provided, verify
       if (userId && sig) {

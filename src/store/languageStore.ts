@@ -13,7 +13,16 @@ const translations = {
     // Header
     'friday_bingo': 'Friday Bingo',
     'balance': 'Balance',
-    
+     bingo_rules_countdown: [
+        "Mark your numbers as they are called.",
+        "Click 'Bingo' only when you have at least one pattern.",
+         "Any player who pressed Bingo without a valid pattern will be disqualified.",
+        "Betting is locked once the game starts.",
+        "Winners are paid automatically after verification."
+      ],
+      bingo_rules_ended: [
+        "Check your cards and press Bingo."
+      ],
     // Landing
     'welcome': 'Welcome to Friday Bingo!',
     'available_rooms': 'Available Rooms',
@@ -99,6 +108,16 @@ const translations = {
     'join_room': 'ክፍል ግባ',
     'cancel_bet':'ውርርድ ሰርዝ',
     // Room
+    bingo_rules_countdown: [
+        "የተጠሩትን ቁጥሮች ካርቴላ ላይ ካሉት ቁጥሮች ጋር ማዛመድይጫኑ",
+        "እያሸነፍክ እንደሆነ እርግጠኛ ከሆንክ ብቻ 'ቢንጎ' ይጫኑ",
+        "ቁጥር ሳይወጣለት ቢንጎን የተጫነ ማንኛውም ተጫዋች  ካርቴላው ውድቅ ይሆናል።",
+        "ጨዋታ ሲጀምር መደብ ይቆማል።",
+        "አሸናፊዎች Bingo ከተረጋገጠ በኋላ ደራሽ ወደ ሂሳብ ይገባል።"
+      ],
+      bingo_rules_ended: [
+        "ካርዶችዎን አስተያየተው'ቢንጎ' ይጫኑ።"
+      ],
     'room_details': 'ክፍል',
     'payout': 'ደራሽ',
     'max_players': 'ከፍተኛ ተጫዋቾች',

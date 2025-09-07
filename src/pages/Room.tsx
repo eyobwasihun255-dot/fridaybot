@@ -62,7 +62,7 @@ const CountdownOverlay = ({
 const Room: React.FC = () => {
   const { roomId } = useParams();
   const navigate = useNavigate();
-  const { t } = useLanguageStore();
+  const { t ,language} = useLanguageStore();
    
    const { winnerCard, showWinnerPopup, closeWinnerPopup } = useGameStore();
 
@@ -608,7 +608,7 @@ return (
   {currentRoom?.gameStatus === "ended" && currentRoom.nextGameCountdownEndAt && (
     <CountdownOverlay
       countdownEndAt={currentRoom.nextGameCountdownEndAt}
-      label="በታች ያለውን ቢንጎ በመጫን ሽልማትዎን በጊዜ ይወስዱ"
+      label="next Game starting soon"
     />
   )}
 </div>
@@ -703,16 +703,26 @@ return (
   {/* Info Board during Countdown */}
 {currentRoom?.gameStatus === "countdown" && (
   <div className="w-full bg-yellow-400/80 text-black rounded-lg p-3 mb-2 shadow text-sm">
-    <h3 className="font-bold mb-1">📜 Bingo Rules & Info</h3>
+    <h3 className="font-bold mb-1">📜 {language === "am" ? "የቢንጎ ደንቦች" : "Bingo Rules & Info"}</h3>
     <ul className="list-disc list-inside space-y-1">
-      <li>Mark your numbers as they are called.</li>
-      <li>You can place a bet only once per round.</li>
-      <li>Click "Bingo" only when you have a full pattern.</li>
-      <li>Betting is locked once the game starts.</li>
-      <li>Winners are paid automatically after verification.</li>
+      {t("bingo_rules_countdown").map((rule: string, i: number) => (
+        <li key={i}>{rule}</li>
+      ))}
     </ul>
   </div>
 )}
+
+{currentRoom?.gameStatus === "ended" && (
+  <div className="w-full bg-yellow-400/80 text-black rounded-lg p-3 mb-2 shadow text-sm">
+    <h3 className="font-bold mb-1">📜 {language === "am" ? "የቢንጎ ደንቦች" : "Bingo Rules & Info"}</h3>
+    <ul className="list-disc list-inside space-y-1">
+      {t("bingo_rules_ended").map((rule: string, i: number) => (
+        <li key={i}>{rule}</li>
+      ))}
+    </ul>
+  </div>
+)}
+
 
   <div className="flex flex-row gap-2">
 <button

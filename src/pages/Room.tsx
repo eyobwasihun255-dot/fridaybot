@@ -97,11 +97,6 @@ const storeIsBetActive = useGameStore((s) => s.isBetActive);
 // Flatten current card once for quick lookups
 const flatCard = React.useMemo(() => cardNumbers.flat(), [cardNumbers]);
 
-/**
- * Returns the first pattern that the user's marks fully cover.
- * "Fully cover" = at each index in the pattern, either it's a free space (0) or the number is in markedNumbers.
- * Returns { patternIndex, patternIndices, patternNumbers } or null if none.
- */
 function findCoveredPatternByMarks() {
   const patterns = generatePatterns();
   const markedSet = new Set(markedNumbers);
@@ -132,6 +127,27 @@ function patternExistsInCalled(patternNumbers: number[]) {
   return patternNumbers.every((n) => n === 0 || calledSet.has(n));
 }
 
+// Find if player is in winners list
+const isInWinnerList = currentRoom?.winners?.some(
+  (w: any) => w.cardId === displayedCard?.id
+) ?? false;
+
+// Reuse your existing covered pattern logic
+const coveredPattern = findCoveredPatternByMarks();
+const patternValidAgainstCalled = coveredPattern
+  ? patternExistsInCalled(coveredPattern.patternNumbers)
+  : false;
+
+// Only allow Bingo if:
+// - Room is not in "playing", OR
+// - (Room is playing AND they have a valid pattern & it's in called numbers)
+// AND they are not in the winners list
+const canCallBingo =
+  !isInWinnerList &&
+  (
+    currentRoom?.gameStatus !== "playing" ||
+    (coveredPattern && patternValidAgainstCalled)
+  );
 
 // Combine with local state for smoother UX
 const isBetActive = hasBet || alreadyBetted || storeIsBetActive;
@@ -594,12 +610,18 @@ return (
 <div className="flex flex-col gap-2 mt-3 w-full">
   {/* Row with Bingo + Home */}
   <div className="flex flex-row gap-2">
-   <button 
+ <button
   onClick={handleBingoClick}
-  className="flex-1 bg-gradient-to-r from-orange-500 to-yellow-500 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition"
+  disabled={!canCallBingo}
+  className={`flex-1 py-2 rounded font-bold text-sm shadow transition ${
+    canCallBingo
+      ? "bg-gradient-to-r from-orange-500 to-yellow-500 hover:opacity-90"
+      : "bg-gray-500 cursor-not-allowed"
+  }`}
 >
   {t('bingo')}
 </button>
+
 
     <button
       onClick={() => navigate("/")}

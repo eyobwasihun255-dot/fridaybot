@@ -8,7 +8,7 @@ const ADMIN_IDS = (process.env.ADMIN_IDS || "")
   .map((id) => parseInt(id.trim()))
   .filter(Boolean);
 // ====================== LANGUAGE HELPER ======================
-function t(lang, key) {
+function t(lang, key,...args) {
 const texts = {
 en: {
 welcome:
@@ -79,7 +79,11 @@ declined_withdraw: "❌ የማውጫ ጥያቄ ተቀናቀለ።",
 fallback: "Send /deposit or /withdraw to start.",
 },
 };
-return texts[lang][key] || key;
+ const value = texts[lang]?.[key];
+  if (typeof value === "function") {
+    return value(...args); // pass extra args to the function
+  }
+  return value || key;
 }
 
 // ====================== TELEGRAM HELPERS ======================
@@ -413,7 +417,7 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
 
   // Message with MarkdownV2 formatting (triple backticks for copy box)
   const infoText = method === "CBE"
-    ? `💳 Deposit to CBE Account:\n\`\`\`\n${accountDetails.accNumber}\n\`\`\`\nAccount Holder: ${accountDetails.accHolder}`
+    ? `💳 Deposit to CBE Account:\n\`\`\`\nCOMING SOON\n\`\`\`\nAccount Holder: ${accountDetails.accHolder}`
     : `📱 Deposit via Telebirr:\n\`\`\`\n${accountDetails.phone}\n\`\`\`\nAccount Holder: ${accountDetails.holder}`;
 
   await sendMessage(chatId, infoText, { parse_mode: "MarkdownV2" });
@@ -498,7 +502,7 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
       const newBalance = (user.balance || 0) - req.amount;
       await update(userRef, { balance: newBalance });
 
-      await sendMessage(req.userId, t(lang, "approved_withdraw", req.amount, req.method, req.account));
+      await sendMessage(req.userId, t(lang, "approved_withdraw", req.amount, req.account));
       await sendMessage(chatId, t(lang, "admin_approved_withdraw", `@${user.username || req.userId}`, req.amount));
     }
     withdrawalRequests.delete(requestId);

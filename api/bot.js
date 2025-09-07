@@ -243,22 +243,38 @@ async function handleUserMessage(message) {
   const pending = pendingActions.get(userId);
 
   // ====================== DEPOSIT AMOUNT STEP ======================
-  if (pending?.type === "awaiting_deposit_amount") {
-    const amount = parseFloat(text);
-    if (isNaN(amount) || amount <= 0) {
-      await sendMessage(chatId, t(lang, "invalid_amount"));
-      return;
-    }
-
-    pendingActions.set(userId, { 
-      type: "awaiting_deposit_sms", 
-      method: pending.method, 
-      amount 
-    });
-
-    await sendMessage(chatId, t(lang, "deposit_sms")(pending.method));
+ if (pending?.type === "awaiting_deposit_amount") {
+  const amount = parseFloat(text);
+  if (isNaN(amount) || amount <= 0) {
+    await sendMessage(chatId, t(lang, "invalid_amount"));
     return;
   }
+
+  // Save amount for next step
+  pendingActions.set(userId, { 
+    type: "awaiting_deposit_sms", 
+    method: pending.method, 
+    amount 
+  });
+
+  // Account details
+  const accountDetails = pending.method === "CBE"
+    ? { accNumber: "1234567890", accHolder: "Friday Bingo" }
+    : { phone: "0948404314", holder: "Friday Bingo" };
+
+  // Escape Markdown special chars
+  const escapeMD = (txt) => txt.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
+
+  const infoText =
+    pending.method === "CBE"
+      ? `💳 *Deposit to CBE Account:*\n\`\`\`\n${escapeMD(accountDetails.accNumber)}\n\`\`\`\n*Account Holder:* ${escapeMD(accountDetails.accHolder)}\n\n📩 ${t(lang, "deposit_sms", pending.method)}`
+      : `📱 *Deposit via Telebirr:*\n\`\`\`\n${escapeMD(accountDetails.phone)}\n\`\`\`\n*Account Holder:* ${escapeMD(accountDetails.holder)}\n\n📩 ${t(lang, "deposit_sms", pending.method)}`;
+
+  // Send account details + ask for SMS
+  await sendMessage(chatId, infoText, { parse_mode: "MarkdownV2" });
+  return;
+}
+
 
   // ====================== DEPOSIT SMS STEP ======================
   if (pending?.type === "awaiting_deposit_sms") {
@@ -406,26 +422,12 @@ async function handleCallback(callbackQuery) {
 if (data === "deposit_cbe" || data === "deposit_telebirr") {
   const method = data === "deposit_cbe" ? "CBE" : "Telebirr";
 
-  // Save deposit method
+  // Save deposit method (next step: ask amount)
   pendingActions.set(userId, { type: "awaiting_deposit_amount", method });
 
-  // Account details
-  const accountDetails = method === "CBE"
-    ? { accNumber: "1234567890", accHolder: "Friday Bingo" }
-    : { phone: "0948404314", holder: "Friday Bingo" };
-
-  // Escape Markdown special chars
-  const escapeMD = (text) => text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
-
-  const infoText =
-    method === "CBE"
-      ? `💳 *Deposit to CBE Account:*\n\`\`\`\n${escapeMD(accountDetails.accNumber)}\n\`\`\`\n*Account Holder:* ${escapeMD(accountDetails.accHolder)}\n\n💰 Enter deposit amount for ${escapeMD(method)}:`
-      : `📱 *Deposit via Telebirr:*\n\`\`\`\n${escapeMD(accountDetails.phone)}\n\`\`\`\n*Account Holder:* ${escapeMD(accountDetails.holder)}\n\n💰 Enter deposit amount for ${escapeMD(method)}:`;
-
-  await sendMessage(chatId, infoText, { parse_mode: "MarkdownV2" });
+  await sendMessage(chatId, t(lang, "deposit_amount", method)); // Ask only amount
   return;
 }
-
 
 
 

@@ -320,36 +320,63 @@ function checkCardBingo(cardNumbers: number[][], calledNumbers: number[]) {
       </div>
     );
   };
+  const handleBingoClick = async () => {
+  if (!displayedCard || !currentRoom || !user) return;
 
-const handleBingoClick = async () => {
-  if (!displayedCard) {
-    setGameMessage("Select a card first.");
+  // 1️⃣ Check if room already paid
+  if (currentRoom.payed) {
+    setGameMessage("ተከፍሏል! ሌላ ጊዜ ይጠብቁ…");
     return;
   }
 
-  // 1) The player's marks must fully cover at least one pattern.
+  // 2️⃣ Check if user is in winners list
+  const isWinner = currentRoom.winners?.some(
+    (w: any) => w.cardId === displayedCard.id
+  );
+  if (!isWinner) {
+    setGameMessage("ካርዱዎ እንደ አሸናፊ አልተመዘገበም። ካርዱዎ ተሰናዳ።");
+    return;
+  }
+
+  // 3️⃣ Check for at least one fully covered pattern
   const covered = findCoveredPatternByMarks();
   if (!covered) {
-    setGameMessage("No winning pattern covered by your marks.");
+    setGameMessage("ካርዱዎ ተሰናዳ። ምልክቶቹ ምንም አልሞላም።");
     return;
   }
 
-  // 2) That same pattern’s numbers must all exist in the called list (free space 0 is ignored).
-  const isValidAgainstCalled = patternExistsInCalled(covered.patternNumbers);
-  if (!isValidAgainstCalled) {
-    setGameMessage("Marked pattern is not in called numbers. Disqualified.");
+  // 4️⃣ Check if pattern is fully in called numbers
+  const isValid = patternExistsInCalled(covered.patternNumbers);
+  if (!isValid) {
+    setGameMessage("ካርዱዎ ተሰናዳ። የምልክት ቁጥሮች አልተጠሉም።");
     return;
   }
 
-  // ✅ Passed both checks: proceed to your existing store action
+  // ✅ Passed all checks: process payout
   try {
-    await useGameStore.getState().checkBingo(); // uses your current implementation
-    setGameMessage("Bingo submitted! Waiting for verification…");
-  } catch (e) {
-    console.error(e);
-    setGameMessage("Failed to submit bingo. Try again.");
+    const activePlayersCount = currentRoom.players
+      ? Object.keys(currentRoom.players).length
+      : 0;
+    const payout = activePlayersCount * currentRoom.betAmount * 0.9;
+
+    const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
+    await runTransaction(balanceRef, (current) => (current || 0) + payout);
+
+    // Update room to mark payout done
+    const roomRef = ref(rtdb, `rooms/${currentRoom.id}`);
+    await update(roomRef, { payed: true });
+
+    // Show winner popup
+    useGameStore.getState().setWinnerCard(displayedCard);
+    useGameStore.getState().setShowWinnerPopup(true);
+
+    setGameMessage(`🎉 ትክክለኛ! ድምብ ደረሰ: ${payout}`);
+  } catch (err) {
+    console.error("❌ Error processing Bingo payout:", err);
+    setGameMessage("አልተሳካም። እንደገና ይሞክሩ።");
   }
 };
+
 
 
 

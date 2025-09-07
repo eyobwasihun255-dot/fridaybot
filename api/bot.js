@@ -415,7 +415,7 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
   // Message to user showing account / phone
   const infoText = method === "telebirr"
     ? `💳 Deposit to Telebirr:\nPhone Number: ${accountDetails.phone}\nAccount Holder: ${accountDetails.holder}`
-    : `📱 Deposit via CBE:\nAccount Number: ${accountDetails.accNumber}\nAccount Holder: ${accountDetails.accHolder}`;
+    : `📱Comming soon..`;
 
   // Inline button to copy / dial
   const keyboard = method === "telebirr"

@@ -47,7 +47,7 @@ const translations = {
         "አሸናፊዎች Bingo ከተረጋገጠ በኋላ ደራሽ ወደ ሂሳብ ይገባል።"
       ],
       bingo_rules_ended: [
-        "ካርዶችዎን አስተያየተው'ቢንጎ' ይጫኑ።"
+        "ካርቴዎን አስተያየተው'ቢንጎ' ይጫኑ።"
       ],
     'room_details': 'ክፍል',
     'payout': 'ደራሽ',

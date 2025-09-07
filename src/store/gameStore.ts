@@ -160,7 +160,8 @@ stopNumberDraw: () => {
   }
 },
     startNumberStream: (roomId, gameId) => {
-   
+      const {currentRoom} = get();
+      if (currentRoom.gameStatus !== "playing") return;
   const gameRef = ref(rtdb, `games/${gameId}`);
   
   onValue(gameRef, (snapshot) => {

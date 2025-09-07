@@ -59,10 +59,28 @@ const translations = {
     'success': 'Success!',
     'confirm': 'Confirm',
     'cancel': 'Cancel',
-    'pattern': 'Winning Patterns'
+    'pattern': 'Winning Patterns',
+    'insufficient_balance': 'Insufficient balance!',
+    'bet_placed': 'Bet placed! Waiting for other players...',
+    'error_player_card': 'Error: player/card not found',
+    'already_attempted_bingo': 'You already attempted Bingo!',
+    'bingo_not_allowed': 'No Bingo allowed now.',
+    'not_a_winner': 'Not a winner this time.',
+    'cancel_failed': 'Cancel failed.',
+    'game_in_progress': 'Game is currently in progress',
   },
   am: {
     // Header
+    // Add inside 'am' block
+'insufficient_balance': ' በቂ ገንዘብ የለም!',
+'bet_placed': 'ውርርድ ተደርጓል! ለሌሎች ተጫዋቾች ይጠብቁ...',
+'error_player_card': 'ስህተት: ተጫዋች/ካርድ አልተገኘም',
+'already_attempted_bingo': 'ቢንጎ አስቀድሞ ሞክረዋል!',
+'bingo_not_allowed': 'አሁን ቢንጎ የማይፈቀድ ነው።',
+'not_a_winner': 'በዚህ ጊዜ አሸናፊ አይደሉም።',
+'cancel_failed': 'አልተሳካም።',
+'game_in_progress': 'ጨዋታ አሁን በሂደት ላይ ነው',
+
     'friday_bingo': 'Friday Bingo',
     'balance': 'ሂሳብ',
     'bet': 'መደብ',

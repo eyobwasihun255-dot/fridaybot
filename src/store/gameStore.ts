@@ -48,6 +48,7 @@ interface GameState {
   selectCard: (cardId: string) => void;
   placeBet: () => Promise<boolean>;
   checkBingo: () => Promise<boolean>;
+
   displayedCalledNumbers: { [roomId: string]: number[] };
   startNumberStream: (roomId: string, gameId: string) => void;
    winnerCard: BingoCard | null;      // Winner card for the current game
@@ -223,7 +224,7 @@ if (user?.telegramId) {
           calledNumbers: [],
           gameId: null,
           payed: false,
-          winner:null,
+          winners:null,
           payout: null,
           countdownEndAt: null,
           countdownStartedBy: null,

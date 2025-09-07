@@ -241,7 +241,7 @@ React.useEffect(() => {
   if (!displayedCard || !currentRoom) return;
 
   if (!currentRoom.isDemoRoom && (user?.balance || 0) < currentRoom.betAmount) {
-    setGameMessage('Insufficient balance!');
+    setGameMessage(t('insufficient_balance'));
     return;
   }
 
@@ -252,7 +252,7 @@ React.useEffect(() => {
     if (!currentRoom.isDemoRoom) {
       await updateBalance(-currentRoom.betAmount);
     }
-    setGameMessage('Bet placed! Waiting for other players...');
+    setGameMessage(t('bet_placed'));
     
    
   }
@@ -338,69 +338,106 @@ function checkCardBingo(cardNumbers: number[][], calledNumbers: number[]) {
     );
   };
 const handleBingoClick = async () => {
-  if (!displayedCard || !currentRoom || !user) {
-    setGameMessage("Error: player/card not found");
-    return;
-  }
-
-  // ✅ Prevent multiple attempts locally
-  if (hasAttemptedBingo) return;
-
-  // 1️⃣ Check DB flag: prevent double attempt
-  const playerPath = `rooms/${currentRoom.id}/players/${user.telegramId}`;
-  const playerData = currentRoom.players?.[user.telegramId];
-  if (playerData?.attemptedBingo) {
-    setGameMessage("You already attempted Bingo!");
-    setHasAttemptedBingo(true);
-    return;
-  }
-
-  setHasAttemptedBingo(true);
-
-  // 2️⃣ Set the DB flag immediately to prevent race conditions
-  await update(ref(rtdb, playerPath), { attemptedBingo: true });
-
-  // 3️⃣ Check if room already paid
-  if (currentRoom.payed) {
-    setGameMessage("ተከፍሏል! ሌላ ጊዜ ይጠብቁ…");
-    return;
-  }
-
-  // 4️⃣ Check for at least one fully covered pattern
-  const covered = findCoveredPatternByMarks();
-  if (!covered || !patternExistsInCalled(covered.patternNumbers)) {
-    setGameMessage("በሐሳብ ቢንጎ አልሆነም። እርስዎ ተከለከሉ!");
-    if (currentRoom?.gameStatus === "ended" || currentRoom?.gameStatus === "playing") {
-      setIsDisqualified(true);
+  if (currentRoom?.gameStatus === "playing" || currentRoom?.gameStatus === "ended") {
+    if (!displayedCard || !currentRoom || !user) {
+      setGameMessage(t('error_player_card'));
+      return;
     }
-    return;
-  }
 
-  // ✅ Passed all checks: process payout
-  try {
-    const activePlayersCount = currentRoom.players
-      ? Object.keys(currentRoom.players).length
-      : 0;
-    const payout = activePlayersCount * currentRoom.betAmount * 0.9;
+    if (hasAttemptedBingo) return;
 
-    const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
-    await runTransaction(balanceRef, (current) => (current || 0) + payout);
+    const playerPath = `rooms/${currentRoom.id}/players/${user.telegramId}`;
+    const playerData = currentRoom.players?.[user.telegramId];
+    if (playerData?.attemptedBingo) {
+      setGameMessage(t('already_attempted_bingo'));
+      setHasAttemptedBingo(true);
+      return;
+    }
 
-    const roomRef = ref(rtdb, `rooms/${currentRoom.id}`);
-    await update(roomRef, { payed: true });
+    setHasAttemptedBingo(true);
 
-    useGameStore.getState().setWinnerCard(displayedCard);
-    useGameStore.getState().setShowWinnerPopup(true);
-    useGameStore.getState().endGame(currentRoom.id);
+    await update(ref(rtdb, playerPath), { attemptedBingo: true });
 
-  } catch (err) {
-    console.error("❌ Error processing Bingo payout:", err);
-    setGameMessage("አልተሳካም። እንደገና ይሞክሩ።");
+    if (currentRoom.payed) {
+      setGameMessage(t('already_paid'));
+      return;
+    }
+
+    const covered = findCoveredPatternByMarks();
+    if (!covered || !patternExistsInCalled(covered.patternNumbers)) {
+      setGameMessage(t('not_a_winner'));
+      setIsDisqualified(true);
+      return;
+    }
+
+    try {
+      const activePlayersCount = currentRoom.players
+        ? Object.keys(currentRoom.players).length
+        : 0;
+      const payout = activePlayersCount * currentRoom.betAmount * 0.9;
+
+      // Update player balance
+      const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
+      await runTransaction(balanceRef, (current) => (current || 0) + payout);
+
+      // Register player as winner in room
+      const roomWinnersRef = ref(rtdb, `rooms/${currentRoom.id}/winners`);
+      const newWinner = {
+        cardId: displayedCard.id,
+        telegramId: user.telegramId,
+        username: user.username || `user_${user.telegramId}`,
+        payout,
+        timestamp: Date.now(),
+        checked: false
+      };
+      await runTransaction(roomWinnersRef, (current: any) => {
+        const arr = Array.isArray(current) ? current : [];
+        arr.push(newWinner);
+        return arr;
+      });
+
+      // ✅ Additional: log winning history
+      const winningHistoryRef = ref(rtdb, `winningHistory`);
+      const historyEntry = {
+        gameId: currentRoom.gameId,
+        rollNumber: currentRoom.rollNumber ?? 0,
+        roomId: currentRoom.id,
+        playerId: user.telegramId,
+        username: user.username || `user_${user.telegramId}`,
+        cardId: displayedCard.id,
+        date: Date.now(),
+        payout
+      };
+      const newHistoryRef = ref(rtdb, `winningHistory/${currentRoom.gameId}_${user.telegramId}_${Date.now()}`);
+      await update(newHistoryRef, historyEntry);
+
+      // Mark room as paid (optional if only one winner)
+      await update(ref(rtdb, `rooms/${currentRoom.id}`), { payed: true });
+
+      // Update local state
+      useGameStore.getState().setWinnerCard(displayedCard);
+      useGameStore.getState().setShowWinnerPopup(true);
+      useGameStore.getState().endGame(currentRoom.id);
+
+    } catch (err) {
+      console.error("❌ Error processing Bingo payout:", err);
+      setGameMessage(t('error_processing_bingo'));
+    }
+  } else {
+    setGameMessage(t('bingo_not_allowed'));
   }
 };
 
 
 
+function getBingoLetter(num: number): string {
+  if (num >= 1 && num <= 15) return "B-";
+  if (num >= 16 && num <= 30) return "I-";
+  if (num >= 31 && num <= 45) return "N-";
+  if (num >= 46 && num <= 60) return "G-";
+  if (num >= 61 && num <= 75) return "O-";
+  return "";
+}
 
 
 
@@ -550,17 +587,20 @@ return (
       <div className="w-3/5 bg-white/10 p-2 rounded border border-white/20 text-xs">
         {/* Current Call */}
         <div className="relative flex flex-col items-center justify-center bg-white/10 p-2 rounded border border-white/20 min-h-[100px]">
-  <span className="text-[10px] mb-1">Current</span>
 
-  <div
+
+ <div
   className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold shadow bg-gradient-to-br ${
     displayedCalledNumbers.length > 0
       ? getPartitionColor(displayedCalledNumbers.at(-1)!)
       : "from-gray-400 to-gray-600"
   }`}
 >
-  {displayedCalledNumbers.length > 0 ? displayedCalledNumbers.at(-1) : "-"}
+  {displayedCalledNumbers.length > 0
+    ? `${getBingoLetter(displayedCalledNumbers.at(-1)!)}${displayedCalledNumbers.at(-1)}`
+    : "-"}
 </div>
+
 
 
   
@@ -660,6 +700,20 @@ return (
 {/* Bottom buttons */}
 <div className="flex flex-col gap-2 mt-3 w-full">
   {/* Row with Bingo + Home */}
+  {/* Info Board during Countdown */}
+{currentRoom?.gameStatus === "countdown" && (
+  <div className="w-full bg-yellow-400/80 text-black rounded-lg p-3 mb-2 shadow text-sm">
+    <h3 className="font-bold mb-1">📜 Bingo Rules & Info</h3>
+    <ul className="list-disc list-inside space-y-1">
+      <li>Mark your numbers as they are called.</li>
+      <li>You can place a bet only once per round.</li>
+      <li>Click "Bingo" only when you have a full pattern.</li>
+      <li>Betting is locked once the game starts.</li>
+      <li>Winners are paid automatically after verification.</li>
+    </ul>
+  </div>
+)}
+
   <div className="flex flex-row gap-2">
 <button
   onClick={handleBingoClick}
@@ -695,30 +749,37 @@ return (
     <div className="w-full mt-6 bg-white/10 rounded border border-white/20 p-3">
       <h3 className="font-bold text-sm mb-2">Players in this room</h3>
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-        {currentRoom?.players && Object.keys(currentRoom.players || {}).length > 0 ? (
-          Object.values(currentRoom.players || {}).map((player: any) => {
-            const maskedUsername = player.username
-  ? `${player.username.slice(0, 3)}***`
-  : `user_${player.telegramId?.slice(0, 3) ?? '???'}***`;
+  {currentRoom?.players && Object.keys(currentRoom.players || {}).length > 0 ? (
+    Object.values(currentRoom.players || {}).map((player: any) => {
+      const maskedUsername = player.username
+        ? `${player.username.slice(0, 3)}***`
+        : `user_${player.telegramId?.slice(0, 3) ?? '???'}***`;
 
+      // ✅ Determine background color
+      let bgColor = "bg-white/20"; // default
+      if (currentRoom.winners?.some((w: any) => w.telegramId === player.telegramId)) {
+        bgColor = "bg-yellow-400"; // winner
+      } else if (player.attemptedBingo) {
+        bgColor = "bg-yellow-200"; // attempted bingo
+      }
 
-            return (
-              <div
-                key={player.id}
-                className="bg-white/20 rounded p-2 flex flex-col items-center text-center"
-              >
-                <span className="font-semibold">{maskedUsername}</span>
-                <span className="text-xs">Bet: {player.betAmount}</span>
-              </div>
-            );
-          })
-        ) : (
-          <div className="col-span-full text-center text-gray-300">
-            No players have bet yet...
-          </div>
-        )}
-      </div>
-       
+      return (
+        <div
+          key={player.id}
+          className={`${bgColor} rounded p-2 flex flex-col items-center text-center transition`}
+        >
+          <span className="font-semibold">{maskedUsername}</span>
+          <span className="text-xs">Bet: {player.betAmount}</span>
+        </div>
+      );
+    })
+  ) : (
+    <div className="col-span-full text-center text-gray-300">
+      No players have bet yet...
+    </div>
+  )}
+</div>
+
     </div>
 
 

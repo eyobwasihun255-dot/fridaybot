@@ -607,11 +607,8 @@ return (
   <div className="flex flex-row gap-2">
  <button
   onClick={handleBingoClick}
-  className={`flex-1 py-2 rounded font-bold text-sm shadow transition ${
-    canCallBingo
-      ? "bg-gradient-to-r from-orange-500 to-yellow-500 hover:opacity-90"
-      : "bg-gray-500 cursor-not-allowed"
-  }`}
+  className="flex-1 py-2 rounded font-bold text-sm shadow transition bg-gradient-to-r from-orange-500 to-yellow-500 hover:opacity-90"
+   
 >
   {t('bingo')}
 </button>

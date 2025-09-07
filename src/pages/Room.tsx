@@ -158,6 +158,11 @@ React.useEffect(() => {
 }, [currentRoom?.gameStatus, currentRoom?.gameId]);
  // Inside Room.tsx
 
+const alreadyAttempted = playerData?.attemptedBingo ?? false;
+React.useEffect(() => {
+  setHasAttemptedBingo(alreadyAttempted);
+}, [alreadyAttempted]);
+
 
 
 // ✅ Reset right card marks when countdown ends and game starts
@@ -332,36 +337,42 @@ function checkCardBingo(cardNumbers: number[][], calledNumbers: number[]) {
       </div>
     );
   };
-  const handleBingoClick = async () => {
+const handleBingoClick = async () => {
   if (!displayedCard || !currentRoom || !user) {
     setGameMessage("Error: player/card not found");
     return;
   }
 
-  // ✅ If player already attempted Bingo, ignore
+  // ✅ Prevent multiple attempts locally
   if (hasAttemptedBingo) return;
 
-  setHasAttemptedBingo(true); // mark attempt
+  // 1️⃣ Check DB flag: prevent double attempt
+  const playerPath = `rooms/${currentRoom.id}/players/${user.telegramId}`;
+  const playerData = currentRoom.players?.[user.telegramId];
+  if (playerData?.attemptedBingo) {
+    setGameMessage("You already attempted Bingo!");
+    setHasAttemptedBingo(true);
+    return;
+  }
 
-  // 1️⃣ Check if room already paid
+  setHasAttemptedBingo(true);
+
+  // 2️⃣ Set the DB flag immediately to prevent race conditions
+  await update(ref(rtdb, playerPath), { attemptedBingo: true });
+
+  // 3️⃣ Check if room already paid
   if (currentRoom.payed) {
     setGameMessage("ተከፍሏል! ሌላ ጊዜ ይጠብቁ…");
     return;
   }
 
-  // 2️⃣ Check for at least one fully covered pattern
+  // 4️⃣ Check for at least one fully covered pattern
   const covered = findCoveredPatternByMarks();
-  if (!covered) {
+  if (!covered || !patternExistsInCalled(covered.patternNumbers)) {
     setGameMessage("በሐሳብ ቢንጎ አልሆነም። እርስዎ ተከለከሉ!");
-    setIsDisqualified(true); // ❌ disqualify player
-    return;
-  }
-
-  // 3️⃣ Check if pattern is fully in called numbers
-  const isValid = patternExistsInCalled(covered.patternNumbers);
-  if (!isValid) {
-    setGameMessage("በሐሳብ ቢንጎ አልሆነም። እርስዎ ተከለከሉ!");
-    setIsDisqualified(true);
+    if (currentRoom?.gameStatus === "ended" || currentRoom?.gameStatus === "playing") {
+      setIsDisqualified(true);
+    }
     return;
   }
 
@@ -655,7 +666,7 @@ return (
   className={`flex-1 py-2 rounded font-bold text-sm shadow transition bg-gradient-to-r from-orange-500 to-yellow-500 hover:opacity-90
     ${hasAttemptedBingo || isDisqualified ? "opacity-50 cursor-not-allowed" : ""}
   `}
-  disabled={hasAttemptedBingo || isDisqualified || currentRoom?.gameStatus === "ended"}
+  disabled={hasAttemptedBingo || isDisqualified }
 >
   {t('bingo')}
 </button>

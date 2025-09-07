@@ -160,8 +160,7 @@ stopNumberDraw: () => {
   }
 },
     startNumberStream: (roomId, gameId) => {
-      const { currentRoom } = get();
-      if (currentRoom.gameStatus === "playing") return;
+   
   const gameRef = ref(rtdb, `games/${gameId}`);
   
   onValue(gameRef, (snapshot) => {
@@ -212,7 +211,7 @@ stopNumberDraw: () => {
     const cooldownDuration = 0.5 * 60 * 1000; // 30 sec (0.5 min)
     const nextGameCountdownEndAt = Date.now() + cooldownDuration;
     useGameStore.getState().stopNumberDraw();
-    // Step 1: End the game 
+    // Step 1: End the game
     await update(roomRef, {
       gameStatus: "ended",
       countdownEndAt: null,

@@ -402,25 +402,25 @@ async function handleCallback(callbackQuery) {
 
   // ================== DEPOSIT ==================
 if (data === "deposit_cbe" || data === "deposit_telebirr") {
-  const method = data === "deposit_cbe" ? "CBE" : "Telebirr";
+  const method = data === "deposit_telebirr" ? "Telebirr" : "CBE";
 
   // Save deposit method in pendingActions
   pendingActions.set(userId, { type: "awaiting_deposit_amount", method });
 
   // Account details depending on method
-  const accountDetails = method === "CBE"
-    ? { accNumber: "1234567890", accHolder: "Friday Bingo" }
-    : { phone: "0948404314", holder: "Friday Bingo" };
+  const accountDetails = method === "telebirr"
+    ? { phone: "1234562890", accHolder: "Friday Bingo" }
+    : { accNumber: "0948404314", holder: "Friday Bingo" };
 
   // Message to user showing account / phone
-  const infoText = method === "CBE"
-    ? `💳 Deposit to CBE Account:\nAccount Number: ${accountDetails.accNumber}\nAccount Holder: ${accountDetails.accHolder}`
-    : `📱 Deposit via Telebirr:\nPhone Number: ${accountDetails.phone}\nAccount Holder: ${accountDetails.holder}`;
+  const infoText = method === "telebirr"
+    ? `💳 Deposit to Telebirr:\nPhone Number: ${accountDetails.phone}\nAccount Holder: ${accountDetails.holder}`
+    : `📱 Deposit via CBE:\nAccount Number: ${accountDetails.accNumber}\nAccount Holder: ${accountDetails.accHolder}`;
 
   // Inline button to copy / dial
-  const keyboard = method === "CBE"
-    ? { inline_keyboard: [[{ text: "Copy Account Number", callback_data: "copy_acc" }]] }
-    : { inline_keyboard: [[{ text: "📱 Dial / Copy", url: `tel:${accountDetails.phone}` }]] };
+  const keyboard = method === "telebirr"
+    ? { inline_keyboard: [[{ text: "📱 Dial / Copy", url: `tel:${accountDetails.phone}` }]] }
+    : { inline_keyboard: [[{ text: "Copy Account Number", callback_data: "copy_acc" }]] };
 
   // Send account / phone details first
   await sendMessage(chatId, infoText, { reply_markup: keyboard });

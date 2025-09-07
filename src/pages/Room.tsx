@@ -171,7 +171,14 @@ React.useEffect(() => {
       joinRoom(roomId);
     }
   }, [roomId, joinRoom]);
-  
+
+React.useEffect(() => {
+  if (!gameMessage) return;
+
+  const timer = setTimeout(() => setGameMessage(''), 3000); // hide after 3s
+  return () => clearTimeout(timer);
+}, [gameMessage]);
+
 
 React.useEffect(() => {
   if (!selectedCard) return;
@@ -430,7 +437,14 @@ return (
       </button>
     </div>
   </div>
+)} 
+{/* Game Message Popup */}
+{gameMessage && (
+  <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-black/80 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-fade-in-out">
+    {gameMessage}
+  </div>
 )}
+
 {showPatterns && (
   <div className="absolute top-0 left-0 w-full h-full bg-black/70 flex items-center justify-center z-50">
     <div className="bg-white text-black rounded-2xl shadow-xl p-4 w-[95%] max-w-4xl max-h-[85vh] overflow-y-auto">

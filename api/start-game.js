@@ -50,14 +50,14 @@ function shuffleArray(array) {
 
 // --- Generate drawn numbers in 3 stages for up to 3 winners ---
 function generateDrawnNumbersMultiWinner(cards) {
+  const winners = [];
+  const drawn = new Set();
+
   const safeAdd = (set, n) => {
     if (n > 0 && n <= 75) set.add(n);
   };
 
-  const winners = [];
-  const drawn = new Set();
-
-  const generateStageForCard = (card, targetTotalCount) => {
+  const generateStageForCard = (card, alreadyDrawnCount, targetTotalCount) => {
     const patterns = pickPatternNumbers(card);
     const pattern = patterns[Math.floor(Math.random() * patterns.length)];
     const stageSet = new Set();
@@ -72,23 +72,23 @@ function generateDrawnNumbersMultiWinner(cards) {
     }
 
     stageSet.forEach(n => drawn.add(n));
+
     return Array.from(stageSet);
   };
 
-  // Stage 1
   if (cards.length > 0) {
     winners.push(cards[0].id);
-    generateStageForCard(cards[0], 25);
+    generateStageForCard(cards[0], 0, 25);
   }
-  // Stage 2
+
   if (cards.length > 1) {
     winners.push(cards[1].id);
-    generateStageForCard(cards[1], 35);
+    generateStageForCard(cards[1], 25, 35);
   }
-  // Stage 3
+
   if (cards.length > 2) {
     winners.push(cards[2].id);
-    generateStageForCard(cards[2], 50);
+    generateStageForCard(cards[2], 35, 50);
   }
 
   while (drawn.size < 50) {
@@ -96,7 +96,10 @@ function generateDrawnNumbersMultiWinner(cards) {
     if (!drawn.has(num)) drawn.add(num);
   }
 
-  return { drawnNumbers: shuffleArray(Array.from(drawn).slice(0, 50)), winners };
+  return {
+    drawnNumbers: shuffleArray(Array.from(drawn).slice(0, 50)),
+    winners
+  };
 }
 
 // --- API Handler ---
@@ -106,7 +109,7 @@ export default async function handler(req, res) {
 
   const roomRef = ref(rtdb, `rooms/${roomId}`);
   let gameData = null;
-  let winnerIds: string[] = [];
+  let winnerIds = [];
 
   try {
     await runTransaction(roomRef, room => {
@@ -114,13 +117,15 @@ export default async function handler(req, res) {
 
       const gameId = uuidv4();
       const playerIds = Object.keys(room.players || {});
-      let drawnNumbers: number[] = [];
+      let drawnNumbers = [];
 
       if (playerIds.length > 0) {
         const cards = playerIds.map(pid => room.bingoCards[room.players[pid].cardId]);
         const { drawnNumbers: nums, winners } = generateDrawnNumbersMultiWinner(cards);
         drawnNumbers = nums;
         winnerIds = winners;
+      } else {
+        drawnNumbers = [];
       }
 
       const betAmount = room.betAmount || 0;
@@ -136,7 +141,7 @@ export default async function handler(req, res) {
         status: "active",
         totalPayout,
         betsDeducted: false,
-        winners: [] // will fill with {id, userId, username, checked}
+        winners: [] // will be filled with {id, userId, username, checked}
       };
 
       room.gameStatus = "playing";
@@ -152,7 +157,7 @@ export default async function handler(req, res) {
 
     if (!gameData) return res.status(400).json({ error: "Game already started or invalid state" });
 
-    // Add userId and checked to winners
+    // ✅ Add checked & userId for each winner
     for (const wid of winnerIds) {
       const userSnap = await get(ref(rtdb, `users/${wid}`));
       const userData = userSnap.val();

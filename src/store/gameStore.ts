@@ -159,16 +159,16 @@ stopNumberDraw: () => {
     set({ startingGame: false });
   }
 },
-   startNumberStream: (roomId, gameId) => {
+    startNumberStream: (roomId, gameId) => {
+      const { currentRoom } = get();
+      if (currentRoom.gameStatus === "playing") return;
   const gameRef = ref(rtdb, `games/${gameId}`);
-  const roomRef = ref(rtdb, `rooms/${roomId}`);
-
-  // Listen for game data
+  
   onValue(gameRef, (snapshot) => {
     const data = snapshot.val();
     if (!data || !data.drawnNumbers || !data.startedAt) return;
 
-    const { drawnNumbers, startedAt, drawIntervalMs, winnerCard } = data;
+    const { drawnNumbers, startedAt, drawIntervalMs, winnerCard, totalPayout } = data;
 
     let currentIndex = Math.floor((Date.now() - startedAt) / drawIntervalMs);
     if (currentIndex > drawnNumbers.length) currentIndex = drawnNumbers.length;
@@ -184,18 +184,13 @@ stopNumberDraw: () => {
     let i = currentIndex;
 
     const interval = setInterval(async () => {
-      // 🔹 Check callStatus before every draw
-      const roomSnap = await get(roomRef);
-      const roomData = roomSnap.val();
-      if (!roomData || roomData.callStatus === false || roomData.gameStatus !== "playing") {
-        console.log("⛔ Stopping draw — callStatus is false or game ended");
-        clearInterval(interval);
-        return;
-      }
-
       if (i >= drawnNumbers.length) {
         clearInterval(interval);
-        get().endGame(roomId);
+
+        // ✅ Show popup after all numbers called
+   
+
+        get().endGame(roomId); // optional: end game after popup
         return;
       }
 
@@ -205,7 +200,6 @@ stopNumberDraw: () => {
           [roomId]: [...(state.displayedCalledNumbers[roomId] || []), drawnNumbers[i]],
         },
       }));
-
       i++;
     }, drawIntervalMs);
   });
@@ -217,13 +211,13 @@ stopNumberDraw: () => {
     const bingoCardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
     const cooldownDuration = 0.5 * 60 * 1000; // 30 sec (0.5 min)
     const nextGameCountdownEndAt = Date.now() + cooldownDuration;
+    useGameStore.getState().stopNumberDraw();
     // Step 1: End the game
     await update(roomRef, {
       gameStatus: "ended",
       countdownEndAt: null,
       countdownStartedBy: null,
       nextGameCountdownEndAt,
-      callStatus : true,
     });
 
     console.log("✅ Game ended. Next round countdown started.");

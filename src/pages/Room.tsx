@@ -5,6 +5,9 @@ import { useLanguageStore } from '../store/languageStore';
 import { useGameStore } from '../store/gameStore';
 import { useAuthStore } from '../store/authStore';
 import BingoGrid from '../components/BingoGrid';
+import { rtdb } from '../firebase/config';
+import { ref, runTransaction, update } from 'firebase/database';
+
 const CountdownOverlay = ({
   countdownEndAt,
   label,
@@ -321,6 +324,8 @@ function checkCardBingo(cardNumbers: number[][], calledNumbers: number[]) {
     );
   };
   const handleBingoClick = async () => {
+    console.log("Bingo Click:", { displayedCard, currentRoom, user });
+
   if (!displayedCard || !currentRoom || !user) {
     setGameMessage("error");
     return;

@@ -250,7 +250,7 @@ async function handleUserMessage(message) {
       type: "awaiting_deposit_sms", 
       method: pending.method, 
       amount 
-    }); 
+    });
 
     await sendMessage(chatId, t(lang, "deposit_sms")(pending.method));
     return;
@@ -258,26 +258,11 @@ async function handleUserMessage(message) {
 
   // ====================== DEPOSIT SMS STEP ======================
   if (pending?.type === "awaiting_deposit_sms") {
-  const url = extractUrlFromText(text);
-  if (!url) {
-    await sendMessage(chatId, t(lang, "no_link"));
-    return;
-  }
-
-  // Example: Use a fixed phone number for payment (replace with your actual number)
-  const paymentPhone = "0948404314";
-
-  // Inline keyboard button that users can tap (opens phone dialer)
-  const keyboard = {
-    inline_keyboard: [
-      [
-        {
-          text: `📱 Send to : ${paymentPhone} `,
-          url: `tel:${paymentPhone}` // opens dialer
-        }
-      ]
-    ]
-  };
+    const url = extractUrlFromText(text);
+    if (!url) {
+      await sendMessage(chatId, t(lang, "no_link"));
+      return;
+    }
 
     // ✅ Check if URL already exists in deposits
     const depositsRef = ref(rtdb, "deposits");
@@ -416,12 +401,34 @@ async function handleCallback(callbackQuery) {
   }
 
   // ================== DEPOSIT ==================
-  if (data === "deposit_cbe" || data === "deposit_telebirr") {
-    const method = data === "deposit_cbe" ? "CBE" : "Telebirr";
-    await sendMessage(chatId, t(lang, "enter_deposit_amount", method));
-    pendingActions.set(userId, { type: "awaiting_deposit_amount", method });
-    return;
-  }
+ if (data === "deposit_cbe" || data === "deposit_telebirr") {
+  const method = data === "deposit_cbe" ? "CBE" : "Telebirr";
+
+  // Save deposit method in pendingActions
+  pendingActions.set(userId, { type: "awaiting_deposit_amount", method });
+
+  // Account details depending on method
+  const accountDetails = method === "CBE"
+    ? { accNumber: "1234567890", accHolder: "Friday Bingo" }
+    : { phone: "0948404314", holder: "Friday Bingo" };
+
+  // Message to user showing account / phone
+  const infoText = method === "CBE"
+    ? `💳 Deposit to CBE Account:\nAccount Number: ${accountDetails.accNumber}\nAccount Holder: ${accountDetails.accHolder}`
+    : `📱 Deposit via Telebirr:\nPhone Number: ${accountDetails.phone}\nAccount Holder: ${accountDetails.holder}`;
+
+  // Inline button to copy / dial
+  const keyboard = method === "CBE"
+    ? { inline_keyboard: [[{ text: "Copy Account Number", callback_data: "copy_acc" }]] }
+    : { inline_keyboard: [[{ text: "📱 Dial / Copy", url: `tel:${accountDetails.phone}` }]] };
+
+  await sendMessage(chatId, infoText, { reply_markup: keyboard });
+
+  // Ask user for deposit amount next
+  await sendMessage(chatId, t(lang, "enter_deposit_amount", method));
+  return;
+}
+
 
   if (data.startsWith("approve_deposit_")) {
     const requestId = data.replace("approve_deposit_", "");

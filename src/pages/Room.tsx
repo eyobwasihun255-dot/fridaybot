@@ -141,8 +141,8 @@ const patternValidAgainstCalled = coveredPattern
 const canCallBingo =
   !isInWinnerList &&
   (
-    currentRoom?.gameStatus !== "playing" ||
-    (coveredPattern && patternValidAgainstCalled)
+ 
+    coveredPattern && patternValidAgainstCalled
   );
 
 // Combine with local state for smoother UX

@@ -9,76 +9,7 @@ interface LanguageState {
 }
 
 const translations = {
-  en: {
-    // Header
-    'friday_bingo': 'Friday Bingo',
-    'balance': 'Balance',
-     bingo_rules_countdown: [
-        "Mark your numbers as they are called.",
-        "Click 'Bingo' only when you have at least one pattern.",
-         "Any player who pressed Bingo without a valid pattern will be disqualified.",
-        "Betting is locked once the game starts.",
-        "Winners are paid automatically after verification."
-      ],
-      bingo_rules_ended: [
-        "Check your cards and press Bingo."
-      ],
-    // Landing
-    'welcome': 'Welcome to Friday Bingo!',
-    'available_rooms': 'Available Rooms',
-    'demo_room': 'Demo Room',
-    'free_play': 'Free Play',
-    'bet_amount': 'Bet Amount',
-    'players': 'Players',
-    'status': 'Status',
-    'active': 'Active',
-    'waiting': 'Waiting ',
-    'in_progress': 'In Progress',
-    'join_room': 'Join Room',
-    'cancel_bet':'Cancel bet',
-    'place_bet':'Place bet',
-    
-    // Room
-    'room_details': 'Room',
-    'bet': 'Bet',
-    'payout': 'Payout',
-    'max_players': 'Max Players',
-    'game_area': 'Game Area',
-    'select_card': 'Select Your Card',
-    'card_number': 'Card #',
-    'bingo': 'BINGO!',
-    'numbers_called': 'Numbers Called',
-    'waiting_players': 'Waiting ...',
-    'game_starts_in': 'Game starts in',
-    'seconds': 'seconds',
-    'you_won': 'Congratulations! You won!',
-    'not_a_winner': 'Not a winner this time.',
-    'game_ended': 'Game ended. Starting new round...',
-    
-    // Game
-    'b_column': 'B (1-15)',
-    'i_column': 'I (16-30)',
-    'n_column': 'N (31-45)',
-    'g_column': 'G (46-60)',
-    'o_column': 'O (61-75)',
-    
-    // General
-    'loading': 'Loading...',
-    'error': 'An error occurred',
-    'success': 'Success!',
-    'confirm': 'Confirm',
-    'cancel': 'Cancel',
-    'pattern': 'Winning Patterns',
-    'insufficient_balance': 'Insufficient balance!',
-    'bet_placed': 'Bet placed! Waiting for other players...',
-    'error_player_card': 'Error: player/card not found',
-    'already_attempted_bingo': 'You already attempted Bingo!',
-    'bingo_not_allowed': 'No Bingo allowed now.',
-    'not_a_winner': 'Not a winner this time.',
-    'cancel_failed': 'Cancel failed.',
-    'game_in_progress': 'Game is currently in progress',
-  },
-  am: {
+    am: {
     // Header
     // Add inside 'am' block
 'insufficient_balance': ' በቂ ገንዘብ የለም!',
@@ -147,11 +78,79 @@ const translations = {
     'success': 'ተሳክቷል!',
     'confirm': 'አረጋግጥ',
     'cancel': 'ሰርዝ'
+  },en: {
+    // Header
+    'friday_bingo': 'Friday Bingo',
+    'balance': 'Balance',
+     bingo_rules_countdown: [
+        "Mark your numbers as they are called.",
+        "Click 'Bingo' only when you have at least one pattern.",
+         "Any player who pressed Bingo without a valid pattern will be disqualified.",
+        "Betting is locked once the game starts.",
+        "Winners are paid automatically after verification."
+      ],
+      bingo_rules_ended: [
+        "Check your cards and press Bingo."
+      ],
+    // Landing
+    'welcome': 'Welcome to Friday Bingo!',
+    'available_rooms': 'Available Rooms',
+    'demo_room': 'Demo Room',
+    'free_play': 'Free Play',
+    'bet_amount': 'Bet Amount',
+    'players': 'Players',
+    'status': 'Status',
+    'active': 'Active',
+    'waiting': 'Waiting ',
+    'in_progress': 'In Progress',
+    'join_room': 'Join Room',
+    'cancel_bet':'Cancel bet',
+    'place_bet':'Place bet',
+    
+    // Room
+    'room_details': 'Room',
+    'bet': 'Bet',
+    'payout': 'Payout',
+    'max_players': 'Max Players',
+    'game_area': 'Game Area',
+    'select_card': 'Select Your Card',
+    'card_number': 'Card #',
+    'bingo': 'BINGO!',
+    'numbers_called': 'Numbers Called',
+    'waiting_players': 'Waiting ...',
+    'game_starts_in': 'Game starts in',
+    'seconds': 'seconds',
+    'you_won': 'Congratulations! You won!',
+    'not_a_winner': 'Not a winner this time.',
+    'game_ended': 'Game ended. Starting new round...',
+    
+    // Game
+    'b_column': 'B (1-15)',
+    'i_column': 'I (16-30)',
+    'n_column': 'N (31-45)',
+    'g_column': 'G (46-60)',
+    'o_column': 'O (61-75)',
+    
+    // General
+    'loading': 'Loading...',
+    'error': 'An error occurred',
+    'success': 'Success!',
+    'confirm': 'Confirm',
+    'cancel': 'Cancel',
+    'pattern': 'Winning Patterns',
+    'insufficient_balance': 'Insufficient balance!',
+    'bet_placed': 'Bet placed! Waiting for other players...',
+    'error_player_card': 'Error: player/card not found',
+    'already_attempted_bingo': 'You already attempted Bingo!',
+    'bingo_not_allowed': 'No Bingo allowed now.',
+    'not_a_winner': 'Not a winner this time.',
+    'cancel_failed': 'Cancel failed.',
+    'game_in_progress': 'Game is currently in progress',
   }
 };
 
 export const useLanguageStore = create<LanguageState>((set, get) => ({
-  language: 'en',
+  language: 'am',
   
   setLanguage: (lang: Language) => {
     set({ language: lang });

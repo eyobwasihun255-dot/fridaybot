@@ -78,7 +78,7 @@ const [remaining, setRemaining] = useState<number | null>(null);
   const [hasBet, setHasBet] = useState(false);
   const [gameMessage, setGameMessage] = useState('');
   
-
+const [markedNumbers, setMarkedNumbers] = React.useState<number[]>([]);
   const cancelBet = useGameStore((state) => state.cancelBet);
 const displayedCalledNumbers = useGameStore(
   (s) => s.displayedCalledNumbers[currentRoom?.id ?? ""] || []
@@ -158,7 +158,7 @@ React.useEffect(() => {
 }, [currentRoom?.gameStatus, currentRoom?.gameId]);
  // Inside Room.tsx
 
-const [markedNumbers, setMarkedNumbers] = React.useState<number[]>([]);
+
 
 // ✅ Reset right card marks when countdown ends and game starts
 React.useEffect(() => {

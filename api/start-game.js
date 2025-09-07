@@ -50,14 +50,6 @@ function shuffleArray(array) {
 
 // --- Generate drawn numbers in 3 stages for up to 3 winners ---
 function generateDrawnNumbersMultiWinner(cards) {
-  const ranges = [
-    { min: 1, max: 15 },
-    { min: 16, max: 30 },
-    { min: 31, max: 45 },
-    { min: 46, max: 60 },
-    { min: 61, max: 75 },
-  ];
-
   const safeAdd = (set, n) => {
     if (n > 0 && n <= 75) set.add(n);
   };
@@ -65,57 +57,46 @@ function generateDrawnNumbersMultiWinner(cards) {
   const winners = [];
   const drawn = new Set();
 
-  // Helper: generate stage for a given card so it wins in that stage
-  const generateStageForCard = (card, alreadyDrawnCount, targetTotalCount) => {
+  const generateStageForCard = (card, targetTotalCount) => {
     const patterns = pickPatternNumbers(card);
     const pattern = patterns[Math.floor(Math.random() * patterns.length)];
     const stageSet = new Set();
 
-    // Add missing numbers from the pattern that are not yet drawn
     pattern.forEach(n => {
       if (!drawn.has(n)) safeAdd(stageSet, n);
     });
 
-    // Fill up with random numbers until we reach the target count for this stage
     while (drawn.size + stageSet.size < targetTotalCount) {
       const num = Math.floor(Math.random() * 75) + 1;
       if (!drawn.has(num)) stageSet.add(num);
     }
 
-    // Add stage numbers to main drawn set
     stageSet.forEach(n => drawn.add(n));
-
     return Array.from(stageSet);
   };
 
-  // Stage 1: first winner (numbers 1–25)
+  // Stage 1
   if (cards.length > 0) {
     winners.push(cards[0].id);
-    generateStageForCard(cards[0], 0, 25);
+    generateStageForCard(cards[0], 25);
   }
-
-  // Stage 2: second winner (numbers 26–35)
+  // Stage 2
   if (cards.length > 1) {
     winners.push(cards[1].id);
-    generateStageForCard(cards[1], 25, 35);
+    generateStageForCard(cards[1], 35);
   }
-
-  // Stage 3: third winner (numbers 36–50)
+  // Stage 3
   if (cards.length > 2) {
     winners.push(cards[2].id);
-    generateStageForCard(cards[2], 35, 50);
+    generateStageForCard(cards[2], 50);
   }
 
-  // Fill remaining if less than 50
   while (drawn.size < 50) {
     const num = Math.floor(Math.random() * 75) + 1;
     if (!drawn.has(num)) drawn.add(num);
   }
 
-  return {
-    drawnNumbers: shuffleArray(Array.from(drawn).slice(0, 50)),
-    winners
-  };
+  return { drawnNumbers: shuffleArray(Array.from(drawn).slice(0, 50)), winners };
 }
 
 // --- API Handler ---
@@ -125,7 +106,7 @@ export default async function handler(req, res) {
 
   const roomRef = ref(rtdb, `rooms/${roomId}`);
   let gameData = null;
-  let winnerIds = [];
+  let winnerIds: string[] = [];
 
   try {
     await runTransaction(roomRef, room => {
@@ -133,15 +114,13 @@ export default async function handler(req, res) {
 
       const gameId = uuidv4();
       const playerIds = Object.keys(room.players || {});
-      let drawnNumbers = [];
+      let drawnNumbers: number[] = [];
 
       if (playerIds.length > 0) {
         const cards = playerIds.map(pid => room.bingoCards[room.players[pid].cardId]);
         const { drawnNumbers: nums, winners } = generateDrawnNumbersMultiWinner(cards);
         drawnNumbers = nums;
         winnerIds = winners;
-      } else {
-        drawnNumbers = [];
       }
 
       const betAmount = room.betAmount || 0;
@@ -157,7 +136,7 @@ export default async function handler(req, res) {
         status: "active",
         totalPayout,
         betsDeducted: false,
-        winners: [] // will be filled after fetching usernames
+        winners: [] // will fill with {id, userId, username, checked}
       };
 
       room.gameStatus = "playing";
@@ -173,12 +152,18 @@ export default async function handler(req, res) {
 
     if (!gameData) return res.status(400).json({ error: "Game already started or invalid state" });
 
-    // Fetch winners’ usernames in order
+    // Add userId and checked to winners
     for (const wid of winnerIds) {
       const userSnap = await get(ref(rtdb, `users/${wid}`));
       const userData = userSnap.val();
       const username = userData?.username || "Unknown";
-      gameData.winners.push({ id: wid, username });
+
+      gameData.winners.push({
+        id: wid,
+        userId: wid,
+        username,
+        checked: false
+      });
     }
 
     const gameRef = ref(rtdb, `games/${gameData.id}`);
@@ -212,4 +197,3 @@ export default async function handler(req, res) {
     res.status(500).json({ error: "Failed to start game" });
   }
 }
- 

@@ -321,7 +321,10 @@ function checkCardBingo(cardNumbers: number[][], calledNumbers: number[]) {
     );
   };
   const handleBingoClick = async () => {
-  if (!displayedCard || !currentRoom || !user) return;
+  if (!displayedCard || !currentRoom || !user) {
+    setGameMessage("error");
+    return;
+  }
 
   // 1️⃣ Check if room already paid
   if (currentRoom.payed) {
@@ -329,14 +332,7 @@ function checkCardBingo(cardNumbers: number[][], calledNumbers: number[]) {
     return;
   }
 
-  // 2️⃣ Check if user is in winners list
-  const isWinner = currentRoom.winners?.some(
-    (w: any) => w.cardId === displayedCard.id
-  );
-  if (!isWinner) {
-    setGameMessage("ካርዱዎ እንደ አሸናፊ አልተመዘገበም። ካርዱዎ ተሰናዳ።");
-    return;
-  }
+  
 
   // 3️⃣ Check for at least one fully covered pattern
   const covered = findCoveredPatternByMarks();

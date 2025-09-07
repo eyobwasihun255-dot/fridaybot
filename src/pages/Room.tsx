@@ -760,7 +760,7 @@ return (
       if (currentRoom.winners?.some((w: any) => w.telegramId === player.telegramId)) {
         bgColor = "bg-green-400"; // winner
       } else if (player.attemptedBingo) {
-        bgColor = "bg-red-200"; // attempted bingo
+        bgColor = "bg-red-400"; // attempted bingo
       }
 
       return (

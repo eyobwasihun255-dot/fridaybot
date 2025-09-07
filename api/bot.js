@@ -250,7 +250,7 @@ async function handleUserMessage(message) {
       type: "awaiting_deposit_sms", 
       method: pending.method, 
       amount 
-    });
+    }); 
 
     await sendMessage(chatId, t(lang, "deposit_sms")(pending.method));
     return;
@@ -258,11 +258,26 @@ async function handleUserMessage(message) {
 
   // ====================== DEPOSIT SMS STEP ======================
   if (pending?.type === "awaiting_deposit_sms") {
-    const url = extractUrlFromText(text);
-    if (!url) {
-      await sendMessage(chatId, t(lang, "no_link"));
-      return;
-    }
+  const url = extractUrlFromText(text);
+  if (!url) {
+    await sendMessage(chatId, t(lang, "no_link"));
+    return;
+  }
+
+  // Example: Use a fixed phone number for payment (replace with your actual number)
+  const paymentPhone = "0948404314";
+
+  // Inline keyboard button that users can tap (opens phone dialer)
+  const keyboard = {
+    inline_keyboard: [
+      [
+        {
+          text: `📱 Send to : ${paymentPhone} `,
+          url: `tel:${paymentPhone}` // opens dialer
+        }
+      ]
+    ]
+  };
 
     // ✅ Check if URL already exists in deposits
     const depositsRef = ref(rtdb, "deposits");

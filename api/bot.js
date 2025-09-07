@@ -400,32 +400,36 @@ async function handleCallback(callbackQuery) {
     return;
   }
 
+if (data === "copy_telebirr") {
+  await sendMessage(chatId, "📱 Telebirr Number: 0948404314\n(Press & hold to copy)");
+}
+
   // ================== DEPOSIT ==================
-if (data === "deposit_cbe" || data === "deposit_telebirr") {
-  const method = data === "deposit_telebirr" ? "Telebirr" : "CBE";
+ if (data === "deposit_cbe" || data === "deposit_telebirr") {
+  const method = data === "deposit_cbe" ? "CBE" : "Telebirr";
 
   // Save deposit method in pendingActions
   pendingActions.set(userId, { type: "awaiting_deposit_amount", method });
 
   // Account details depending on method
-  const accountDetails = method === "telebirr"
-    ? { phone: "1234562890", accHolder: "Friday Bingo" }
-    : { accNumber: "0948404314", holder: "Friday Bingo" };
+  const accountDetails = method === "CBE"
+    ? { accNumber: "1234567890", accHolder: "Friday Bingo" }
+    : { phone: "0948404314", holder: "Friday Bingo" };
 
   // Message to user showing account / phone
-  const infoText = method === "telebirr"
-    ? `💳 Deposit to Telebirr:\nPhone Number: ${accountDetails.phone}\nAccount Holder: ${accountDetails.holder}`
-    : `📱Comming soon..`;
+  const infoText = method === "CBE"
+    ? `💳 Deposit to CBE Account:\nAccount Number: ${accountDetails.accNumber}\nAccount Holder: ${accountDetails.accHolder}`
+    : `📱 Deposit via Telebirr:\nPhone Number: ${accountDetails.phone}\nAccount Holder: ${accountDetails.holder}`;
 
   // Inline button to copy / dial
-  const keyboard = method === "telebirr"
-    ? { inline_keyboard: [[{ text: "📱 Dial / Copy", url: `tel:${accountDetails.phone}` }]] }
-    : { inline_keyboard: [[{ text: "Copy Account Number", callback_data: "copy_acc" }]] };
+  const keyboard = method === "CBE"
+  ? { inline_keyboard: [[{ text: "Copy Account Number", callback_data: "copy_acc" }]] }
+  : { inline_keyboard: [[{ text: "📋 Copy Phone Number", callback_data: "copy_telebirr" }]] };
 
-  // Send account / phone details first
+
   await sendMessage(chatId, infoText, { reply_markup: keyboard });
 
-  // Then ask user for deposit amount
+  // Ask user for deposit amount next
   await sendMessage(chatId, t(lang, "enter_deposit_amount", method));
   return;
 }

@@ -94,6 +94,43 @@ const alreadyBetted = !!playerData?.betAmount && playerData.betAmount > 0;
 // ✅ Always at top of component
 const storeIsBetActive = useGameStore((s) => s.isBetActive);
 
+// Flatten current card once for quick lookups
+const flatCard = React.useMemo(() => cardNumbers.flat(), [cardNumbers]);
+
+/**
+ * Returns the first pattern that the user's marks fully cover.
+ * "Fully cover" = at each index in the pattern, either it's a free space (0) or the number is in markedNumbers.
+ * Returns { patternIndex, patternIndices, patternNumbers } or null if none.
+ */
+function findCoveredPatternByMarks() {
+  const patterns = generatePatterns();
+  const markedSet = new Set(markedNumbers);
+
+  for (let pIdx = 0; pIdx < patterns.length; pIdx++) {
+    const indices = patterns[pIdx];
+    const fullyCovered = indices.every((i) => {
+      const num = flatCard[i];
+      return num === 0 || markedSet.has(num);
+    });
+
+    if (fullyCovered) {
+      return {
+        patternIndex: pIdx,
+        patternIndices: indices,
+        patternNumbers: indices.map((i) => flatCard[i]),
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Verifies that every non-free-space number in the pattern was actually called.
+ */
+function patternExistsInCalled(patternNumbers: number[]) {
+  const calledSet = new Set(displayedCalledNumbers);
+  return patternNumbers.every((n) => n === 0 || calledSet.has(n));
+}
 
 
 // Combine with local state for smoother UX
@@ -273,6 +310,35 @@ function checkCardBingo(cardNumbers: number[][], calledNumbers: number[]) {
     );
   };
 
+const handleBingoClick = async () => {
+  if (!displayedCard) {
+    setGameMessage("Select a card first.");
+    return;
+  }
+
+  // 1) The player's marks must fully cover at least one pattern.
+  const covered = findCoveredPatternByMarks();
+  if (!covered) {
+    setGameMessage("No winning pattern covered by your marks.");
+    return;
+  }
+
+  // 2) That same pattern’s numbers must all exist in the called list (free space 0 is ignored).
+  const isValidAgainstCalled = patternExistsInCalled(covered.patternNumbers);
+  if (!isValidAgainstCalled) {
+    setGameMessage("Marked pattern is not in called numbers. Disqualified.");
+    return;
+  }
+
+  // ✅ Passed both checks: proceed to your existing store action
+  try {
+    await useGameStore.getState().checkBingo(); // uses your current implementation
+    setGameMessage("Bingo submitted! Waiting for verification…");
+  } catch (e) {
+    console.error(e);
+    setGameMessage("Failed to submit bingo. Try again.");
+  }
+};
 
 
 
@@ -528,12 +594,13 @@ return (
 <div className="flex flex-col gap-2 mt-3 w-full">
   {/* Row with Bingo + Home */}
   <div className="flex flex-row gap-2">
-    <button 
-       onClick={() => useGameStore.getState().checkBingo()}
-      className="flex-1 bg-gradient-to-r from-orange-500 to-yellow-500 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition"
-    >
-      {t('bingo')}
-    </button>
+   <button 
+  onClick={handleBingoClick}
+  className="flex-1 bg-gradient-to-r from-orange-500 to-yellow-500 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition"
+>
+  {t('bingo')}
+</button>
+
     <button
       onClick={() => navigate("/")}
       className="flex-1 bg-gradient-to-r from-red-500 to-pink-500 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition"

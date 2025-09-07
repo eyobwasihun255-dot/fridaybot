@@ -64,8 +64,7 @@ function pickPatternNumbers(card) {
 }
 
 // --- Generate drawn numbers ensuring exactly one winner ---
-function generateDrawnNumbersForWinner(winnerCard, allCards) {
-  const drawnNumbers = new Set();
+function generateDrawnNumbersTwoStage(winnerCard, allCards) {
   const ranges = [
     { min: 1, max: 15 },
     { min: 16, max: 30 },
@@ -74,33 +73,70 @@ function generateDrawnNumbersForWinner(winnerCard, allCards) {
     { min: 61, max: 75 },
   ];
 
-  const safeAdd = n => {
-    if (n > 0 && n <= 75) drawnNumbers.add(n);
+  const safeAdd = (set, n) => {
+    if (n > 0 && n <= 75) set.add(n);
   };
 
+  // --- Stage 1: Winner's pattern (first 25 numbers)
   const winnerPatterns = pickPatternNumbers(winnerCard);
   const winnerPattern = winnerPatterns[Math.floor(Math.random() * winnerPatterns.length)];
-  winnerPattern.forEach(safeAdd);
 
-  const partitionedNumbers = ranges.map(() => new Set());
+  const stage1Set = new Set();
+  winnerPattern.forEach(n => safeAdd(stage1Set, n));
 
-  drawnNumbers.forEach(num => {
+  // Fill stage 1 up to 25 numbers, respecting BINGO column limits
+  const partitioned = ranges.map(() => new Set());
+  stage1Set.forEach(num => {
     for (let i = 0; i < ranges.length; i++) {
-      if (num >= ranges[i].min && num <= ranges[i].max) partitionedNumbers[i].add(num);
+      if (num >= ranges[i].min && num <= ranges[i].max) partitioned[i].add(num);
     }
   });
 
   for (let i = 0; i < ranges.length; i++) {
     const { min, max } = ranges[i];
-    while (partitionedNumbers[i].size < 5) {
+    while (partitioned[i].size < 5) {
       const num = Math.floor(Math.random() * (max - min + 1)) + min;
-      partitionedNumbers[i].add(num);
+      partitioned[i].add(num);
     }
   }
 
-  const finalNumbers = [];
-  partitionedNumbers.forEach(set => finalNumbers.push(...set));
-  return finalNumbers;
+  const first25 = [];
+  partitioned.forEach(set => first25.push(...set));
+
+  // --- Stage 2: Missing one number for each other card (numbers 26–50)
+  const stage2Set = new Set();
+
+  allCards.forEach(card => {
+    if (card.id === winnerCard.id) return; // skip winner
+
+    const patterns = pickPatternNumbers(card);
+
+    // Find a pattern that is missing exactly 1 number from first 25
+    for (const pattern of patterns) {
+      const missing = pattern.filter(n => !first25.includes(n));
+      if (missing.length === 1) {
+        const num = missing[0];
+        if (!winnerPattern.includes(num)) { // avoid giving winner's pattern numbers again
+          safeAdd(stage2Set, num);
+        }
+        break; // Only need one per card
+      }
+    }
+  });
+
+  // Fill remaining numbers for stage 2 randomly without duplicates
+  while (stage2Set.size < 25) {
+    const num = Math.floor(Math.random() * 75) + 1;
+    if (!first25.includes(num) && !winnerPattern.includes(num)) {
+      stage2Set.add(num);
+    }
+  }
+
+  const second25 = Array.from(stage2Set);
+
+  // --- Combine and shuffle within each stage
+  const drawnNumbers = [...shuffleArray(first25), ...shuffleArray(second25)];
+  return drawnNumbers;
 }
 
 function shuffleArray(array) {

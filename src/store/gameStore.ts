@@ -202,8 +202,6 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
     // Step 1: End the game
     await update(roomRef, {
       gameStatus: "ended",
-      
-      calledNumbers: [],
       countdownEndAt: null,
       countdownStartedBy: null,
       nextGameCountdownEndAt,
@@ -221,7 +219,8 @@ if (user?.telegramId) {
 }
         await update(roomRef, {
           gameStatus: "waiting",
-          currentwinner: null,
+          currentwinner: null,  
+          calledNumbers: [],
           gameId: null,
           payed: false,
           winner:null,

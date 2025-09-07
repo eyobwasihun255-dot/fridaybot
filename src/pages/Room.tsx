@@ -86,6 +86,8 @@ const [markedNumbers, setMarkedNumbers] = React.useState<number[]>([]);
 const displayedCalledNumbers = useGameStore(
   (s) => s.displayedCalledNumbers[currentRoom?.id ?? ""] || []
 );
+const [hasAttemptedBingo, setHasAttemptedBingo] = useState(false);
+const [isDisqualified, setIsDisqualified] = useState(false);
 
 const startNumberStream = useGameStore((s) => s.startNumberStream);
 // Find this player's data inside the room
@@ -331,12 +333,15 @@ function checkCardBingo(cardNumbers: number[][], calledNumbers: number[]) {
     );
   };
   const handleBingoClick = async () => {
-    console.log("Bingo Click:", { displayedCard, currentRoom, user });
-
   if (!displayedCard || !currentRoom || !user) {
-    setGameMessage("error");
+    setGameMessage("Error: player/card not found");
     return;
   }
+
+  // ✅ If player already attempted Bingo, ignore
+  if (hasAttemptedBingo) return;
+
+  setHasAttemptedBingo(true); // mark attempt
 
   // 1️⃣ Check if room already paid
   if (currentRoom.payed) {
@@ -344,19 +349,19 @@ function checkCardBingo(cardNumbers: number[][], calledNumbers: number[]) {
     return;
   }
 
-  
-
-  // 3️⃣ Check for at least one fully covered pattern
+  // 2️⃣ Check for at least one fully covered pattern
   const covered = findCoveredPatternByMarks();
   if (!covered) {
-    setGameMessage("ካርዱዎ ተሰናዳ። ምልክቶቹ ምንም አልሞላም።");
+    setGameMessage("በሐሳብ ቢንጎ አልሆነም። እርስዎ ተከለከሉ!");
+    setIsDisqualified(true); // ❌ disqualify player
     return;
   }
 
-  // 4️⃣ Check if pattern is fully in called numbers
+  // 3️⃣ Check if pattern is fully in called numbers
   const isValid = patternExistsInCalled(covered.patternNumbers);
   if (!isValid) {
-    setGameMessage("ካርዱዎ ተሰናዳ። የምልክት ቁጥሮች አልተጠሉም።");
+    setGameMessage("በሐሳብ ቢንጎ አልሆነም። እርስዎ ተከለከሉ!");
+    setIsDisqualified(true);
     return;
   }
 
@@ -370,15 +375,13 @@ function checkCardBingo(cardNumbers: number[][], calledNumbers: number[]) {
     const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
     await runTransaction(balanceRef, (current) => (current || 0) + payout);
 
-    // Update room to mark payout done
     const roomRef = ref(rtdb, `rooms/${currentRoom.id}`);
     await update(roomRef, { payed: true });
 
-    // Show winner popup
     useGameStore.getState().setWinnerCard(displayedCard);
     useGameStore.getState().setShowWinnerPopup(true);
+    useGameStore.getState().endGame(currentRoom.id);
 
-    setGameMessage(`🎉 ትክክለኛ! ድምብ ደረሰ: ${payout}`);
   } catch (err) {
     console.error("❌ Error processing Bingo payout:", err);
     setGameMessage("አልተሳካም። እንደገና ይሞክሩ።");
@@ -647,13 +650,16 @@ return (
 <div className="flex flex-col gap-2 mt-3 w-full">
   {/* Row with Bingo + Home */}
   <div className="flex flex-row gap-2">
- <button
+<button
   onClick={handleBingoClick}
-  className="flex-1 py-2 rounded font-bold text-sm shadow transition bg-gradient-to-r from-orange-500 to-yellow-500 hover:opacity-90"
-   
+  className={`flex-1 py-2 rounded font-bold text-sm shadow transition bg-gradient-to-r from-orange-500 to-yellow-500 hover:opacity-90
+    ${hasAttemptedBingo || isDisqualified ? "opacity-50 cursor-not-allowed" : ""}
+  `}
+  disabled={hasAttemptedBingo || isDisqualified || currentRoom?.gameStatus === "ended"}
 >
   {t('bingo')}
 </button>
+
 
 
     <button

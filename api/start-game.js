@@ -158,22 +158,27 @@ export default async function handler(req, res) {
     if (!gameData) return res.status(400).json({ error: "Game already started or invalid state" });
 
     // ✅ Add checked & userId for each winner
-   for (let i = 0; i < winnerIds.length; i++) {
-  const cardId = winnerIds[i];
-  const card = Object.values(roomRef.val()?.bingoCards || {}).find(c => c.id === cardId);
-  const userId = card?.claimedBy || cardId; // fallback in case claimedBy missing
+   // Fetch current room data snapshot
+const roomSnap = await get(roomRef);
+const roomValue = roomSnap.val() || { bingoCards: {} };
+
+// Add checked, userId & cardId for each winner
+for (const cardId of winnerIds) {
+  const card = Object.values(roomValue.bingoCards).find(c => c.id === cardId);
+  const userId = card?.claimedBy || cardId;
   const userSnap = await get(ref(rtdb, `users/${userId}`));
   const userData = userSnap.val();
   const username = userData?.username || "Unknown";
 
   gameData.winners.push({
     id: uuidv4(),    // unique winner record ID
-    cardId,          // add cardId
-    userId,          // link to player
+    cardId,
+    userId,
     username,
     checked: false
   });
 }
+
 
     const gameRef = ref(rtdb, `games/${gameData.id}`);
     const gameSnap = await get(gameRef);

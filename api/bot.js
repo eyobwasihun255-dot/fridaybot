@@ -256,7 +256,8 @@ async function handleUserMessage(message) {
       amount 
     });
 
-    await sendMessage(chatId, t(lang, "deposit_sms")(pending.method));
+  await sendMessage(chatId, t(lang, "deposit_sms", pending.method));
+
     return;
   }
 

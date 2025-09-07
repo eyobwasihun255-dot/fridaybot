@@ -400,39 +400,29 @@ async function handleCallback(callbackQuery) {
     return;
   }
 
-if (data === "copy_telebirr") {
-  await sendMessage(chatId, "📱 Telebirr Number: 0948404314\n(Press & hold to copy)");
-}
-
-  // ================== DEPOSIT ==================
- if (data === "deposit_cbe" || data === "deposit_telebirr") {
+if (data === "deposit_cbe" || data === "deposit_telebirr") {
   const method = data === "deposit_cbe" ? "CBE" : "Telebirr";
 
-  // Save deposit method in pendingActions
+  // Save deposit method
   pendingActions.set(userId, { type: "awaiting_deposit_amount", method });
 
-  // Account details depending on method
+  // Account details
   const accountDetails = method === "CBE"
     ? { accNumber: "1234567890", accHolder: "Friday Bingo" }
     : { phone: "0948404314", holder: "Friday Bingo" };
 
-  // Message to user showing account / phone
+  // Message with MarkdownV2 formatting (triple backticks for copy box)
   const infoText = method === "CBE"
-    ? `💳 Deposit to CBE Account:\nAccount Number: ${accountDetails.accNumber}\nAccount Holder: ${accountDetails.accHolder}`
-    : `📱 Deposit via Telebirr:\nPhone Number: ${accountDetails.phone}\nAccount Holder: ${accountDetails.holder}`;
+    ? `💳 Deposit to CBE Account:\n\`\`\`\n${accountDetails.accNumber}\n\`\`\`\nAccount Holder: ${accountDetails.accHolder}`
+    : `📱 Deposit via Telebirr:\n\`\`\`\n${accountDetails.phone}\n\`\`\`\nAccount Holder: ${accountDetails.holder}`;
 
-  // Inline button to copy / dial
-  const keyboard = method === "CBE"
-  ? { inline_keyboard: [[{ text: "Copy Account Number", callback_data: "copy_acc" }]] }
-  : { inline_keyboard: [[{ text: "📋 Copy Phone Number", callback_data: "copy_telebirr" }]] };
+  await sendMessage(chatId, infoText, { parse_mode: "MarkdownV2" });
 
-
-  await sendMessage(chatId, infoText, { reply_markup: keyboard });
-
-  // Ask user for deposit amount next
-  await sendMessage(chatId, t(lang, "enter_deposit_amount", method));
+  // Ask for amount
+  await sendMessage(chatId, t(lang, "deposit_amount")(method));
   return;
 }
+
 
 
   if (data.startsWith("approve_deposit_")) {

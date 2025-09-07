@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { rtdb } from '../firebase/config';
 import { ref, onValue, get as fbget, set as fbset, update, remove, push, query, orderByChild, equalTo , runTransaction } from 'firebase/database';
+// add get and remove
+import { get } from 'firebase/database';
 
 
 
@@ -53,13 +55,15 @@ interface GameState {
   startNumberStream: (roomId: string, gameId: string) => void;
    winnerCard: BingoCard | null;      // Winner card for the current game
   showWinnerPopup: boolean; 
-   closeWinnerPopup: () => void; // <-- missing before
+   closeWinnerPopup: () => void; 
+   stopNumberDraw: () => void;
   setWinnerCard: (card: BingoCard) => void; // Setter for winner card
   setShowWinnerPopup: (show: boolean) => void; // Setter for popup visibility
   endGame: (roomId: string) => void;
   fetchBingoCards: () => void;
   cancelBet: (cardId?: string) => Promise<boolean>;
   isBetActive: boolean;
+  drawIntervalId: ReturnType<typeof setInterval> | null ;
 }
 
 async function resetAllCardsAndPlayers(roomId: string) {
@@ -67,24 +71,33 @@ async function resetAllCardsAndPlayers(roomId: string) {
     const cardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
     const playersRef = ref(rtdb, `rooms/${roomId}/players`);
 
-    // 1️⃣ Get all cards in the room
+    // 1) Read all cards once
     const snapshot = await get(cardsRef);
+
     if (snapshot.exists()) {
-      const updates: Record<string, any> = {};
+      // Build an array of update promises (update each card child)
+      const updates: Promise<any>[] = [];
+
       snapshot.forEach((cardSnap) => {
-        updates[`${cardSnap.key}/claimed`] = false;
-        updates[`${cardSnap.key}/claimedBy`] = null;
+        const cardKey = cardSnap.key;
+        if (!cardKey) return; // skip safety
+        const cardRef = ref(rtdb, `rooms/${roomId}/bingoCards/${cardKey}`);
+
+        // Only change claimed fields — this merges with existing child data
+        updates.push(update(cardRef, { claimed: false, claimedBy: null }));
       });
 
-      if (Object.keys(updates).length > 0) {
-        await update(cardsRef, updates);
+      if (updates.length) {
+        await Promise.all(updates);
         console.log("♻️ All cards unclaimed in room:", roomId);
+      } else {
+        console.log("ℹ️ No claimed cards to update for room:", roomId);
       }
     } else {
       console.log("ℹ️ No cards found for room:", roomId);
     }
 
-    // 2️⃣ Remove all players
+    // 2) Remove all players
     await remove(playersRef);
     console.log("🗑️ All players removed from room:", roomId);
 
@@ -96,6 +109,7 @@ async function resetAllCardsAndPlayers(roomId: string) {
 
 export const useGameStore = create<GameState>((set, get) => ({
   rooms: [],
+  drawIntervalId: null,
   displayedCalledNumbers:[],
   currentRoom: null,
   isBetActive: false,
@@ -109,7 +123,13 @@ setShowWinnerPopup: (show: boolean) => set({ showWinnerPopup: show }),
 
 closeWinnerPopup: () => set({ showWinnerPopup: false }),
 
-
+stopNumberDraw: () => {
+    const id = get().drawIntervalId;
+    if (id) {
+      clearInterval(id);
+      set({ drawIntervalId: null });
+    
+  }},
   startGameIfCountdownEnded: async () => {
   const { currentRoom, startingGame } = get();
   if (!currentRoom || startingGame) return;
@@ -141,7 +161,7 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
 },
     startNumberStream: (roomId, gameId) => {
   const gameRef = ref(rtdb, `games/${gameId}`);
-  
+  if (get().drawIntervalId) return;
   onValue(gameRef, (snapshot) => {
     const data = snapshot.val();
     if (!data || !data.drawnNumbers || !data.startedAt) return;
@@ -189,7 +209,7 @@ closeWinnerPopup: () => set({ showWinnerPopup: false }),
     const bingoCardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
     const cooldownDuration = 0.5 * 60 * 1000; // 30 sec (0.5 min)
     const nextGameCountdownEndAt = Date.now() + cooldownDuration;
-
+    useGameStore.getState().stopNumberDraw();
     // Step 1: End the game
     await update(roomRef, {
       gameStatus: "ended",

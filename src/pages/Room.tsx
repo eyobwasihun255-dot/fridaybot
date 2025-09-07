@@ -758,9 +758,9 @@ return (
       // ✅ Determine background color
       let bgColor = "bg-white/20"; // default
       if (currentRoom.winners?.some((w: any) => w.telegramId === player.telegramId)) {
-        bgColor = "bg-yellow-400"; // winner
+        bgColor = "bg-green-400"; // winner
       } else if (player.attemptedBingo) {
-        bgColor = "bg-yellow-200"; // attempted bingo
+        bgColor = "bg-red-200"; // attempted bingo
       }
 
       return (

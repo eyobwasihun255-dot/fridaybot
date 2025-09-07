@@ -608,7 +608,7 @@ return (
   {currentRoom?.gameStatus === "ended" && currentRoom.nextGameCountdownEndAt && (
     <CountdownOverlay
       countdownEndAt={currentRoom.nextGameCountdownEndAt}
-      label="next Game starting soon"
+      label=""
     />
   )}
 </div>

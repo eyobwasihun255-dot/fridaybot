@@ -57,40 +57,46 @@ function generateDrawnNumbersMultiWinner(cards) {
     if (n > 0 && n <= 75) set.add(n);
   };
 
-  const generateStageForCard = (card, alreadyDrawnCount, targetTotalCount) => {
-    const patterns = pickPatternNumbers(card);
-    const pattern = patterns[Math.floor(Math.random() * patterns.length)];
-    const stageSet = new Set();
-
-    pattern.forEach(n => {
-      if (!drawn.has(n)) safeAdd(stageSet, n);
-    });
-
-    while (drawn.size + stageSet.size < targetTotalCount) {
-      const num = Math.floor(Math.random() * 75) + 1;
-      if (!drawn.has(num)) stageSet.add(num);
-    }
-
-    stageSet.forEach(n => drawn.add(n));
-
-    return Array.from(stageSet);
-  };
-
+  // --- Step 1: Stage 1 for first winner card ---
   if (cards.length > 0) {
-    winners.push(cards[0].id);
-    generateStageForCard(cards[0], 0, 25);
+    const card = cards[0];
+    winners.push(card.id);
+    const patterns = pickPatternNumbers(card);
+
+    // Pick a random pattern
+    const pattern = patterns[Math.floor(Math.random() * patterns.length)];
+
+    // Add all but 1 number from the pattern
+    const patternCopy = [...pattern];
+    const missingIndex = Math.floor(Math.random() * patternCopy.length);
+    patternCopy.splice(missingIndex, 1); // Remove one number to "almost" complete
+    patternCopy.forEach(n => safeAdd(drawn, n));
+
+    // Fill remaining numbers for stage 1 randomly until 25 total
+    while (drawn.size < 25) {
+      const num = Math.floor(Math.random() * 75) + 1;
+      if (!drawn.has(num)) drawn.add(num);
+    }
   }
 
+  // --- Step 2: Stage 2 for 2nd and 3rd winner cards ---
   if (cards.length > 1) {
-    winners.push(cards[1].id);
-    generateStageForCard(cards[1], 25, 35);
+    const card = cards[1];
+    winners.push(card.id);
+    const patterns = pickPatternNumbers(card);
+    const pattern = patterns[Math.floor(Math.random() * patterns.length)];
+    pattern.forEach(n => safeAdd(drawn, n));
   }
 
   if (cards.length > 2) {
-    winners.push(cards[2].id);
-    generateStageForCard(cards[2], 35, 50);
+    const card = cards[2];
+    winners.push(card.id);
+    const patterns = pickPatternNumbers(card);
+    const pattern = patterns[Math.floor(Math.random() * patterns.length)];
+    pattern.forEach(n => safeAdd(drawn, n));
   }
 
+  // --- Step 3: Fill remaining numbers until 50 ---
   while (drawn.size < 50) {
     const num = Math.floor(Math.random() * 75) + 1;
     if (!drawn.has(num)) drawn.add(num);

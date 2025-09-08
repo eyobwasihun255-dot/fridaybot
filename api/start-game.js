@@ -51,62 +51,99 @@ function shuffleArray(array) {
 // --- Generate drawn numbers in 3 stages for up to 3 winners ---
 function generateDrawnNumbersMultiWinner(cards) {
   const winners = [];
-  const drawn = new Set();
+  const usedNumbers = new Set();
+  const drawnNumbers = [];
 
-  const safeAdd = (set, n) => {
-    if (n > 0 && n <= 75) set.add(n);
+  const safeAdd = (arr, num) => {
+    if (num > 0 && num <= 75 && !usedNumbers.has(num)) {
+      usedNumbers.add(num);
+      arr.push(num);
+      return true;
+    }
+    return false;
   };
 
-  // --- Step 1: Stage 1 for first winner card ---
-  if (cards.length > 0) {
-    const card = cards[0];
-    winners.push(card.id);
+  if (cards.length === 0) {
+    return { drawnNumbers: [], winners: [] };
+  }
+
+  // Pick up to 3 winners randomly
+  const shuffledCards = shuffleArray(cards);
+  const chosenWinners = shuffledCards.slice(0, 3);
+
+  // Pick patterns for each winner
+  const winnerPatterns = chosenWinners.map(card => {
     const patterns = pickPatternNumbers(card);
+    return patterns[Math.floor(Math.random() * patterns.length)];
+  });
 
-    // Pick a random pattern
-    const pattern = patterns[Math.floor(Math.random() * patterns.length)];
+  // --- Stage 1 (0–24) ---
+  {
+    const [card, pattern] = [chosenWinners[0], winnerPatterns[0]];
+    winners.push(card.id);
 
-    // Add all but 1 number from the pattern
-    const patternCopy = [...pattern];
-    const missingIndex = Math.floor(Math.random() * patternCopy.length);
-    patternCopy.splice(missingIndex, 1); // Remove one number to "almost" complete
-    patternCopy.forEach(n => safeAdd(drawn, n));
+    // Add pattern numbers, but leave 1 missing
+    const missingIdx = Math.floor(Math.random() * pattern.length);
+    pattern.forEach((n, i) => {
+      if (i !== missingIdx) safeAdd(drawnNumbers, n);
+    });
 
-    // Fill remaining numbers for stage 1 randomly until 25 total
-    while (drawn.size < 25) {
-      const num = Math.floor(Math.random() * 75) + 1;
-      if (!drawn.has(num)) drawn.add(num);
+    // For other cards, try to add most of their pattern but leave 1–2 missing
+    for (let ci = 1; ci < cards.length; ci++) {
+      const otherCard = cards[ci];
+      const patterns = pickPatternNumbers(otherCard);
+      const pat = patterns[Math.floor(Math.random() * patterns.length)];
+      const missCount = Math.random() < 0.5 ? 1 : 2;
+      const missing = new Set(
+        shuffleArray(pat).slice(0, missCount)
+      );
+      pat.forEach(n => {
+        if (!missing.has(n)) safeAdd(drawnNumbers, n);
+      });
+    }
+
+    // Fill until exactly 25
+    while (drawnNumbers.length < 25) {
+      safeAdd(drawnNumbers, Math.floor(Math.random() * 75) + 1);
     }
   }
 
-  // --- Step 2: Stage 2 for 2nd and 3rd winner cards ---
-  if (cards.length > 1) {
-    const card = cards[1];
+  // --- Stage 2 (25–34) ---
+  if (chosenWinners[1]) {
+    const [card, pattern] = [chosenWinners[1], winnerPatterns[1]];
     winners.push(card.id);
-    const patterns = pickPatternNumbers(card);
-    const pattern = patterns[Math.floor(Math.random() * patterns.length)];
-    pattern.forEach(n => safeAdd(drawn, n));
+
+    // Add missing numbers from this pattern
+    pattern.forEach(n => safeAdd(drawnNumbers, n));
+
+    // Fill up to index 35
+    while (drawnNumbers.length < 35) {
+      safeAdd(drawnNumbers, Math.floor(Math.random() * 75) + 1);
+    }
   }
 
-  if (cards.length > 2) {
-    const card = cards[2];
+  // --- Stage 3 (35–49) ---
+  if (chosenWinners[2]) {
+    const [card, pattern] = [chosenWinners[2], winnerPatterns[2]];
     winners.push(card.id);
-    const patterns = pickPatternNumbers(card);
-    const pattern = patterns[Math.floor(Math.random() * patterns.length)];
-    pattern.forEach(n => safeAdd(drawn, n));
+
+    // Add missing numbers from this pattern
+    pattern.forEach(n => safeAdd(drawnNumbers, n));
+
+    // Fill up to 50
+    while (drawnNumbers.length < 50) {
+      safeAdd(drawnNumbers, Math.floor(Math.random() * 75) + 1);
+    }
+  } else {
+    // If less than 3 winners, just fill until 50
+    while (drawnNumbers.length < 50) {
+      safeAdd(drawnNumbers, Math.floor(Math.random() * 75) + 1);
+    }
   }
 
-  // --- Step 3: Fill remaining numbers until 50 ---
-  while (drawn.size < 50) {
-    const num = Math.floor(Math.random() * 75) + 1;
-    if (!drawn.has(num)) drawn.add(num);
-  }
-
-  return {
-    drawnNumbers: shuffleArray(Array.from(drawn).slice(0, 50)),
-    winners
-  };
+  return { drawnNumbers, winners };
 }
+
 
 // --- API Handler ---
 export default async function handler(req, res) {

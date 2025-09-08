@@ -268,7 +268,8 @@ if (user?.telegramId) {
         console.error("❌ Failed to reset cards/room:", err);
       }
     }, cooldownDuration);
-   set({ isBetActive: false });
+   set({ isBetActive: false, selectedCard: null });
+
   } catch (err) {
     console.error("❌ Failed to end game:", err);
   }

@@ -259,7 +259,7 @@ if (user?.telegramId) {
           countdownStartedBy: null,
           nextGameCountdownEndAt: null,
         });
-         set({ isBetActive: false });
+        
 
 
         console.log("✅ Room reset to waiting after cooldown.");
@@ -267,7 +267,7 @@ if (user?.telegramId) {
         console.error("❌ Failed to reset cards/room:", err);
       }
     }, cooldownDuration);
-
+   set({ isBetActive: false });
   } catch (err) {
     console.error("❌ Failed to end game:", err);
   }

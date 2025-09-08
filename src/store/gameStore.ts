@@ -240,12 +240,13 @@ stopNumberDraw: () => {
 
     get().stopNumberDraw();
     // Step 3: After cooldown, reset the room state
-     const { user } = useAuthStore.getState();
+    
+    setTimeout(async () => {
+      try {
+         const { user } = useAuthStore.getState();
 if (user?.telegramId) {
   await resetAllCardsAndPlayers(roomId);
 }
-    setTimeout(async () => {
-      try {
        
         await update(roomRef, {
           gameStatus: "waiting",

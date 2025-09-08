@@ -243,7 +243,6 @@ stopNumberDraw: () => {
      const { user } = useAuthStore.getState();
 if (user?.telegramId) {
   await resetAllCardsAndPlayers(roomId);
-  set({ isBetActive: false });
 }
     setTimeout(async () => {
       try {
@@ -260,7 +259,8 @@ if (user?.telegramId) {
           countdownStartedBy: null,
           nextGameCountdownEndAt: null,
         });
-         
+         set({ isBetActive: false });
+
 
         console.log("✅ Room reset to waiting after cooldown.");
       } catch (err) {

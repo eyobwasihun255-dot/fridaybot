@@ -159,16 +159,23 @@ stopNumberDraw: () => {
     set({ startingGame: false });
   }
 },
-    startNumberStream: (roomId, gameId) => {
-      const {currentRoom} = get();
-      if (currentRoom.gameStatus !== "playing") return;
+ startNumberStream: (roomId, gameId) => {
+  const { currentRoom } = get();
+  if (currentRoom.gameStatus !== "playing") return;
+
   const gameRef = ref(rtdb, `games/${gameId}`);
-  
+
   onValue(gameRef, (snapshot) => {
     const data = snapshot.val();
     if (!data || !data.drawnNumbers || !data.startedAt) return;
 
-    const { drawnNumbers, startedAt, drawIntervalMs, winnerCard, totalPayout } = data;
+    const { drawnNumbers, startedAt, drawIntervalMs, winnerCard, totalPayout, gameStatus } = data;
+
+    // 🔴 Stop immediately if game is ended
+    if (gameStatus === "ended") {
+      get().stopNumberDraw();
+      return;
+    }
 
     let currentIndex = Math.floor((Date.now() - startedAt) / drawIntervalMs);
     if (currentIndex > drawnNumbers.length) currentIndex = drawnNumbers.length;
@@ -183,27 +190,32 @@ stopNumberDraw: () => {
 
     let i = currentIndex;
 
-    const interval = setInterval(async () => {
+    // Clear previous interval before starting a new one
+    get().stopNumberDraw();
+
+    const interval = setInterval(() => {
       if (i >= drawnNumbers.length) {
-        clearInterval(interval);
-
-        // ✅ Show popup after all numbers called
-   
-
-        get().endGame(roomId); // optional: end game after popup
+        get().stopNumberDraw();
+        get().endGame(roomId); // will trigger gameStatus=ended in DB
         return;
       }
 
       set((state) => ({
         displayedCalledNumbers: {
           ...state.displayedCalledNumbers,
-          [roomId]: [...(state.displayedCalledNumbers[roomId] || []), drawnNumbers[i]],
+          [roomId]: [
+            ...(state.displayedCalledNumbers[roomId] || []),
+            drawnNumbers[i],
+          ],
         },
       }));
       i++;
     }, drawIntervalMs);
+
+    set({ drawIntervalId: interval });
   });
 },
+
 
   endGame: async (roomId: string) => {
   try {
@@ -211,6 +223,10 @@ stopNumberDraw: () => {
     const bingoCardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
     const cooldownDuration = 0.5 * 60 * 1000; // 30 sec (0.5 min)
     const nextGameCountdownEndAt = Date.now() + cooldownDuration;
+    
+     const { currentRoom } = get();
+    if (!currentRoom?.gameId) return;
+    const gameRef = ref(rtdb, `games/${currentRoom.gameId}`);
     // Step 1: End the game
     await update(roomRef, {
       gameStatus: "ended",
@@ -220,14 +236,16 @@ stopNumberDraw: () => {
     });
 
     console.log("✅ Game ended. Next round countdown started.");
+     await update(gameRef, { gameStatus: "ended" }); // 🔴 broadcast stop
 
+    get().stopNumberDraw();
     // Step 3: After cooldown, reset the room state
     setTimeout(async () => {
       try {
         const { user } = useAuthStore.getState();
 if (user?.telegramId) {
   await resetAllCardsAndPlayers(roomId);
-   set({ isBetActive: false });
+  
 }
         await update(roomRef, {
           gameStatus: "waiting",
@@ -241,6 +259,7 @@ if (user?.telegramId) {
           countdownStartedBy: null,
           nextGameCountdownEndAt: null,
         });
+         set({ isBetActive: false });
 
         console.log("✅ Room reset to waiting after cooldown.");
       } catch (err) {

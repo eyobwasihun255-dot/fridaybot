@@ -453,7 +453,7 @@ return (
       </div>
       <div className="bg-white/10 rounded text-center py-1 border border-white/20">
         {t('payout')}: {Math.floor(
-  (Object.keys(currentRoom.players || {}).length || 0) * currentRoom.betAmount * 0.9
+  (Object.keys(currentRoom.players || {}).length || 0) * currentRoom.betAmount * 0.9 - currentRoom.betAmount      
 )}
 
       </div> 
@@ -702,6 +702,16 @@ return (
   {/* Row with Bingo + Home */}
   {/* Info Board during Countdown */}
 {currentRoom?.gameStatus === "countdown" && (
+  <div className="w-full bg-yellow-400/80 text-black rounded-lg p-3 mb-2 shadow text-sm">
+    <h3 className="font-bold mb-1">📜 {language === "am" ? "የቢንጎ ደንቦች" : "Bingo Rules & Info"}</h3>
+    <ul className="list-disc list-inside space-y-1">
+      {t("bingo_rules_countdown").map((rule: string, i: number) => (
+        <li key={i}>{rule}</li>
+      ))}
+    </ul>
+  </div>
+)}
+{currentRoom?.gameStatus === "waiting" && (
   <div className="w-full bg-yellow-400/80 text-black rounded-lg p-3 mb-2 shadow text-sm">
     <h3 className="font-bold mb-1">📜 {language === "am" ? "የቢንጎ ደንቦች" : "Bingo Rules & Info"}</h3>
     <ul className="list-disc list-inside space-y-1">

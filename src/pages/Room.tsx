@@ -473,9 +473,34 @@ return (
 
     {/* Main content row */}
     <div className="flex flex-row gap-2 w-full max-w-full h-full">
-  {showWinnerPopup && winnerCard && (
+ {showWinnerPopup && winnerCard && (
   <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-    <div className="bg-white text-black rounded-2xl shadow-xl p-6 w-80 max-w-full text-center relative animate-jump">
+    <div className="relative bg-white text-black rounded-2xl shadow-2xl p-8 w-96 max-w-full text-center overflow-hidden">
+
+      {/* 🎺 Trumpets animation */}
+      <div className="absolute -top-6 -left-10 text-5xl animate-wiggle">🎺</div>
+      <div className="absolute -top-6 -right-10 text-5xl animate-wiggle">🎺</div>
+
+      {/* 💸 Flying money animation */}
+      {[...Array(8)].map((_, i) => (
+        <div
+          key={i}
+          className="absolute text-2xl animate-fly"
+          style={{
+            left: `${Math.random() * 90}%`,
+            animationDelay: `${i * 0.3}s`,
+          }}
+        >
+          💵
+        </div>
+      ))}
+
+      {/* 🔴 Bouncing bingo balls */}
+      <div className="absolute -bottom-10 left-6 text-4xl animate-bounce-slow">🔴</div>
+      <div className="absolute -bottom-10 left-20 text-4xl animate-bounce-slow delay-150">🟡</div>
+      <div className="absolute -bottom-10 left-36 text-4xl animate-bounce-slow delay-300">🟢</div>
+      <div className="absolute -bottom-10 left-52 text-4xl animate-bounce-slow delay-500">🔵</div>
+
       {/* Close button (top-right) */}
       <button
         onClick={closeWinnerPopup}
@@ -484,19 +509,20 @@ return (
         ✕
       </button>
 
-      <h2 className="text-xl font-bold mb-3">🎉 Bingo! You won! 🎉</h2>
-      <p className="mb-4">Your card #{winnerCard.serialNumber}</p>
+      <h2 className="text-2xl font-bold mb-3 animate-bounce">🎉 Bingo! You won! 🎉</h2>
+      <p className="mb-4 text-lg">Your card #{winnerCard.serialNumber}</p>
 
       {/* Big close button */}
       <button
         onClick={closeWinnerPopup}
-        className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700"
+        className="mt-2 px-5 py-3 bg-gradient-to-r from-green-500 to-blue-600 text-white rounded-xl shadow-lg hover:scale-105 transform transition"
       >
         Close
       </button>
     </div>
   </div>
-)} 
+)}
+
 {/* Game Message Popup */}
 {gameMessage && (
   <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-black/80 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-fade-in-out">

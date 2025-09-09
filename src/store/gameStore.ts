@@ -245,7 +245,7 @@ stopNumberDraw: () => {
       const { user } = useAuthStore.getState();
 if (user?.telegramId) {
   await resetAllCardsAndPlayers(roomId);
-}    set({ isBetActive: false, selectedCard: null });
+}   
       try {
         
         await update(roomRef, {
@@ -268,7 +268,7 @@ if (user?.telegramId) {
         console.error("❌ Failed to reset cards/room:", err);
       }
     }, cooldownDuration);
-            
+       set({ isBetActive: false, selectedCard: null });      
        
 
 

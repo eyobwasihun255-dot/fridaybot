@@ -561,31 +561,44 @@ return (
   </div>
 
   {/* Numbers Grid with countdown overlay */}
-  <div className="relative flex-1">
-    <div className="grid grid-cols-5 gap-1 w-full h-full">
-      {[...Array(15)].map((_, rowIdx) =>
-        ["B", "I", "N", "G", "O"].map((col, colIdx) => {
-          const num = rowIdx + 1 + colIdx * 15;
-          const isCalled = displayedCalledNumbers.includes(num);
+{/* Numbers Grid with countdown overlay */}
+<div className="relative flex-1">
+  <div className="grid grid-cols-5 gap-1 w-full h-full">
+    {[...Array(15)].map((_, rowIdx) =>
+      ["B", "I", "N", "G", "O"].map((col, colIdx) => {
+        const num = rowIdx + 1 + colIdx * 15;
+        const lastCalled = displayedCalledNumbers.at(-1);
+        const isLastCalled = num === lastCalled;
+        const isPreviouslyCalled =
+          displayedCalledNumbers.includes(num) && !isLastCalled;
 
-          return (
-            <div
-              key={`${col}-${num}`}
-              className={`flex items-center justify-center p-[3px] rounded font-bold text-[11px] transition 
-                ${isCalled ? "bg-green-500 text-white scale-105" : "bg-white/20"}
-              `}
-            >
-              {num}
-            </div>
-          );
-        })
-      )}
-    </div>
+        return (
+          <div
+            key={`${col}-${num}`}
+            className={`flex items-center justify-center p-[3px] rounded font-bold text-[11px] transition
+              ${isLastCalled
+                ? "bg-green-500 text-white scale-105"
+                : isPreviouslyCalled
+                ? "bg-red-500 text-white"
+                : "bg-white/20"}
+            `}
+          >
+            {num}
+          </div>
+        );
+      })
+    )}
+  </div>
 
-    {/* Countdown overlay ONLY on top of numbers grid */}
-   {currentRoom?.gameStatus === "countdown" && currentRoom.countdownEndAt && (
-  <CountdownOverlay countdownEndAt={currentRoom.countdownEndAt} label="Game starting soon" />
-)}
+  {/* Countdown overlay ONLY on top of numbers grid */}
+  {currentRoom?.gameStatus === "countdown" && currentRoom.countdownEndAt && (
+    <CountdownOverlay
+      countdownEndAt={currentRoom.countdownEndAt}
+      label="Game starting soon"
+    />
+  )}
+</div>
+
 
 
   </div>

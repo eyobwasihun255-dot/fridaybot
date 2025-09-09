@@ -131,24 +131,18 @@ function generateDrawnNumbersMultiWinner(cards) {
     pattern.forEach(n => safeAdd(drawnNumbers, n));
 
     // Fill up to 50
-    while (drawnNumbers.length < 50) {
+    while (drawnNumbers.length < 75) {
       safeAdd(drawnNumbers, Math.floor(Math.random() * 75) + 1);
     }
   } else {
     // If less than 3 winners, just fill until 50
-    while (drawnNumbers.length < 50) {
+    while (drawnNumbers.length < 75) {
       safeAdd(drawnNumbers, Math.floor(Math.random() * 75) + 1);
     }
   }
 
-  // --- Final Stage: Fill until all 75 numbers are drawn ---
-  while (drawnNumbers.length < 75) {
-    safeAdd(drawnNumbers, Math.floor(Math.random() * 75) + 1);
-  }
-
   return { drawnNumbers, winners };
 }
-
 
 
 // --- API Handler ---

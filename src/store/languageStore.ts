@@ -53,8 +53,8 @@ const translations = {
     'payout': 'ደራሽ',
     'max_players': 'ከፍተኛ ተጫዋቾች',
     'game_area': 'የጨዋታ አካባቢ',
-    'select_card': 'ካርድዎን ይምረጡ 👉',
-    'card_number': 'ካርድ #',
+    'select_card': 'ካርቴላ ይምረጡ 👉',
+    'card_number': 'ካርቴላ #',
     'place_bet': 'ውርርድ ያድርጉ',
     'bingo': 'ቢንጎ!',
     'numbers_called': 'የተጠሩ ቁጥሮች',
@@ -78,11 +78,13 @@ const translations = {
     'success': 'ተሳክቷል!',
     'confirm': 'አረጋግጥ',
     'cancel': 'ሰርዝ',
+    'cards': 'ካርቴላ',
     'players_in_room': 'ተጫዋቾች ',
-    'no_card_selected': 'ካርድ አልተመረጠም...',
+    'no_card_selected': 'ካርቴላ አልተመረጠም...',
     'game_already_in_progress': 'ጨዋታ በሂደት ላይ ነው',
   },en: {
     // Header
+    'cards': 'Card',
     'friday_bingo': 'Friday Bingo',
     'balance': 'Balance',
      bingo_rules_countdown: [

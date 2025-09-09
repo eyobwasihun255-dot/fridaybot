@@ -647,7 +647,7 @@ return (
     .sort((a, b) => a.serialNumber - b.serialNumber)
     .map((card) => (
       <option key={card.id} value={card.id} disabled={card.claimed}>
-        Card {card.serialNumber} {card.claimed ? "(claimed)" : ""}
+        {t('cards')} {card.serialNumber} {card.claimed ? "(claimed)" : ""}
       </option>
     ))}
 </select>

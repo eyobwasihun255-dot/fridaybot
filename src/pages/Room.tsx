@@ -560,7 +560,6 @@ return (
     ))}
   </div>
 
-  {/* Numbers Grid with countdown overlay */}
 {/* Numbers Grid with countdown overlay */}
 <div className="relative flex-1">
   <div className="grid grid-cols-5 gap-1 w-full h-full">
@@ -599,9 +598,6 @@ return (
   )}
 </div>
 
-
-
-  </div>
 </div>
 
       {/* Right side (Your Card) */}

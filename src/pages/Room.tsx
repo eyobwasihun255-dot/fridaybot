@@ -101,6 +101,23 @@ const storeIsBetActive = useGameStore((s) => s.isBetActive);
 
 // Flatten current card once for quick lookups
 const flatCard = React.useMemo(() => cardNumbers.flat(), [cardNumbers]);
+const [loserPopup, setLoserPopup] = useState<{ visible: boolean; message: string }>({
+  visible: false,
+  message: ''
+});
+
+function checkIfLoser(currentRoom: any, t: (key: string) => string) {
+  const { user } = useAuthStore.getState();
+  if (!currentRoom || !user) return;
+
+  const winners = currentRoom.winners || [];
+  const isWinner = winners.some((w: any) => w.telegramId === user.telegramId);
+
+  if (!isWinner) {
+    setLoserPopup({ visible: true, message: t('you_lost') });
+  }
+}
+
 
 function findCoveredPatternByMarks() {
   const patterns = generatePatterns();
@@ -161,6 +178,7 @@ React.useEffect(() => {
 const alreadyAttempted = playerData?.attemptedBingo ?? false;
 React.useEffect(() => {
   setHasAttemptedBingo(alreadyAttempted);
+  checkIfLoser(currentRoom, t);
 }, [alreadyAttempted]);
 
 
@@ -473,6 +491,20 @@ return (
 
     {/* Main content row */}
     <div className="flex flex-row gap-2 w-full max-w-full h-full">
+      {loserPopup.visible && (
+  <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+    <div className="bg-white text-black rounded-2xl shadow-2xl p-8 w-96 max-w-full text-center">
+      <h2 className="text-2xl font-bold mb-3"> {loserPopup.message} </h2>
+      <button
+        onClick={() => setLoserPopup({ visible: false, message: '' })}
+        className="mt-2 px-5 py-3 bg-red-500 text-white rounded-xl shadow-lg hover:scale-105 transform transition"
+      >
+        Close
+      </button>
+    </div>
+  </div>
+)}
+
  {showWinnerPopup && winnerCard && (
   <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
     <div className="relative bg-white text-black rounded-2xl shadow-2xl p-8 w-96 max-w-full text-center overflow-hidden">

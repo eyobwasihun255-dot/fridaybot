@@ -38,6 +38,7 @@ const translations = {
     'in_progress': 'በሂደት ላይ',
     'join_room': 'ክፍል ግባ',
     'cancel_bet':'ውርርድ ሰርዝ',
+    'you_lost': 'ይቅርታ! ተሸንፈዋል!',
     // Room
     bingo_rules_countdown: [
         "የተጠሩትን ቁጥሮች ካርቴላ ላይ ካሉት ቁጥሮች ጋር ማዛመድይጫኑ",
@@ -116,7 +117,7 @@ const translations = {
     'join_room': 'Join Room',
     'cancel_bet':'Cancel bet',
     'place_bet':'Place bet',
-    
+    'you_lost': 'Sorry! You lost!',
     // Room
     'room_details': 'Room',
     'bet': 'Bet',

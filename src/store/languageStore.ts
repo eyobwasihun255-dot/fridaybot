@@ -77,7 +77,10 @@ const translations = {
     'error': 'ስህተት ተከስቷል',
     'success': 'ተሳክቷል!',
     'confirm': 'አረጋግጥ',
-    'cancel': 'ሰርዝ'
+    'cancel': 'ሰርዝ',
+    'players_in_room': 'ተጫዋቾች ',
+    'no_card_selected': 'ካርድ አልተመረጠም...',
+    'game_already_in_progress': 'ጨዋታ በሂደት ላይ ነው',
   },en: {
     // Header
     'friday_bingo': 'Friday Bingo',
@@ -92,6 +95,11 @@ const translations = {
       bingo_rules_ended: [
         "Check your cards and press Bingo."
       ],
+      'players_in_room': 'Players in this room',
+      'no_card_selected': 'No card selected yet...',
+      'game_already_in_progress': 'Game already in progress',
+    'bet': 'Bet',
+    'pattern': 'Winning Patterns',
     // Landing
     'welcome': 'Welcome to Friday Bingo!',
     'available_rooms': 'Available Rooms',

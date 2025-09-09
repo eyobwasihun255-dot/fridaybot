@@ -702,12 +702,12 @@ return (
       : t("place_bet") + " card:" + displayedCard.serialNumber}
   </button>
 ) : (
-  <p className="text-gray-400 italic text-sm">Game already in progress</p>
+  <p className="text-gray-400 italic text-sm">{t("game_already_in_progress")}</p>
 )}
 
   </div>
 ) : (
-  <p className="mt-6 text-gray-400">No card selected yet...</p>
+  <p className="mt-6 text-gray-400">{t('no_card_selected')}</p>
 )}
 
       </div>
@@ -784,7 +784,7 @@ return (
 
     {/* Footer: Betted Players */}
     <div className="w-full mt-6 bg-white/10 rounded border border-white/20 p-3">
-      <h3 className="font-bold text-sm mb-2">Players in this room</h3>
+      <h3 className="font-bold text-sm mb-2">{t("players_in_room")}</h3>
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
   {currentRoom?.players && Object.keys(currentRoom.players || {}).length > 0 ? (
     Object.values(currentRoom.players || {}).map((player: any) => {

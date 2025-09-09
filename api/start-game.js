@@ -49,12 +49,8 @@ function shuffleArray(array) {
 }
 
 // --- Generate drawn numbers in 3 stages for up to 3 winners ---
-// --- Generate drawn numbers with exactly ONE winner ---
-function generateDrawnNumbersSingleWinner(cards) {
-  if (cards.length === 0) {
-    return { drawnNumbers: [], winners: [] };
-  }
-
+function generateDrawnNumbersMultiWinner(cards) {
+  const winners = [];
   const usedNumbers = new Set();
   const drawnNumbers = [];
 
@@ -67,31 +63,90 @@ function generateDrawnNumbersSingleWinner(cards) {
     return false;
   };
 
-  // --- Step 1: Pick exactly 1 winner card ---
-  const winnerCard = cards[Math.floor(Math.random() * cards.length)];
+  if (cards.length === 0) {
+    return { drawnNumbers: [], winners: [] };
+  }
 
-  // --- Step 2: Pick a random pattern from this card ---
-  const patterns = pickPatternNumbers(winnerCard);
-  const winningPattern = patterns[Math.floor(Math.random() * patterns.length)];
+  // Pick up to 3 winners randomly
+  const shuffledCards = shuffleArray(cards);
+  const chosenWinners = shuffledCards.slice(0, 3);
 
-  // --- Step 3: Ensure all winning pattern numbers are in the first 25 ---
-  shuffleArray(winningPattern).forEach(n => safeAdd(drawnNumbers, n));
+  // Pick patterns for each winner
+  const winnerPatterns = chosenWinners.map(card => {
+    const patterns = pickPatternNumbers(card);
+    return patterns[Math.floor(Math.random() * patterns.length)];
+  });
 
-  // --- Step 4: Fill remaining slots until 25 with random unique numbers ---
-  while (drawnNumbers.length < 25) {
+  // --- Stage 1 (0–24) ---
+  {
+    const [card, pattern] = [chosenWinners[0], winnerPatterns[0]];
+    winners.push(card.id);
+
+    // Add pattern numbers, but leave 1 missing
+    const missingIdx = Math.floor(Math.random() * pattern.length);
+    pattern.forEach((n, i) => {
+      if (i !== missingIdx) safeAdd(drawnNumbers, n);
+    });
+
+    // For other cards, try to add most of their pattern but leave 1–2 missing
+    for (let ci = 1; ci < cards.length; ci++) {
+      const otherCard = cards[ci];
+      const patterns = pickPatternNumbers(otherCard);
+      const pat = patterns[Math.floor(Math.random() * patterns.length)];
+      const missCount = Math.random() < 0.5 ? 1 : 2;
+      const missing = new Set(
+        shuffleArray(pat).slice(0, missCount)
+      );
+      pat.forEach(n => {
+        if (!missing.has(n)) safeAdd(drawnNumbers, n);
+      });
+    }
+
+    // Fill until exactly 25
+    while (drawnNumbers.length < 25) {
+      safeAdd(drawnNumbers, Math.floor(Math.random() * 75) + 1);
+    }
+  }
+
+  // --- Stage 2 (25–34) ---
+  if (chosenWinners[1]) {
+    const [card, pattern] = [chosenWinners[1], winnerPatterns[1]];
+    winners.push(card.id);
+
+    // Add missing numbers from this pattern
+    pattern.forEach(n => safeAdd(drawnNumbers, n));
+
+    // Fill up to index 35
+    while (drawnNumbers.length < 35) {
+      safeAdd(drawnNumbers, Math.floor(Math.random() * 75) + 1);
+    }
+  }
+
+  // --- Stage 3 (35–49) ---
+  if (chosenWinners[2]) {
+    const [card, pattern] = [chosenWinners[2], winnerPatterns[2]];
+    winners.push(card.id);
+
+    // Add missing numbers from this pattern
+    pattern.forEach(n => safeAdd(drawnNumbers, n));
+
+    // Fill up to 50
+    while (drawnNumbers.length < 50) {
+      safeAdd(drawnNumbers, Math.floor(Math.random() * 75) + 1);
+    }
+  } else {
+    // If less than 3 winners, just fill until 50
+    while (drawnNumbers.length < 50) {
+      safeAdd(drawnNumbers, Math.floor(Math.random() * 75) + 1);
+    }
+  }
+
+  // --- Final Stage: Fill until all 75 numbers are drawn ---
+  while (drawnNumbers.length < 75) {
     safeAdd(drawnNumbers, Math.floor(Math.random() * 75) + 1);
   }
 
-  // --- Step 5: Add the rest (26–75) with all unused numbers ---
-  const allNums = Array.from({ length: 75 }, (_, i) => i + 1);
-  const remaining = allNums.filter(n => !usedNumbers.has(n));
-  shuffleArray(remaining).forEach(n => safeAdd(drawnNumbers, n));
-
-  // ✅ Now drawnNumbers has 75 numbers:
-  // - Rolls 1–25 contain a full winning pattern (plus fillers)
-  // - Rolls 26–75 are the rest without duplicates
-
-  return { drawnNumbers, winners: [winnerCard.id] };
+  return { drawnNumbers, winners };
 }
 
 
@@ -115,7 +170,7 @@ export default async function handler(req, res) {
 
       if (playerIds.length > 0) {
         const cards = playerIds.map(pid => room.bingoCards[room.players[pid].cardId]);
-        const { drawnNumbers: nums, winners } = generateDrawnNumbersSingleWinner(cards);
+        const { drawnNumbers: nums, winners } = generateDrawnNumbersMultiWinner(cards);
         drawnNumbers = nums;
         winnerIds = winners;
       } else {

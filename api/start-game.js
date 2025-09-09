@@ -115,7 +115,7 @@ export default async function handler(req, res) {
 
       if (playerIds.length > 0) {
         const cards = playerIds.map(pid => room.bingoCards[room.players[pid].cardId]);
-        const { drawnNumbers: nums, winners } = generateDrawnNumbersMultiWinner(cards);
+        const { drawnNumbers: nums, winners } = generateDrawnNumbersSingleWinner(cards);
         drawnNumbers = nums;
         winnerIds = winners;
       } else {

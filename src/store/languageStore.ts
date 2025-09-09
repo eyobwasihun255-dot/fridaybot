@@ -80,6 +80,8 @@ const translations = {
     'confirm': 'አረጋግጥ',
     'cancel': 'ሰርዝ',
     'cards': 'ካርቴላ',
+    'card': 'ካርቴላ',
+    'winner': 'አሸናፊ',
     'players_in_room': 'ተጫዋቾች ',
     'no_card_selected': 'ካርቴላ አልተመረጠም...',
     'game_already_in_progress': 'ጨዋታ በሂደት ላይ ነው',
@@ -133,6 +135,8 @@ const translations = {
     'seconds': 'seconds',
     'you_won': 'Congratulations! You won!',
     'not_a_winner': 'Not a winner this time.',
+    'card': 'Card',
+    'winner': 'is the WINNER',
     'game_ended': 'Game ended. Starting new round...',
     
     // Game

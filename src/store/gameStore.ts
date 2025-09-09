@@ -245,7 +245,7 @@ stopNumberDraw: () => {
       const { user } = useAuthStore.getState();
 if (user?.telegramId) {
   await resetAllCardsAndPlayers(roomId);
-}    set({ isBetActive: false, selectedCard: null });
+}   
       try {
         
         await update(roomRef, {

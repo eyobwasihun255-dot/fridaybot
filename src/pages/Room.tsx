@@ -525,11 +525,7 @@ return (
       ))}
 
       {/* Bingo balls */}
-      <div className="absolute -bottom-10 left-6 text-5xl animate-bounce-slow">🔴</div>
-      <div className="absolute -bottom-10 left-20 text-5xl animate-bounce-slow delay-150">🟡</div>
-      <div className="absolute -bottom-10 left-36 text-5xl animate-bounce-slow delay-300">🟢</div>
-      <div className="absolute -bottom-10 left-52 text-5xl animate-bounce-slow delay-500">🔵</div>
-
+      
       {/* Trumpets */}
       <div className="absolute -top-6 -left-10 text-5xl animate-wiggle">🎺</div>
       <div className="absolute -top-6 -right-10 text-5xl animate-wiggle">🎺</div>
@@ -544,11 +540,11 @@ return (
 
       {/* BINGO text */}
       <h2 className="text-5xl font-extrabold tracking-wide text-yellow-300 drop-shadow-lg animate-bounce">
-        BINGO!
+       {t('bingo')}!
       </h2>
 
       <p className="mb-4 text-lg text-white font-semibold">
-        Card #{winnerCard.serialNumber} is the WINNER 🎯
+        {t('card')} #{winnerCard.serialNumber} is {t('winner')} 🎉
       </p>
 
       {/* Close button big */}

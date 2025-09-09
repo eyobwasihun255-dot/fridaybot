@@ -113,7 +113,7 @@ function checkIfLoser(currentRoom: any, t: (key: string) => string) {
   const winners = currentRoom.winners || [];
   const isWinner = winners.some((w: any) => w.telegramId === user.telegramId);
 
-  if (!isWinner) {
+  if (!isWinner && currentRoom.paid) {
     setLoserPopup({ visible: true, message: t('you_lost') });
   }
 }
@@ -505,46 +505,53 @@ return (
   </div>
 )}
 
- {showWinnerPopup && winnerCard && (
+{showWinnerPopup && winnerCard && (
   <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-    <div className="relative bg-white text-black rounded-2xl shadow-2xl p-8 w-96 max-w-full text-center overflow-hidden">
+    <div className="relative bg-gradient-to-br from-red-500 via-yellow-400 to-blue-500 rounded-3xl shadow-2xl p-8 w-96 max-w-full text-center overflow-hidden animate-scale-in">
 
-      {/* 🎺 Trumpets animation */}
-      <div className="absolute -top-6 -left-10 text-5xl animate-wiggle">🎺</div>
-      <div className="absolute -top-6 -right-10 text-5xl animate-wiggle">🎺</div>
-
-      {/* 💸 Flying money animation */}
-      {[...Array(8)].map((_, i) => (
+      {/* Confetti */}
+      {[...Array(25)].map((_, i) => (
         <div
           key={i}
-          className="absolute text-2xl animate-fly"
+          className="absolute text-lg animate-fall"
           style={{
-            left: `${Math.random() * 90}%`,
-            animationDelay: `${i * 0.3}s`,
+            top: `${Math.random() * 100}%`,
+            left: `${Math.random() * 100}%`,
+            animationDelay: `${Math.random() * 2}s`,
           }}
         >
-          💵
+          🎉
         </div>
       ))}
 
-      {/* 🔴 Bouncing bingo balls */}
-      <div className="absolute -bottom-10 left-6 text-4xl animate-bounce-slow">🔴</div>
-      <div className="absolute -bottom-10 left-20 text-4xl animate-bounce-slow delay-150">🟡</div>
-      <div className="absolute -bottom-10 left-36 text-4xl animate-bounce-slow delay-300">🟢</div>
-      <div className="absolute -bottom-10 left-52 text-4xl animate-bounce-slow delay-500">🔵</div>
+      {/* Bingo balls */}
+      <div className="absolute -bottom-10 left-6 text-5xl animate-bounce-slow">🔴</div>
+      <div className="absolute -bottom-10 left-20 text-5xl animate-bounce-slow delay-150">🟡</div>
+      <div className="absolute -bottom-10 left-36 text-5xl animate-bounce-slow delay-300">🟢</div>
+      <div className="absolute -bottom-10 left-52 text-5xl animate-bounce-slow delay-500">🔵</div>
 
-      {/* Close button (top-right) */}
+      {/* Trumpets */}
+      <div className="absolute -top-6 -left-10 text-5xl animate-wiggle">🎺</div>
+      <div className="absolute -top-6 -right-10 text-5xl animate-wiggle">🎺</div>
+
+      {/* Close button */}
       <button
         onClick={closeWinnerPopup}
-        className="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
+        className="absolute top-2 right-2 text-white hover:text-gray-200"
       >
         ✕
       </button>
 
-      <h2 className="text-2xl font-bold mb-3 animate-bounce">🎉 Bingo! You won! 🎉</h2>
-      <p className="mb-4 text-lg">Your card #{winnerCard.serialNumber}</p>
+      {/* BINGO text */}
+      <h2 className="text-5xl font-extrabold tracking-wide text-yellow-300 drop-shadow-lg animate-bounce">
+        BINGO!
+      </h2>
 
-      {/* Big close button */}
+      <p className="mb-4 text-lg text-white font-semibold">
+        Card #{winnerCard.serialNumber} is the WINNER 🎯
+      </p>
+
+      {/* Close button big */}
       <button
         onClick={closeWinnerPopup}
         className="mt-2 px-5 py-3 bg-gradient-to-r from-green-500 to-blue-600 text-white rounded-xl shadow-lg hover:scale-105 transform transition"
@@ -554,6 +561,7 @@ return (
     </div>
   </div>
 )}
+
 
 {/* Game Message Popup */}
 {gameMessage && (

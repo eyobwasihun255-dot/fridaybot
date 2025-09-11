@@ -37,26 +37,16 @@ function App() {
 // 🔑 Separate hook into a child component inside Router
 // 🔑 Separate hook into a child component inside Router
 const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeUser, user }) => {
-  const [searchParams] = useSearchParams();
-
+ 
   React.useEffect(() => {
     const initUser = async () => {
-      const userId = searchParams.get("id");
-      const sig = searchParams.get("sig");
+    
 
       let telegramId = userId ?? user?.telegramId ?? "demo123";
       let username = user?.username ?? `user_${telegramId}`;
       let language = user?.language ?? "am";
 
-      // ✅ If telegramId + sig is provided, verify
-      if (userId && sig) {
-        const res = await fetch(`/api/verifyUser?id=${userId}&sig=${sig}`);
-        const data = await res.json();
-        if (!data.valid) {
-          telegramId = "demo123";
-          username = "demo_usder";
-        }
-      }
+    
 
       // ✅ Always fetch from RTDB to get fresh balance
       const freshUser = await getOrCreateUser({

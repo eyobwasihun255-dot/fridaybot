@@ -42,37 +42,42 @@ const Initializer: React.FC<{ initializeUser: any; user: any }> = ({ initializeU
   React.useEffect(() => {
     const initUser = async () => {
       try {
-        let telegramId = user?.telegramId || undefined;
-        let username = user?.username || undefined;
-        let lang = user?.lang || "am"; // ✅ match your store User type
+        let telegramId: string | undefined = user?.telegramId;
+        let username: string | undefined = user?.username;
+        let lang: string = user?.lang || "am";
 
         const userId = searchParams.get("id");
         const sig = searchParams.get("sig");
 
-        // ✅ If userId + sig are provided, verify with backend
+        // ✅ Try backend verification first
         if (userId && sig) {
-  const res = await fetch(`/api/verifyUser?${searchParams.toString()}`);
-  const data = await res.json();
+          const res = await fetch(`/api/verifyUser?${searchParams.toString()}`);
+          const data = await res.json();
 
-  if (data.valid) {
-    telegramId = data.id;
-    username = data.username || `user_${telegramId}`;
-    lang = user?.lang || "am";
-  }
-}
+          if (data.valid) {
+            telegramId = data.id;
+            username = data.username || `user_${data.id}`;
+            lang = data.lang || "am";
+          }
+        }
 
+        // ✅ Fallback to Telegram-provided user object
+        if (!telegramId && user?.telegramId) {
+          telegramId = user.telegramId;
+          username = user.username || `user_${telegramId}`;
+        }
 
-        // ✅ Only fallback if still nothing
+        // ✅ Only fallback to demo if nothing is available
         if (!telegramId) {
           telegramId = "demo123";
           username = "demo_user";
         }
 
-        // ✅ Always fetch from RTDB
+        // ✅ Fetch from RTDB to ensure balance is up to date
         const freshUser = await getOrCreateUser({
           telegramId,
           username: username!,
-          lang, // 🔥 FIXED: pass `lang` not `language`
+          lang,
         });
 
         initializeUser(freshUser);
@@ -82,10 +87,11 @@ const Initializer: React.FC<{ initializeUser: any; user: any }> = ({ initializeU
     };
 
     initUser();
-  }, [initializeUser, searchParams]);
+  }, [initializeUser, searchParams, user]);
 
   return null;
 };
+
 
 
 

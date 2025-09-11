@@ -44,11 +44,11 @@ const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeU
       const userId = searchParams.get("id");
       const sig = searchParams.get("sig");
 
-      let telegramId = userId ?? user?.telegramId ?? "demo123";
-      let username = user?.username ?? `user_${telegramId}`;
-      let language = user?.language ?? "am";
+      let telegramId = userId ?? "demo123";
+      let username = `user_${telegramId}`;
+      let lang = "am"; // default
 
-      // ✅ If telegramId + sig is provided, verify
+      // ✅ verify signature if provided
       if (userId && sig) {
         const res = await fetch(`/api/verifyUser?id=${userId}&sig=${sig}`);
         const data = await res.json();
@@ -58,13 +58,14 @@ const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeU
         }
       }
 
-      // ✅ Always fetch from RTDB to get fresh balance
+      // ✅ Always hit Firebase RTDB
       const freshUser = await getOrCreateUser({
         telegramId,
         username,
-        language,
+        lang,
       });
 
+      // ✅ Replace local user with the fresh one
       initializeUser(freshUser);
     };
 
@@ -73,6 +74,7 @@ const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeU
 
   return null;
 };
+
 
 
 export default App;

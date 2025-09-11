@@ -42,50 +42,78 @@ const Initializer: React.FC<{ initializeUser: any; user: any }> = ({ initializeU
   React.useEffect(() => {
     const initUser = async () => {
       try {
-        let telegramId = user?.telegramId || undefined;
-        let username = user?.username || undefined;
-        let lang = user?.lang || "am"; // ✅ match your store User type
+        // 🔹 Start loading
+        useAuthStore.setState({ loading: true });
 
-        const userId = searchParams.get("id");
-        const sig = searchParams.get("sig");
+        // 1) Wait for persisted user to exist
+        if (user?.telegramId) {
+          console.log("[Initializer] using persisted user", user);
+          const fresh = await getOrCreateUser({
+            telegramId: user.telegramId,
+            username: user.username,
+            lang: user.lang ?? "am",
+          });
+          initializeUser(fresh);
+          return;
+        }
 
-        // ✅ If userId + sig are provided, verify with backend
-        if (userId && sig) {
-  const res = await fetch(`/api/verifyUser?${searchParams.toString()}`);
-  const data = await res.json();
+        let telegramId: string | undefined;
+        let username: string | undefined;
+        let lang = "am";
 
-  if (data.valid) {
-    telegramId = data.id;
-    username = data.username || `user_${telegramId}`;
-    lang = user?.lang || "am";
-  }
-}
+        // 2) Check URL params first (id + sig or hash)
+        const paramsObj = Object.fromEntries(searchParams.entries());
+        if (Object.keys(paramsObj).length) {
+          const res = await fetch(`/api/verifyUser?${searchParams.toString()}`);
+          const data = await res.json();
+          if (data.valid) {
+            telegramId = data.id;
+            username = data.username || `user_${telegramId}`;
+            lang = user?.lang || "am";
+            console.log("[Initializer] verified from URL params", data);
+          }
+        }
 
+        // 3) Check Telegram WebApp initData / initDataUnsafe
+        if (!telegramId && typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
+          const t = (window as any).Telegram.WebApp;
+          const initData = t.initData || t.initDataUnsafe?.rawInitData;
+          if (initData) {
+            const parsed = Object.fromEntries(new URLSearchParams(initData));
+            const res = await fetch(`/api/verifyUser?${new URLSearchParams(parsed).toString()}`);
+            const data = await res.json();
+            if (data.valid) {
+              telegramId = data.id;
+              username = data.username || `user_${telegramId}`;
+              lang = user?.lang || "am";
+              console.log("[Initializer] verified from WebApp initData", data);
+            }
+          }
+        }
 
-        // ✅ Only fallback if still nothing
+        // 4) Only fallback to demo if nothing found
         if (!telegramId) {
+          console.log("[Initializer] No verified user found, using demo");
           telegramId = "demo123";
           username = "demo_user";
         }
 
-        // ✅ Always fetch from RTDB
-        const freshUser = await getOrCreateUser({
-          telegramId,
-          username: username!,
-          lang, // 🔥 FIXED: pass `lang` not `language`
-        });
-
+        // 5) Always fetch from RTDB
+        const freshUser = await getOrCreateUser({ telegramId, username: username!, lang });
         initializeUser(freshUser);
       } catch (err) {
-        console.error("Failed to init user:", err);
+        console.error("[Initializer] initUser error:", err);
+      } finally {
+        // 🔹 Stop loading even if error
+        useAuthStore.setState({ loading: false });
       }
     };
 
     initUser();
-  }, [initializeUser, searchParams]);
-
+  }, [initializeUser, searchParams, user]); // ✅ include `user` to handle persisted store
   return null;
 };
+
 
 
 

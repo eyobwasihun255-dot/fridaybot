@@ -8,7 +8,7 @@ interface Room {
   name: string;
   betAmount: number;
   maxPlayers: number;
-  currentPlayers: number;
+  players: number;
   status: string;
   isDemoRoom?: boolean;
 }
@@ -92,7 +92,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
             <span className="text-white/80">{t('players')}:</span>
             <div className="flex items-center space-x-1">
               <Users className="w-4 h-4 text-blue-300" />
-              <span className="text-white">{room.currentPlayers}/{room.maxPlayers}</span>
+              <span className="text-white">{room.players ? room.players : 0}/{room.maxPlayers}</span>
             </div>
           </div>
 

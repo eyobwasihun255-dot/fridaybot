@@ -89,12 +89,15 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
           </div>
 
           <div className="flex items-center justify-between">
-            <span className="text-white/80">{t('players')}:</span>
-            <div className="flex items-center space-x-1">
-              <Users className="w-4 h-4 text-blue-300" />
-              <span className="text-white">0/{room.maxPlayers}</span>
-            </div>
-          </div>
+  <span className="text-white/80">{t('players')}:</span>
+  <div className="flex items-center space-x-1">
+    <Users className="w-4 h-4 text-blue-300" />
+    <span className="text-white">
+      {room.players ? Object.keys(room.players).length : 0}/{room.maxPlayers}
+    </span>
+  </div>
+</div>
+
 
           <div className="flex items-center justify-between">
             <span className="text-white/80">{t('status')}:</span>

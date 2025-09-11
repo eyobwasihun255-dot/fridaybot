@@ -1,30 +1,36 @@
-
- // ✅ import your interface
- import { ref, get as dbGet, set as dbSet } from "firebase/database";
+// services/firebaseApi.ts
+import { ref, get as dbGet, set as dbSet } from "firebase/database";
 import { rtdb } from "../firebase/config";
 
-
-interface User {
+export async function getOrCreateUser({
+  telegramId,
+  username,
+  lang = "am",
+}: {
   telegramId: string;
   username: string;
-  balance: number;
-  lang: string;
-  createdAt: string;
-  updatedAt: string;
-}
-export async function getOrCreateUser(user: { telegramId: string; username: string; lang: string }) {
-  const userRef = ref(rtdb, `users/${user.telegramId}`);
-  const snapshot = await dbGet(userRef);
+  lang?: string;
+}) {
+  const userRef = ref(rtdb, `users/${telegramId}`);
+  const snap = await dbGet(userRef);
 
-  if (snapshot.exists()) {
-    // ✅ Return existing user (preserve balance)
-    return snapshot.val();
+  if (snap.exists()) {
+    const val = snap.val();
+    // ensure fields are present
+    return {
+      telegramId: val.telegramId ?? telegramId,
+      username: val.username ?? username,
+      balance: typeof val.balance === "number" ? val.balance : Number(val.balance ?? 0),
+      lang: val.lang ?? lang,
+      createdAt: val.createdAt ?? new Date().toISOString(),
+      updatedAt: val.updatedAt ?? new Date().toISOString(),
+    };
   } else {
     const newUser = {
-      telegramId: user.telegramId,
-      username: user.username,
-      balance: 100, // start balance (example)
-      lang: user.lang,
+      telegramId,
+      username,
+      balance: 100, // starting balance if you want
+      lang,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

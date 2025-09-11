@@ -1,36 +1,45 @@
+// /pages/api/verifyUser.ts
 import crypto from "crypto";
 
 export default function handler(req, res) {
-  const { id, username, auth_date, hash, ...rest } = req.query;
   const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return res.status(500).json({ error: "Server misconfiguration" });
 
-  if (!token) {
-    return res.status(500).json({ error: "Server misconfiguration" });
+  const q = req.query;
+
+  // 1) Telegram WebApp verification using `hash` (preferred)
+  if (q.hash) {
+    // build data-check-string with all keys except 'hash'
+    const dataCheckArr = Object.keys(q)
+      .filter((k) => k !== "hash")
+      .sort()
+      .map((k) => `${k}=${q[k]}`);
+    const dataCheckString = dataCheckArr.join("\n");
+
+    const secretKey = crypto.createHash("sha256").update(token).digest();
+    const hmac = crypto.createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
+
+    const valid = hmac === q.hash;
+    return res.status(200).json({
+      valid,
+      id: q.id,
+      username: q.username,
+      ...(valid ? { verifiedBy: "hash" } : {}),
+    });
   }
 
-  // 1. Build data-check-string
-  const dataCheckArr = Object.keys(req.query)
-    .filter((k) => k !== "hash")
-    .sort()
-    .map((k) => `${k}=${req.query[k]}`);
-  const dataCheckString = dataCheckArr.join("\n");
-
-  // 2. Create secret key
-  const secretKey = crypto.createHash("sha256").update(token).digest();
-
-  // 3. Compute hash
-  const hmac = crypto.createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
-
-  const valid = hmac === hash;
-
-  if (!valid) {
-    return res.status(200).json({ valid: false });
+  // 2) Legacy (your previous) check: sig based on id (keeps backward compatibility)
+  if (q.sig && q.id) {
+    const expectedSig = crypto.createHmac("sha256", token).update(String(q.id)).digest("hex");
+    const valid = q.sig === expectedSig;
+    return res.status(200).json({
+      valid,
+      id: q.id,
+      username: q.username,
+      ...(valid ? { verifiedBy: "legacy-sig" } : {}),
+    });
   }
 
-  // ✅ Return full user info
-  return res.status(200).json({
-    valid: true,
-    id,
-    username,
-  });
+  // 3) Nothing to verify
+  return res.status(400).json({ valid: false, error: "no-verification-data" });
 }

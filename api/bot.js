@@ -12,14 +12,14 @@ function t(lang, key,...args) {
 const texts = {
 en: {
 welcome:
-"🎯 Welcome to Friday Bingo!\n\nCommands:\n/playgame - Launch game\n/deposit - Add funds\n/withdraw - Withdraw winnings",
+"🎯 Welcome to Friday Bingo!\n for any question @Natii4545 \n\nCommands:\n/playgame - Launch game\n/deposit - Add funds\n/withdraw - Withdraw winnings",
 choose_lang: "🌍 Please choose your language:",
 receipt_used :"Receipt is used !",
 play: "🎉 Let’s play Bingo!",
 enter_deposit_amount : "Enter amount to Deposit",
 deposit_method: "Choose payment method :",
 deposit_amount: (method) => `Enter deposit amount for ${method}:`,
-deposit_sms: (method) => `📩 Please forward the ${method} SMS receipt (with the payment link).`,
+deposit_sms: (method) => `📩 Please forward the ${method} SMS receipt after sending the payment to number above.`,
 withdraw_amount: "💵 Enter withdrawal amount:",
 select_withdraw_method : "Choose payment method:",
 withdraw_method: "Select withdrawal method:",
@@ -46,7 +46,7 @@ admin_declined_deposit : "❌ Admin declined Request ! ",
 
 },
 am: {
-welcome:"🎯 Welcom to Friday Bingo!\n\nትዕዛዞች:\n/playgame - ጨዋታ ጀምር\n/deposit - ገንዘብ ጨምር\n/withdraw - ትርፍ ወስድ",
+welcome:"🎯 Welcom to Friday Bingo!\nለማንኛውም ጥያቄዎች @Natii4545 \n\nትዕዛዞች:\n/playgame - ጨዋታ ጀምር\n/deposit - ገንዘብ ጨምር\n/withdraw - ትርፍ ወስድ",
 choose_lang: "🌍 ቋንቋ ይምረጡ:",
 receipt_used : "ደረሰኝ ጥቅም ላይ ይውላል!",
 admin_declined_withdraw : "❌ Admin ጥያቄውን አልተቀበለውም ! ",
@@ -60,7 +60,7 @@ enter_deposit_amount : "የተቀማጭ ገንዘብ መጠን ያስገቡ",
 send_deposit_sms: "📩 እባክዎ የተቀበሉትን የክፍያ SMS ያስገቡ",
 deposit_method: "የመክፈያ መንገድ ይምረጡ:",
 deposit_amount: (method) => `${method} በመክፈል የሚጨምሩትን መጠን ያስገቡ:`,
-deposit_sms: (method) => `📩 እባክዎ ${method} የክፍያ ኤስኤምኤስ (ከሊንኩ ጋር) ይላኩ።`,
+deposit_sms: (method) => `📩 እባክዎ ከላይ ባለው ${method} ቁጥር ገንዘብ መላኩን ከጨረሱ በኋላ የሚደርሰውን የsms መልእክት ይላኩ።`,
 withdraw_amount: "💵 የሚወስዱትን መጠን ያስገቡ:",
 select_withdraw_method: "የመክፈያ መንገድ ይምረጡ:",
 enter_cbe : "እባክዎን CBE የባንክ ሂሳብ ቁጥርዎን ያስገቡ:",
@@ -75,7 +75,7 @@ wait_admin: "⏳ ጥያቄዎ ተላክ። እባክዎ ይጠብቁ።",
 approved_deposit: (amt) => `✅ ተቀብሏል!\n+${amt} ብር ተጨመረ።\n\n🎮 ከዚህ በኋላ መጫወት ትችላላችሁ:\n/playgame`,
 declined_deposit: "❌ ቅጽ አልተቀበለም።",
 approved_withdraw: (amt, acc) => `✅ መክፈያ ተከናውኗል!\n-${amt} ብር ተከፍሏል ወደ: ${acc}\n\n🎮 እንደገና መጫወት ትችላላችሁ:\n/playgame`,
-declined_withdraw: "❌ የማውጫ ጥያቄ ተቀናቀለ።",
+declined_withdraw: "❌ request declined",
 fallback: "Send /deposit or /withdraw to start.",
 },
 };
@@ -441,16 +441,16 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
 
   // Account details
   const accountDetails = method === "CBE"
-    ? { accNumber: "1234567890", accHolder: "Friday Bingo" }
-    : { phone: "0948404314", holder: "Friday Bingo" };
+    ? { accNumber: "በቅርቡ ይጠብቁ", accHolder: "Friday Bingo" }
+    : { phone: "0900633195", holder: "Mikeyas" };
 
   // Escape Markdown special chars
   const escapeMD = (text) => text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
 
   const infoText =
     method === "CBE"
-      ? `💳 *Deposit to CBE Account:*\n\`\`\`\n${escapeMD(accountDetails.accNumber)}\n\`\`\`\n*Account Holder:* ${escapeMD(accountDetails.accHolder)}\n\n💰 Enter deposit amount for ${escapeMD(method)}:`
-      : `📱 *Deposit via Telebirr:*\n\`\`\`\n${escapeMD(accountDetails.phone)}\n\`\`\`\n*Account Holder:* ${escapeMD(accountDetails.holder)}\n\n💰 Enter deposit amount for ${escapeMD(method)}:`;
+      ? `💳 *Deposit to CBE Account:*\n\`\`\`\n${escapeMD(accountDetails.accNumber)}\n\`\`\`\n*Account Holder:* ${escapeMD(accountDetails.accHolder)}\n\n💰 የሚጨምሩትን መጠን ያስገቡ:`
+      : `📱 *Deposit via Telebirr:*\n\`\`\`\n${escapeMD(accountDetails.phone)}\n\`\`\`\n*የተቀባዩ ስም :* ${escapeMD(accountDetails.holder)}\n\n💰 የሚጨምሩትን መጠን ያስገቡ:`;
 
   await sendMessage(chatId, infoText, { parse_mode: "MarkdownV2" });
   return;

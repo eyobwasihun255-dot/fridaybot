@@ -178,7 +178,10 @@ async function handlePlaygame(message) {
     user = {
       telegramId: String(telegramId),
       username: message.from.username || message.from.first_name || `user_${telegramId}`,
-      balance: 0, // starting balance
+      balance: 0,      // starting balance
+      gamesPlayed: 0,
+      gamesWon: 0,
+      totalWinnings: 0,
       language: "am",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

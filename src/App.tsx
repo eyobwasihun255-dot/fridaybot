@@ -46,9 +46,17 @@ const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeU
       const tgUser = tg?.initDataUnsafe?.user;
 
       // Prefer Telegram-provided identity when available
-      let telegramId = tgUser?.id ? String(tgUser.id) : user?.telegramId ?? "demo123";
-      let username = tgUser?.username || tgUser?.first_name || user?.username || `user_${telegramId}`;
-      let language = user?.language ?? 'am';
+      if (!tgUser && !user) {
+  console.warn("No Telegram user detected, and no existing user in store.");
+  return; // ⛔ stop until Telegram provides data
+}
+
+const telegramId = tgUser?.id
+  ? String(tgUser.id)
+  : user.telegramId; // use existing user, don't fallback to demo123
+
+const username = tgUser?.username || tgUser?.first_name || user.username;
+const language = user?.language ?? 'am';
 
       // ✅ Always fetch from RTDB to get fresh balance
       const freshUser = await getOrCreateUser({

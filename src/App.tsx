@@ -51,15 +51,16 @@ const Initializer: React.FC<{ initializeUser: any; user: any }> = ({ initializeU
 
         // ✅ If userId + sig are provided, verify with backend
         if (userId && sig) {
-          const res = await fetch(`/api/verifyUser?id=${userId}&sig=${sig}`);
-          const data = await res.json();
+  const res = await fetch(`/api/verifyUser?${searchParams.toString()}`);
+  const data = await res.json();
 
-          if (data.valid) {
-            telegramId = userId;
-            username = data.username || `user_${telegramId}`;
-            lang = data.lang || lang;
-          }
-        }
+  if (data.valid) {
+    telegramId = data.id;
+    username = data.username || `user_${telegramId}`;
+    lang = user?.lang || "am";
+  }
+}
+
 
         // ✅ Only fallback if still nothing
         if (!telegramId) {

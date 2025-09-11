@@ -61,7 +61,7 @@ const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeU
           setTimeout(() => {
             clearInterval(interval);
             resolve(null);
-          }, 3000);
+          }, 6000);
         });
       };
 

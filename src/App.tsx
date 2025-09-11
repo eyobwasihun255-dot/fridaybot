@@ -36,59 +36,58 @@ function App() {
 
 // 🔑 Separate hook into a child component inside Router
 // 🔑 Separate hook into a child component inside Router
-const Initializer: React.FC<{ initializeUser: any; user: any }> = ({ initializeUser, user }) => {
+const Initializer: React.FC<InitializerProps> = ({ initializeUser, user }) => {
   const [searchParams] = useSearchParams();
 
   React.useEffect(() => {
-  const initUser = async () => {
-    try {
-      let telegramId = user?.telegramId;
-      let username = user?.username;
-      let lang = user?.lang || "am";
+    const initUser = async () => {
+      try {
+        let telegramId = user?.telegramId;
+        let username = user?.username;
+        let lang = user?.lang || "am";
 
-      const userId = searchParams.get("id");
-      const sig = searchParams.get("sig");
+        // 1️⃣ Try URL params first (PC / web)
+        const userId = searchParams.get("id");
+        const sig = searchParams.get("sig");
+        if (userId && sig) {
+          const res = await fetch(`/api/verifyUser?${searchParams.toString()}`);
+          const data = await res.json();
 
-      // 1️⃣ Check URL params first
-      if (userId && sig) {
-        const res = await fetch(`/api/verifyUser?${searchParams.toString()}`);
-        const data = await res.json();
-
-        if (data.valid) {
-          telegramId = data.id;
-          username = data.username || `user_${telegramId}`;
-          lang = user?.lang || "am";
+          if (data.valid) {
+            telegramId = data.id;
+            username = data.username || `user_${telegramId}`;
+            lang = data.lang || "am";
+          }
         }
-      } 
-      // 2️⃣ Fallback for Telegram WebApp (Android and iOS)
-      else if (window.Telegram?.WebApp?.initData) {
-        const initDataUnsafe = window.Telegram.WebApp.initDataUnsafe;
-        telegramId = initDataUnsafe.user?.id?.toString();
-        username = initDataUnsafe.user?.username || `user_${telegramId}`;
-        lang = initDataUnsafe.user?.language_code || "am";
+        // 2️⃣ Fallback: Telegram WebApp (iOS & Android)
+        else if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
+          const tgUser = window.Telegram.WebApp.initDataUnsafe.user;
+          telegramId = tgUser.id?.toString();
+          username = tgUser.username || `user_${telegramId}`;
+          lang = tgUser.language_code || "am";
+        }
+
+        // 3️⃣ Last fallback: demo user
+        if (!telegramId) {
+          telegramId = "demo123";
+          username = "demo_user";
+        }
+
+        // ✅ Fetch or create user from RTDB
+        const freshUser = await getOrCreateUser({
+          telegramId,
+          username,
+          lang,
+        });
+
+        initializeUser(freshUser);
+      } catch (err) {
+        console.error("Failed to init user:", err);
       }
+    };
 
-      // 3️⃣ Final fallback to demo user
-      if (!telegramId) {
-        telegramId = "demo123";
-        username = "demo_user";
-      }
-
-      const freshUser = await getOrCreateUser({
-        telegramId,
-        username: username!,
-        lang,
-      });
-
-      initializeUser(freshUser);
-    } catch (err) {
-      console.error("Failed to init user:", err);
-    }
-  };
-
-  initUser();
-}, [initializeUser, searchParams]);
-
+    initUser();
+  }, [initializeUser, searchParams, user]);
 
   return null;
 };

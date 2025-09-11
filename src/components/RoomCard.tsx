@@ -92,7 +92,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
             <span className="text-white/80">{t('players')}:</span>
             <div className="flex items-center space-x-1">
               <Users className="w-4 h-4 text-blue-300" />
-              <span className="text-white">{room.players.length}/{room.maxPlayers}</span>
+              <span className="text-white">0/{room.maxPlayers}</span>
             </div>
           </div>
 

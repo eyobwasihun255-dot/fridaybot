@@ -7,10 +7,7 @@ export interface User {
   telegramId: string;
   username: string;
   balance: number;
-  gamesPlayed: number;
-  gamesWon: number;
-  totalWinnings: number;
-  language: string;
+  lang: string;
   createdAt: string;
   updatedAt: string;
 }

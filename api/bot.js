@@ -169,7 +169,7 @@ const chatId = message.chat.id;
 const userRef = ref(rtdb, "users/" + message.from.id);
 const userSnap = await get(userRef);
 const user = userSnap.val();
-const lang = user?.lang || "en";
+const lang = user?.lang || "am";
 
 
 const keyboard = {

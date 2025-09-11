@@ -6,17 +6,14 @@ interface User {
   telegramId: string;
   username: string;
   balance: number;
-  gamesPlayed: number;
-  gamesWon: number;
-  totalWinnings: number;
-  language: string;
+  lang: string;
   createdAt: string;
   updatedAt: string;
 }
 export async function getOrCreateUser(user: {
   telegramId: string;
   username: string;
-  language: string;
+  lang: string;
 }): Promise<User> {
   const userRef = ref(rtdb, `users/${user.telegramId}`);
   const snapshot = await get(userRef);
@@ -31,10 +28,7 @@ export async function getOrCreateUser(user: {
     telegramId: user.telegramId,
     username: user.username,
     balance: 50,
-    gamesPlayed: 0,
-    gamesWon: 0,
-    totalWinnings: 0,
-    language: user.language,
+    lang: user.lang,
     createdAt: now,
     updatedAt: now,
   };

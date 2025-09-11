@@ -33,8 +33,6 @@ function App() {
   );
 }
 
-// 🔑 Separate hook into a child component inside Router
-// 🔑 Separate hook into a child component inside Router
 const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeUser, user }) => {
   React.useEffect(() => {
     const initUser = async () => {
@@ -53,7 +51,7 @@ const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeU
       }
 
       let tgUser = tg.initDataUnsafe?.user || null;
-      const maxAttempts = 60; // Try for up to 30 seconds (60 * 500ms)
+      const maxAttempts = 5; // Try for up to 30 seconds (60 * 500ms)
       let attempts = 0;
 
       while (!tgUser && attempts < maxAttempts) {
@@ -95,9 +93,10 @@ const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeU
 
     initUser();
   }, [initializeUser]);
-
+  
   return null;
 };
 
 
 export default App;
+

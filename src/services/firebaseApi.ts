@@ -39,7 +39,7 @@ export async function getOrCreateUser(user: {
     const newUser: User = {
       telegramId: user.telegramId,
       username: user.username,
-      balance: 10, // starting balance
+      balance: 0, // starting balance
       gamesPlayed: 0,
       gamesWon: 0,
       totalWinnings: 0,

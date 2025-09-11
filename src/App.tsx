@@ -63,19 +63,21 @@ const Initializer: React.FC<InitializerProps> = ({ initializeUser, user }) => {
       try {
         let telegramId = user?.telegramId;
         let username = user?.username;
-        let lang = user?.lang || "am";
+        let language = user?.language || "en";
 
-          
+        // TODO: add URL param + Telegram WebApp logic here
+        // (same as I showed you earlier)
 
+        if (!telegramId) {
+          telegramId = "demo123";
+          username = "demo_user";
+          language = "en";
+        }
 
-        // 3️⃣ Last fallback: demo user
-     
-
-        // ✅ Fetch or create user from RTDB
         const freshUser = await getOrCreateUser({
           telegramId,
           username,
-          lang,
+          language,
         });
 
         initializeUser(freshUser);
@@ -89,7 +91,6 @@ const Initializer: React.FC<InitializerProps> = ({ initializeUser, user }) => {
 
   return null;
 };
-
 
 
 

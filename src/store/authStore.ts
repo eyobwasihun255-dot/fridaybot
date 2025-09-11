@@ -10,10 +10,11 @@ export interface User {
   gamesPlayed: number;
   gamesWon: number;
   totalWinnings: number;
-  language: string;
+  language: string;   // ✅ consistent naming
   createdAt: string;
   updatedAt: string;
 }
+
 
 interface AuthState {
   user: User | null;

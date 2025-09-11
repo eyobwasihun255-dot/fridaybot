@@ -32,54 +32,44 @@ function App() {
     </Router>
   );
 }
-const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeUser, user }) => {
 
+// 🔑 Separate hook into a child component inside Router
+// 🔑 Separate hook into a child component inside Router
+const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeUser, user }) => {
   React.useEffect(() => {
     const initUser = async () => {
       const tg = (window as any).Telegram?.WebApp;
+      if (!tg) {
+        console.warn("Telegram WebApp not found!");
+        return;
+      }
 
-      try {
-        tg?.ready();   // initialize the WebApp
-        tg?.expand();  // expand UI
+      try { 
+        tg.ready();   // ensure the WebApp is ready
+        tg.expand();
       } catch {}
 
-      // Wait for Telegram user data
-      const waitForTelegramUser = (): Promise<any> => {
-        return new Promise((resolve) => {
-          if (tg?.initDataUnsafe?.user) {
-            resolve(tg.initDataUnsafe.user);
-            return;
-          }
-          const interval = setInterval(() => {
-            if (tg?.initDataUnsafe?.user) {
-              clearInterval(interval);
-              resolve(tg.initDataUnsafe.user);
-            }
-          }, 50);
+      // Keep checking until Telegram user is available
+      let tgUser = tg.initDataUnsafe?.user || null;
+      const startTime = Date.now();
+      while (!tgUser && Date.now() - startTime < 5000) { // wait up to 5s
+        await new Promise(r => setTimeout(r, 50));
+        tgUser = tg.initDataUnsafe?.user || null;
+      }
 
-          // fallback if not available after 3s
-          setTimeout(() => {
-            clearInterval(interval);
-            resolve(null);
-          }, 6000);
-        });
-      };
+      if (!tgUser) {
+        console.error("Telegram user not available after 5s!");
+        return;
+      }
 
-      const tgUser = await waitForTelegramUser();
-
-      // Use Telegram user if available
-      const telegramId = tgUser?.id ? String(tgUser.id) : null;
-      const username = tgUser?.username || tgUser?.first_name || null;
-      const language = tgUser?.language_code || 'am';
-
-      // Only fallback to stored user or demo if Telegram user is missing
-      const finalTelegramId = telegramId ?? user?.telegramId ?? "demo123";
-      const finalUsername = username ?? user?.username ?? `user_${finalTelegramId}`;
+      const telegramId = String(tgUser.id);
+      const username = tgUser.username || tgUser.first_name || `user_${telegramId}`;
+      const language = tgUser.language_code || 'am';
 
       // Fetch or create user in RTDB
       const freshUser = await getOrCreateUser({
-        telegramId: finalTelegramId,
-        username: finalUsername,
+        telegramId,
+        username,
         language,
       });
 
@@ -87,11 +77,10 @@ const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeU
     };
 
     initUser();
-  }, [initializeUser, user]);
-
+  }, [initializeUser]);
+  
   return null;
 };
-
 
 
 export default App;

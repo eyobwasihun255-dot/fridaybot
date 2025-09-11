@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { rtdb } from '../firebase/config';
+import { ref, get as dbGet, set as dbSet, update as dbUpdate, onValue } from 'firebase/database';
 
 export interface User {
   telegramId: string;
@@ -17,23 +19,22 @@ interface AuthState {
   logout: () => void;
 }
 
-export const useAuthStore = create<AuthState>()(
+// Use the persist middleware properly with the correct typing.
+export const useAuthStore = create<AuthState>(
   persist(
-    (set, get) => ({
+    (set) => ({
       user: null,
-      loading: true,
-      initializeUser: (user) => {
-        set({ user, loading: false });
-      },
+      loading: false,
+      initializeUser: (user) =>
+        set({
+          user,
+          loading: false,
+        }),
       logout: () => set({ user: null, loading: false }),
     }),
     {
-      name: 'auth-storage', // default key
-      getStorage: () => localStorage,
-      // 👇 Key per telegramId so multiple users can exist on one device
-      partialize: (state) => ({
-        user: state.user ? { ...state.user, balance: state.user.balance } : null,
-      }),
+      name: 'auth-storage', // The key for localStorage
+      getStorage: () => localStorage, // Persist state to localStorage
     }
-  ) as any
+  ) as any // Cast to 'any' to resolve the typing error
 );

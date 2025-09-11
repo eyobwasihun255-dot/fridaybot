@@ -36,37 +36,48 @@ function App() {
 
 // 🔑 Separate hook into a child component inside Router
 // 🔑 Separate hook into a child component inside Router
-const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeUser, user }) => {
+const Initializer: React.FC<{ initializeUser: any; user: any }> = ({ initializeUser, user }) => {
   const [searchParams] = useSearchParams();
 
   React.useEffect(() => {
     const initUser = async () => {
-      const userId = searchParams.get("id");
-      const sig = searchParams.get("sig");
+      try {
+        let telegramId = user?.telegramId || null;
+        let username = user?.username || null;
+        let lang = user?.lang || "am";
 
-      let telegramId = userId ?? "demo123";
-      let username = `user_${telegramId}`;
-      let lang = "am"; // default
+        const userId = searchParams.get("id");
+        const sig = searchParams.get("sig");
 
-      // ✅ verify signature if provided
-      if (userId && sig) {
-        const res = await fetch(`/api/verifyUser?id=${userId}&sig=${sig}`);
-        const data = await res.json();
-        if (!data.valid) {
+        // If userId + sig is provided, verify with backend
+        if (userId && sig) {
+          const res = await fetch(`/api/verifyUser?id=${userId}&sig=${sig}`);
+          const data = await res.json();
+
+          if (data.valid) {
+            telegramId = userId;
+            username = data.username || `user_${telegramId}`;
+            lang = data.lang || lang;
+          }
+        }
+
+        // If still no telegramId, fallback
+        if (!telegramId) {
           telegramId = "demo123";
           username = "demo_user";
         }
+
+        // Always fetch the latest user from RTDB
+        const freshUser = await getOrCreateUser({
+          telegramId,
+          username: username!,
+          lang,
+        });
+
+        initializeUser(freshUser);
+      } catch (err) {
+        console.error("Failed to init user:", err);
       }
-
-      // ✅ Always hit Firebase RTDB
-      const freshUser = await getOrCreateUser({
-        telegramId,
-        username,
-        lang,
-      });
-
-      // ✅ Replace local user with the fresh one
-      initializeUser(freshUser);
     };
 
     initUser();
@@ -74,7 +85,6 @@ const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeU
 
   return null;
 };
-
 
 
 export default App;

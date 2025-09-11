@@ -59,7 +59,7 @@ const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeU
     };
 
     initUser();
-  }, [initializeUser, searchParams]);
+  }, [initializeUser]);
 
   return null;
 };

@@ -19,21 +19,16 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       user: null,
-      loading: true,
-      initializeUser: (user) => {
-        set({ user, loading: false });
-      },
+      loading: true, // start loading
+      initializeUser: (user) => set({ user, loading: false }),
       logout: () => set({ user: null, loading: false }),
     }),
     {
-      name: 'auth-storage', // default key
+      name: "auth-storage",
       getStorage: () => localStorage,
-      // 👇 Key per telegramId so multiple users can exist on one device
-      partialize: (state) => ({
-        user: state.user ? { ...state.user, balance: state.user.balance } : null,
-      }),
     }
   ) as any
 );
+

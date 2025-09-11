@@ -32,6 +32,26 @@ function App() {
     </Router>
   );
 }
+const waitForTelegramUser = (): Promise<any> => {
+  return new Promise((resolve) => {
+    if ((window as any).Telegram?.WebApp?.initDataUnsafe?.user) {
+      resolve((window as any).Telegram.WebApp.initDataUnsafe.user);
+    } else {
+      const interval = setInterval(() => {
+        const user = (window as any).Telegram?.WebApp?.initDataUnsafe?.user;
+        if (user) {
+          clearInterval(interval);
+          resolve(user);
+        }
+      }, 50); // check every 50ms
+      setTimeout(() => {
+        clearInterval(interval);
+        resolve(null); // fallback after 2s
+      }, 2000);
+    }
+  });
+};
+
 
 // 🔑 Separate hook into a child component inside Router
 // 🔑 Separate hook into a child component inside Router
@@ -39,30 +59,27 @@ const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeU
  
   React.useEffect(() => {
     const initUser = async () => {
-      // Initialize Telegram WebApp context if available
       const tg = (window as any).Telegram?.WebApp;
       try { tg?.ready(); tg?.expand(); } catch {}
-
-      const tgUser = tg?.initDataUnsafe?.user;
-
-      // Prefer Telegram-provided identity when available
+  
+      const tgUser = await waitForTelegramUser(); // <-- wait for mobile WebApp
+  
       let telegramId = tgUser?.id ? String(tgUser.id) : user?.telegramId ?? "demo123";
       let username = tgUser?.username || tgUser?.first_name || user?.username || `user_${telegramId}`;
-      let language = user?.language ?? 'am';
-
-      // ✅ Always fetch from RTDB to get fresh balance
+      let language = user?.language ?? tgUser?.language_code ?? 'am';
+  
       const freshUser = await getOrCreateUser({
         telegramId,
         username,
         language,
       });
-
+  
       initializeUser(freshUser);
     };
-
+  
     initUser();
   }, [initializeUser]);
-
+  
   return null;
 };
 

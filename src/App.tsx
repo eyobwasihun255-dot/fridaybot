@@ -43,7 +43,7 @@ const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeU
     
 
       let telegramId = userId ?? user?.telegramId ?? "demo123";
-      let username = user?.username ?? `user_${telegramId}`;
+      let username = user?.username ?? `user_`;
       let language = user?.language ?? "am";
 
     

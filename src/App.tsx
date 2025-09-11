@@ -38,38 +38,41 @@ function App() {
 const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeUser, user }) => {
  
   React.useEffect(() => {
-    const initUser = async () => {
-      // Initialize Telegram WebApp context if available
-      const tg = (window as any).Telegram?.WebApp;
-      try { tg?.ready(); tg?.expand(); } catch {}
+  const initUser = async () => {
+    const tg = (window as any).Telegram?.WebApp;
+    try { tg?.ready(); tg?.expand(); } catch {}
 
-      const tgUser = tg?.initDataUnsafe?.user;
+    // ✅ Secure initData string
+    const initData = tg?.initData;
+    const tgUser = tg?.initDataUnsafe?.user;
 
-      // Prefer Telegram-provided identity when available
-      if (!tgUser && !user) {
-  console.warn("No Telegram user detected, and no existing user in store.");
-  return; // ⛔ stop until Telegram provides data
+    if (!tgUser && !initData) {
+      console.error("❌ No Telegram user info available");
+      return;
+    }
+
+    // Prefer Telegram-provided identity
+    if (!tgUser && !user) {
+  console.warn("No Telegram user detected, skipping init.");
+  return;
 }
+const telegramId = tgUser?.id ? String(tgUser.id) : user.telegramId;
 
-const telegramId = tgUser?.id
-  ? String(tgUser.id)
-  : user.telegramId; // use existing user, don't fallback to demo123
+    const username = tgUser?.username || tgUser?.first_name || user?.username || `user_${telegramId}`;
+    const language = tgUser?.language_code || user?.language || "am";
 
-const username = tgUser?.username || tgUser?.first_name || user.username;
-const language = user?.language ?? 'am';
+    // ✅ Always fetch from RTDB
+    const freshUser = await getOrCreateUser({
+      telegramId,
+      username,
+      language,
+    });
 
-      // ✅ Always fetch from RTDB to get fresh balance
-      const freshUser = await getOrCreateUser({
-        telegramId,
-        username,
-        language,
-      });
+    initializeUser(freshUser);
+  };
 
-      initializeUser(freshUser);
-    };
-
-    initUser();
-  }, [initializeUser]);
+  initUser();
+}, [initializeUser]);
 
   return null;
 };

@@ -44,7 +44,7 @@ React.useEffect(() => {
 
     if (id && sig) {
       // 🔐 Verify with backend API
-      const res = await fetch(`/api/verify?id=${id}&sig=${sig}`);
+      const res = await fetch(`/api/verifyUser?id=${id}&sig=${sig}`);
       const { valid } = await res.json();
 
       if (!valid) {

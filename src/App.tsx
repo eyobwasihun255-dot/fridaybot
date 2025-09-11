@@ -12,6 +12,7 @@ import { useSearchParams } from "react-router-dom";
 
 function App() {
   const { user, loading, initializeUser } = useAuthStore();
+  const { language } = useLanguageStore();
 
   return (
     <Router>
@@ -43,37 +44,25 @@ const Initializer: React.FC<{ initializeUser: any; user: any }> = ({ initializeU
       try {
         let telegramId = user?.telegramId || undefined;
         let username = user?.username || undefined;
-        let lang = "am"; // Default language
+        let lang = user?.lang || "am"; // ✅ match your store User type
 
         const userId = searchParams.get("id");
-        const hash = searchParams.get("hash");
-        const usernameParam = searchParams.get("username");
+        const sig = searchParams.get("sig");
 
-        // ✅ If userId + hash are provided, verify with backend
-        if (userId && hash) {
-          try {
-            const res = await fetch(`/api/verifyUser?${searchParams.toString()}`);
-            const data = await res.json();
+        // ✅ If userId + sig are provided, verify with backend
+        if (userId && sig) {
+  const res = await fetch(`/api/verifyUser?${searchParams.toString()}`);
+  const data = await res.json();
 
-            if (data.valid) {
-              telegramId = data.id;
-              username = data.username || usernameParam || `user_${telegramId}`;
-              lang = "am"; // You can add language parameter if needed
-            } else {
-              console.warn("Telegram verification failed, using provided parameters");
-              // Still try to use provided parameters even if verification fails
-              telegramId = userId;
-              username = usernameParam || `user_${telegramId}`;
-            }
-          } catch (verifyError) {
-            console.error("Verification request failed:", verifyError);
-            // Fallback to provided parameters
-            telegramId = userId;
-            username = usernameParam || `user_${telegramId}`;
-          }
-        }
+  if (data.valid) {
+    telegramId = data.id;
+    username = data.username || `user_${telegramId}`;
+    lang = user?.lang || "am";
+  }
+}
 
-        // ✅ Only fallback to demo if still nothing
+
+        // ✅ Only fallback if still nothing
         if (!telegramId) {
           telegramId = "demo123";
           username = "demo_user";
@@ -83,19 +72,12 @@ const Initializer: React.FC<{ initializeUser: any; user: any }> = ({ initializeU
         const freshUser = await getOrCreateUser({
           telegramId,
           username: username!,
-          lang,
+          lang, // 🔥 FIXED: pass `lang` not `language`
         });
 
         initializeUser(freshUser);
       } catch (err) {
         console.error("Failed to init user:", err);
-        // Fallback to demo user on complete failure
-        const demoUser = await getOrCreateUser({
-          telegramId: "demo123",
-          username: "demo_user",
-          lang: "am",
-        });
-        initializeUser(demoUser);
       }
     };
 

@@ -33,55 +33,24 @@ function App() {
   );
 }
 
+// 🔑 Separate hook into a child component inside Router
+// 🔑 Separate hook into a child component inside Router
 const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeUser, user }) => {
+ 
   React.useEffect(() => {
     const initUser = async () => {
+      // Initialize Telegram WebApp context if available
       const tg = (window as any).Telegram?.WebApp;
-      if (!tg) {
-        console.warn("Telegram WebApp not found!");
-        // Potentially handle this case by showing an error or fallback UI
-        return;
-      }
+      try { tg?.ready(); tg?.expand(); } catch {}
 
-      try {
-        tg.ready();
-        tg.expand();
-      } catch (e) {
-        console.error("Error calling Telegram WebApp methods:", e);
-      }
+      const tgUser = tg?.initDataUnsafe?.user;
 
-      let tgUser = tg.initDataUnsafe?.user || null;
-      const maxAttempts = 5; // Try for up to 30 seconds (60 * 500ms)
-      let attempts = 0;
+      // Prefer Telegram-provided identity when available
+      let telegramId = tgUser?.id ? String(tgUser.id) : user?.telegramId ?? "demo123";
+      let username = tgUser?.username || tgUser?.first_name || user?.username || `user_${telegramId}`;
+      let language = user?.language ?? 'am';
 
-      while (!tgUser && attempts < maxAttempts) {
-        console.log(`Attempt ${attempts + 1}: Waiting for Telegram user data...`);
-        await new Promise(r => setTimeout(r, 500)); // Wait for 500ms
-        tgUser = tg.initDataUnsafe?.user || null;
-        attempts++;
-      }
-
-      if (!tgUser) {
-        console.error("Telegram user not available after multiple attempts!");
-        // Fallback to a generic user or prompt the user for input
-        // For now, let's use a clear indicator that data is missing
-        const telegramId = 'unknown_id_' + Date.now();
-        const username = 'unknown_user';
-        const language = 'en'; // Default language
-
-        const freshUser = await getOrCreateUser({
-          telegramId,
-          username,
-          language,
-        });
-        initializeUser(freshUser);
-        return;
-      }
-
-      const telegramId = String(tgUser.id);
-      const username = tgUser.username || tgUser.first_name || `user_${telegramId}`;
-      const language = tgUser.language_code || 'am';
-
+      // ✅ Always fetch from RTDB to get fresh balance
       const freshUser = await getOrCreateUser({
         telegramId,
         username,
@@ -93,10 +62,9 @@ const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeU
 
     initUser();
   }, [initializeUser]);
-  
+
   return null;
 };
 
 
 export default App;
-

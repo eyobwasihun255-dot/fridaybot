@@ -23,6 +23,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       loading: true,
       initializeUser: (user) => {
+        console.log('Initializing user:', user); // Debug log
         set({ user, loading: false });
       },
       logout: () => set({ user: null, loading: false }),
@@ -30,9 +31,9 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'auth-storage', // default key
       getStorage: () => localStorage,
-      // 👇 Key per telegramId so multiple users can exist on one device
+      // 👇 Store complete user data
       partialize: (state) => ({
-        user: state.user ? { ...state.user, balance: state.user.balance } : null,
+        user: state.user,
       }),
     }
   ) as any

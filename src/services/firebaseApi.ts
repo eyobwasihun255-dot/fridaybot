@@ -12,15 +12,12 @@ interface User {
 
 }
 export async function getOrCreateUser(user: { telegramId: string; username: string; lang: string }) {
-  console.log('Getting/creating user:', user); // Debug log
   const userRef = ref(rtdb, `users/${user.telegramId}`);
   const snapshot = await dbGet(userRef);
 
   if (snapshot.exists()) {
     // ✅ Return existing user (preserve balance)
-    const existingUser = snapshot.val();
-    console.log('Found existing user:', existingUser); // Debug log
-    return existingUser;
+    return snapshot.val();
   } else {
     const newUser = {
       telegramId: user.telegramId,
@@ -30,7 +27,6 @@ export async function getOrCreateUser(user: { telegramId: string; username: stri
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    console.log('Creating new user:', newUser); // Debug log
     await dbSet(userRef, newUser);
     return newUser;
   }

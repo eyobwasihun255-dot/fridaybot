@@ -80,7 +80,7 @@ const Initializer: React.FC<InitializerProps> = ({ initializeUser, user }) => {
 if (!telegramId) {
   console.warn("Falling back to demo user!");
   telegramId = "demo123";
-  username = "demo_user";
+  username = "der";
   language = "en";
 }
 

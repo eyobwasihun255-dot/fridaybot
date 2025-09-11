@@ -36,20 +36,18 @@ function App() {
 // Wait for WebApp initialization before reading the user
 const waitForTelegramUser = async (): Promise<any> => {
   return new Promise((resolve) => {
-    if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
-      resolve(window.Telegram.WebApp.initDataUnsafe.user);
-    } else {
-      const interval = setInterval(() => {
-        if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
-          clearInterval(interval);
-          resolve(window.Telegram.WebApp.initDataUnsafe.user);
-        }
-      }, 50); // check every 50ms
-      setTimeout(() => {
-        clearInterval(interval);
-        resolve(null);
-      }, 2000); // fallback after 2s
-    }
+    const check = () => {
+      const user = window.Telegram?.WebApp?.initDataUnsafe?.user;
+      if (user) {
+        console.log("Telegram user found:", user);
+        resolve(user);
+      } else {
+        console.log("Waiting for Telegram user...");
+        setTimeout(check, 100); // retry every 100ms
+      }
+    };
+    check();
+    setTimeout(() => resolve(null), 5000); // give up after 5s
   });
 };
 
@@ -68,11 +66,24 @@ const Initializer: React.FC<InitializerProps> = ({ initializeUser, user }) => {
         // TODO: add URL param + Telegram WebApp logic here
         // (same as I showed you earlier)
 
-        if (!telegramId) {
-          telegramId = "demo123";
-          username = "demo_user";
-          language = "en";
-        }
+      if (!telegramId && window.Telegram?.WebApp) {
+  window.Telegram.WebApp.ready();
+  const tgUser = await waitForTelegramUser();
+  if (tgUser) {
+    telegramId = tgUser.id?.toString();
+    username = tgUser.username || `user_${telegramId}`;
+    language = tgUser.language_code || "en";
+  }
+}
+
+// ✅ Only fallback if still nothing
+if (!telegramId) {
+  console.warn("Falling back to demo user!");
+  telegramId = "demo123";
+  username = "demo_user";
+  language = "en";
+}
+
 
         const freshUser = await getOrCreateUser({
           telegramId,

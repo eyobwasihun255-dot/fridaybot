@@ -11,7 +11,29 @@ export async function getOrCreateUser(user: {
   const snapshot = await dbGet(userRef);
 
   if (snapshot.exists()) {
-    return snapshot.val() as User;
+    const existing = snapshot.val() as any;
+    const now = new Date().toISOString();
+
+    const normalized: User = {
+      telegramId: String(existing.telegramId ?? user.telegramId),
+      username: existing.username ?? user.username,
+      balance: Number(existing.balance ?? 0),
+      gamesPlayed: Number(existing.gamesPlayed ?? 0),
+      gamesWon: Number(existing.gamesWon ?? 0),
+      totalWinnings: Number(existing.totalWinnings ?? 0),
+      language: existing.language ?? existing.lang ?? user.language,
+      createdAt: existing.createdAt ?? now,
+      updatedAt: now,
+    };
+
+    // If any key differs, write back normalized user
+    const needsUpdate = Object.keys(normalized).some(
+      (k) => (existing as any)[k] !== (normalized as any)[k]
+    );
+    if (needsUpdate) {
+      await dbSet(userRef, normalized);
+    }
+    return normalized;
   } else {
     const now = new Date().toISOString();
     const newUser: User = {

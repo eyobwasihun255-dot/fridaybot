@@ -8,7 +8,6 @@ import Header from './components/Header';
 import LoadingSpinner from './components/LoadingSpinner';
 import './firebase/config';
 import { getOrCreateUser } from './services/firebaseApi';
-import { useSearchParams } from "react-router-dom";
 
 function App() {
   const { user, loading, initializeUser } = useAuthStore();
@@ -40,13 +39,16 @@ const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeU
  
   React.useEffect(() => {
     const initUser = async () => {
-    
+      // Initialize Telegram WebApp context if available
+      const tg = (window as any).Telegram?.WebApp;
+      try { tg?.ready(); tg?.expand(); } catch {}
 
-      let telegramId = userId ?? user?.telegramId ?? "demo123";
-      let username = user?.username ?? `user_`;
-      let language = user?.language ?? "am";
+      const tgUser = tg?.initDataUnsafe?.user;
 
-    
+      // Prefer Telegram-provided identity when available
+      let telegramId = tgUser?.id ? String(tgUser.id) : user?.telegramId ?? "demo123";
+      let username = tgUser?.username || tgUser?.first_name || user?.username || `user_${telegramId}`;
+      let language = user?.language ?? 'am';
 
       // ✅ Always fetch from RTDB to get fresh balance
       const freshUser = await getOrCreateUser({

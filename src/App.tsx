@@ -65,28 +65,7 @@ const Initializer: React.FC<InitializerProps> = ({ initializeUser, user }) => {
         let username = user?.username;
         let lang = user?.lang || "am";
 
-        // 1️⃣ Try URL params first (PC / web)
-        const userId = searchParams.get("id");
-        const sig = searchParams.get("sig");
-        if (userId && sig) {
-          const res = await fetch(`/api/verifyUser?${searchParams.toString()}`);
-          const data = await res.json();
-
-          if (data.valid) {
-            telegramId = data.id;
-            username = data.username || `user_${telegramId}`;
-            lang = data.lang || "am";
-          }
-        }
-        // 2️⃣ Fallback: Telegram WebApp (iOS & Android)
-     else if (window.Telegram?.WebApp) {
-  const tgUser = await waitForTelegramUser();
-  if (tgUser) {
-    telegramId = tgUser.id?.toString();
-    username = tgUser.username || `user_${telegramId}`;
-    lang = tgUser.language_code || "am";
-  }
-}
+          
 
 
         // 3️⃣ Last fallback: demo user

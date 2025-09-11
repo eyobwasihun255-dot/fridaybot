@@ -544,7 +544,7 @@ return (
       </h2>
 
       <p className="mb-4 text-lg text-white font-semibold">
-        {t('card')} #{winnerCard.serialNumber} is {t('winner')} 🎉
+        {t('card')} #{winnerCard.serialNumber}  {t('winner')} 🎉
       </p>
 
       {/* Close button big */}

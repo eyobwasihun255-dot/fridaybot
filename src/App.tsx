@@ -33,6 +33,25 @@ function App() {
     </Router>
   );
 }
+// Wait for WebApp initialization before reading the user
+const waitForTelegramUser = async (): Promise<any> => {
+  return new Promise((resolve) => {
+    if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
+      resolve(window.Telegram.WebApp.initDataUnsafe.user);
+    } else {
+      const interval = setInterval(() => {
+        if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
+          clearInterval(interval);
+          resolve(window.Telegram.WebApp.initDataUnsafe.user);
+        }
+      }, 50); // check every 50ms
+      setTimeout(() => {
+        clearInterval(interval);
+        resolve(null);
+      }, 2000); // fallback after 2s
+    }
+  });
+};
 
 // 🔑 Separate hook into a child component inside Router
 // 🔑 Separate hook into a child component inside Router
@@ -60,12 +79,15 @@ const Initializer: React.FC<InitializerProps> = ({ initializeUser, user }) => {
           }
         }
         // 2️⃣ Fallback: Telegram WebApp (iOS & Android)
-        else if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
-          const tgUser = window.Telegram.WebApp.initDataUnsafe.user;
-          telegramId = tgUser.id?.toString();
-          username = tgUser.username || `user_${telegramId}`;
-          lang = tgUser.language_code || "am";
-        }
+     else if (window.Telegram?.WebApp) {
+  const tgUser = await waitForTelegramUser();
+  if (tgUser) {
+    telegramId = tgUser.id?.toString();
+    username = tgUser.username || `user_${telegramId}`;
+    lang = tgUser.language_code || "am";
+  }
+}
+
 
         // 3️⃣ Last fallback: demo user
         if (!telegramId) {

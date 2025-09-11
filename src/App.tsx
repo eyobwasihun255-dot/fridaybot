@@ -90,10 +90,7 @@ const Initializer: React.FC<InitializerProps> = ({ initializeUser, user }) => {
 
 
         // 3️⃣ Last fallback: demo user
-        if (!telegramId) {
-          telegramId = "demo123";
-          username = "demo_user";
-        }
+     
 
         // ✅ Fetch or create user from RTDB
         const freshUser = await getOrCreateUser({

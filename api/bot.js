@@ -165,27 +165,46 @@ await sendMessage(chatId, t("en", "choose_lang"), { reply_markup: keyboard });
 
 
 async function handlePlaygame(message) {
-const chatId = message.chat.id;
-const userRef = ref(rtdb, "users/" + message.from.id);
-const userSnap = await get(userRef);
-const user = userSnap.val();
-const lang = user?.lang || "am";
+  const chatId = message.chat.id;
+  const telegramId = message.from.id;
 
+  // Check or create the user first
+  const userRef = ref(rtdb, `users/${telegramId}`);
+  const userSnap = await get(userRef);
 
-const keyboard = {
-inline_keyboard: [
-[
-{
-text: "🎮 Open Friday Bingo",
-web_app: { url: process.env.WEBAPP_URL || "https://fridaybots.vercel.app" },
-},
-],
-],
-};
+  let user;
+  if (!userSnap.exists()) {
+    // Create user if missing
+    user = {
+      telegramId: String(telegramId),
+      username: message.from.username || message.from.first_name || `user_${telegramId}`,
+      balance: 10, // starting balance
+      language: "am",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    await set(userRef, user);
+  } else {
+    user = userSnap.val();
+  }
 
+  const lang = user.lang || "am";
 
-await sendMessage(chatId, t(lang, "play"), { reply_markup: keyboard });
+  // Now send the WebApp button
+  const keyboard = {
+    inline_keyboard: [
+      [
+        {
+          text: "🎮 Open Friday Bingo",
+          web_app: { url: process.env.WEBAPP_URL || "https://fridaybots.vercel.app" },
+        },
+      ],
+    ],
+  };
+
+  await sendMessage(chatId, t(lang, "play"), { reply_markup: keyboard });
 }
+
 
 async function handleDeposit(message) {
 const chatId = message.chat.id;

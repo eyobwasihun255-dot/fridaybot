@@ -36,21 +36,22 @@ const waitForTelegramUser = (): Promise<any> => {
   return new Promise((resolve) => {
     if ((window as any).Telegram?.WebApp?.initDataUnsafe?.user) {
       resolve((window as any).Telegram.WebApp.initDataUnsafe.user);
-    } else {
-      const interval = setInterval(() => {
-        const user = (window as any).Telegram?.WebApp?.initDataUnsafe?.user;
-        if (user) {
-          clearInterval(interval);
-          resolve(user);
-        }
-      }, 50); // check every 50ms
-      setTimeout(() => {
-        clearInterval(interval);
-        resolve(null); // fallback after 2s
-      }, 2000);
+      return;
     }
+    const interval = setInterval(() => {
+      const user = (window as any).Telegram?.WebApp?.initDataUnsafe?.user;
+      if (user) {
+        clearInterval(interval);
+        resolve(user);
+      }
+    }, 50);
+    setTimeout(() => {
+      clearInterval(interval);
+      resolve(null); // fallback if WebApp fails
+    }, 3000);
   });
 };
+
 
 
 // 🔑 Separate hook into a child component inside Router
@@ -62,12 +63,20 @@ const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeU
       const tg = (window as any).Telegram?.WebApp;
       try { tg?.ready(); tg?.expand(); } catch {}
   
-      const tgUser = await waitForTelegramUser(); // <-- wait for mobile WebApp
+      const tgUser = await waitForTelegramUser();
   
-      let telegramId = tgUser?.id ? String(tgUser.id) : user?.telegramId ?? "demo123";
-      let username = tgUser?.username || tgUser?.first_name || user?.username || `user_${telegramId}`;
-      let language = user?.language ?? tgUser?.language_code ?? 'am';
+      // If Telegram user exists, use their id
+      let telegramId = tgUser?.id ? String(tgUser.id) : null;
+      let username = tgUser?.username || tgUser?.first_name || null;
+      let language = tgUser?.language_code || 'am';
   
+      // Only fallback to demo if no Telegram user
+      if (!telegramId) {
+        telegramId = user?.telegramId ?? "demo123";
+        username = user?.username ?? `user_${telegramId}`;
+      }
+  
+      // Fetch or create in RTDB
       const freshUser = await getOrCreateUser({
         telegramId,
         username,
@@ -78,7 +87,8 @@ const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeU
     };
   
     initUser();
-  }, [initializeUser]);
+  }, [initializeUser, user]);
+  
   
   return null;
 };

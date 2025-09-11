@@ -42,27 +42,36 @@ const Initializer: React.FC<{ initializeUser: any; user: any }> = ({ initializeU
   React.useEffect(() => {
     const initUser = async () => {
       try {
-        let telegramId = user?.telegramId || null;
-        let username = user?.username || null;
-        let lang = user?.lang || "am";
+        let telegramId = user?.telegramId || undefined;
+        let username = user?.username || undefined;
+        let lang = user?.lang || "am"; // ✅ match your store User type
 
         const userId = searchParams.get("id");
         const sig = searchParams.get("sig");
 
-        // If userId + sig is provided, verify with backend
-       
+        // ✅ If userId + sig are provided, verify with backend
+        if (userId && sig) {
+          const res = await fetch(`/api/verifyUser?id=${userId}&sig=${sig}`);
+          const data = await res.json();
 
-        // If still no telegramId, fallback
+          if (data.valid) {
+            telegramId = userId;
+            username = data.username || `user_${telegramId}`;
+            lang = data.lang || lang;
+          }
+        }
+
+        // ✅ Only fallback if still nothing
         if (!telegramId) {
           telegramId = "demo123";
           username = "demo_user";
         }
 
-        // Always fetch the latest user from RTDB
+        // ✅ Always fetch from RTDB
         const freshUser = await getOrCreateUser({
           telegramId,
           username: username!,
-          language,
+          lang, // 🔥 FIXED: pass `lang` not `language`
         });
 
         initializeUser(freshUser);
@@ -76,6 +85,7 @@ const Initializer: React.FC<{ initializeUser: any; user: any }> = ({ initializeU
 
   return null;
 };
+
 
 
 export default App;

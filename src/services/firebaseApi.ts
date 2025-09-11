@@ -1,6 +1,8 @@
-import { rtdb } from "../firebase/config";
-import { ref, get, set } from "firebase/database";
+
  // ✅ import your interface
+ import { ref, get as dbGet, set as dbSet } from "firebase/database";
+import { rtdb } from "../firebase/config";
+
 
 interface User {
   telegramId: string;
@@ -10,29 +12,23 @@ interface User {
   createdAt: string;
   updatedAt: string;
 }
-export async function getOrCreateUser(user: {
-  telegramId: string;
-  username: string;
-  language: string;
-}): Promise<User> {
+export async function getOrCreateUser(user: { telegramId: string; username: string; lang: string }) {
   const userRef = ref(rtdb, `users/${user.telegramId}`);
-  const snapshot = await get(userRef);
+  const snapshot = await dbGet(userRef);
 
   if (snapshot.exists()) {
-    return snapshot.val() as User; // ✅ existing user always matches interface
+    // ✅ Return existing user (preserve balance)
+    return snapshot.val();
+  } else {
+    const newUser = {
+      telegramId: user.telegramId,
+      username: user.username,
+      balance: 100, // start balance (example)
+      lang: user.lang,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    await dbSet(userRef, newUser);
+    return newUser;
   }
-
-  // create new user
-  const now = new Date().toISOString();
-  const newUser: User = {
-    telegramId: user.telegramId,
-    username: user.username,
-    balance: 50,
-    lang: user.language,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  await set(userRef, newUser);
-  return newUser;
 }

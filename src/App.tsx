@@ -36,39 +36,53 @@ function App() {
 // 🔑 Separate hook into a child component inside Router
 // 🔑 Separate hook into a child component inside Router
 const Initializer: React.FC<{ initializeUser: any, user: any }> = ({ initializeUser, user }) => {
- 
-  React.useEffect(() => {
+React.useEffect(() => {
   const initUser = async () => {
-    const tg = (window as any).Telegram?.WebApp;
-    try { tg?.ready(); tg?.expand(); } catch {}
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("id");
+    const sig = params.get("sig");
 
-    // ✅ Secure initData string
-    const initData = tg?.initData;
-    const tgUser = tg?.initDataUnsafe?.user;
+    if (id && sig) {
+      // 🔐 Verify with backend API
+      const res = await fetch(`/api/verify?id=${id}&sig=${sig}`);
+      const { valid } = await res.json();
 
-    if (!tgUser && !initData) {
-      console.error("❌ No Telegram user info available");
+      if (!valid) {
+        console.error("❌ Invalid Telegram signature!");
+        return;
+      }
+
+      // ✅ Use verified Telegram ID
+      const telegramId = id;
+      const username = `user_${telegramId}`; // fallback, real name is already in RTDB
+      const language = "am";
+
+      const freshUser = await getOrCreateUser({
+        telegramId,
+        username,
+        language,
+      });
+
+      initializeUser(freshUser);
       return;
     }
 
-    // Prefer Telegram-provided identity
-    if (!tgUser && !user) {
-  console.warn("No Telegram user detected, skipping init.");
-  return;
-}
-const telegramId = tgUser?.id ? String(tgUser.id) : user.telegramId;
+    // fallback: try Telegram WebApp context
+    const tg = (window as any).Telegram?.WebApp;
+    const tgUser = tg?.initDataUnsafe?.user;
+    if (tgUser) {
+      const telegramId = String(tgUser.id);
+      const username = tgUser.username || tgUser.first_name || `user_${telegramId}`;
+      const language = tgUser.language_code || "am";
 
-    const username = tgUser?.username || tgUser?.first_name || user?.username || `user_${telegramId}`;
-    const language = tgUser?.language_code || user?.language || "am";
+      const freshUser = await getOrCreateUser({
+        telegramId,
+        username,
+        language,
+      });
 
-    // ✅ Always fetch from RTDB
-    const freshUser = await getOrCreateUser({
-      telegramId,
-      username,
-      language,
-    });
-
-    initializeUser(freshUser);
+      initializeUser(freshUser);
+    }
   };
 
   initUser();

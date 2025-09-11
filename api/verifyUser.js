@@ -4,9 +4,8 @@ export default function handler(req, res) {
   const { id, sig } = req.query;
   const secret = process.env.TELEGRAM_BOT_TOKEN;
 
-  if (!secret) {
-    console.error("❌ TELEGRAM_BOT_TOKEN is not set in environment!");
-    return res.status(500).json({ error: "Server misconfiguration" });
+  if (!id || !sig) {
+    return res.status(400).json({ valid: false, error: "Missing params" });
   }
 
   const expectedSig = crypto

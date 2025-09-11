@@ -164,21 +164,31 @@ await sendMessage(chatId, t("en", "choose_lang"), { reply_markup: keyboard });
 }
 
 
+import crypto from "crypto";
+
 async function handlePlaygame(message) {
   const chatId = message.chat.id;
-  const telegramId = message.from.id;
+  const telegramId = String(message.from.id);
 
-  // Check or create the user first
+  // ✅ Sign Telegram ID
+  const secret = process.env.TELEGRAM_BOT_TOKEN;
+  const sig = crypto
+    .createHmac("sha256", secret)
+    .update(telegramId)
+    .digest("hex");
+
+  // Build signed URL
+  const baseUrl = process.env.WEBAPP_URL || "https://fridaybots.vercel.app";
+  const webAppUrl = `${baseUrl}?id=${telegramId}&sig=${sig}`;
+
+  // Ensure user exists in RTDB (your existing logic)
   const userRef = ref(rtdb, `users/${telegramId}`);
   const userSnap = await get(userRef);
-
-  let user;
   if (!userSnap.exists()) {
-    // Create user if missing
-    user = {
-      telegramId: String(telegramId),
+    const user = {
+      telegramId,
       username: message.from.username || message.from.first_name || `user_${telegramId}`,
-      balance: 0,      // starting balance
+      balance: 0,
       gamesPlayed: 0,
       gamesWon: 0,
       totalWinnings: 0,
@@ -187,26 +197,23 @@ async function handlePlaygame(message) {
       updatedAt: new Date().toISOString(),
     };
     await set(userRef, user);
-  } else {
-    user = userSnap.val();
   }
 
-  const lang = user.lang || "am";
-
-  // Now send the WebApp button
+  // Send signed webapp button
   const keyboard = {
     inline_keyboard: [
       [
         {
           text: "🎮 Open Friday Bingo",
-          web_app: { url: process.env.WEBAPP_URL || "https://fridaybots.vercel.app" },
+          web_app: { url: webAppUrl },
         },
       ],
     ],
   };
 
-  await sendMessage(chatId, t(lang, "play"), { reply_markup: keyboard });
+  await sendMessage(chatId, t("am", "play"), { reply_markup: keyboard });
 }
+
 
 
 async function handleDeposit(message) {

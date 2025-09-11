@@ -26,8 +26,7 @@ interface AuthState {
 // Use the persist middleware properly with the correct typing.
 export const useAuthStore = create<AuthState>(
   persist(
-    (set) => ({
-      user: null,
+    (set) => ({ 
       loading: false,
       initializeUser: (user) =>
         set({

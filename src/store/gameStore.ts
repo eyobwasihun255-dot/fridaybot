@@ -49,8 +49,7 @@ interface GameState {
   joinRoom: (roomId: string) => void;
   selectCard: (cardId: string) => void;
   placeBet: () => Promise<boolean>;
-  checkBingo: () => Promise<boolean>;
-
+  showLoserPopup: boolean; 
   displayedCalledNumbers: { [roomId: string]: number[] };
   startNumberStream: (roomId: string, gameId: string) => void;
    winnerCard: BingoCard | null;      // Winner card for the current game
@@ -59,6 +58,7 @@ interface GameState {
    stopNumberDraw: () => void;
   setWinnerCard: (card: BingoCard) => void; // Setter for winner card
   setShowWinnerPopup: (show: boolean) => void; // Setter for popup visibility
+  setShowLoserPopup: (show: boolean) => void; // Setter for popup visibility
   endGame: (roomId: string) => void;
   fetchBingoCards: () => void;
   cancelBet: (cardId?: string) => Promise<boolean>;
@@ -117,6 +117,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   bingoCards: [],
   loading: false,
   startingGame: false, // ✅ Initialize startingGame flag
+  showLoserPopup: false, // default
+
+setShowLoserPopup: (show: boolean) => set({ showLoserPopup: show }),
+
  // add this
 setWinnerCard: (card) => set({ winnerCard: card, showWinnerPopup: false }),
 setShowWinnerPopup: (show: boolean) => set({ showWinnerPopup: show }),
@@ -461,56 +465,7 @@ cancelBet: async (cardId?: string) => {
   }
 },
 
-checkBingo: async () => {
-  const { selectedCard, currentRoom, setWinnerCard, setShowWinnerPopup } = get();
-  const { user } = useAuthStore.getState();
 
-  if (!selectedCard || !currentRoom || !user) return false;
-
-  try {
-     if (currentRoom.gameStatus !== "ended") {
-      alert("⚠️ You can only claim Bingo after all numbers are called!");
-      return false;
-    }
-
-    // ✅ Check if current user is the declared room winner
-    if (currentRoom.winner !== user.telegramId) {
-      alert("❌ You are not the winner for this round!");
-      return false;
-    }
-
-    // ✅ Check if payout already done
-    if (currentRoom.payed) {
-      alert("⚠️ Payout already processed!");
-      return false;
-    }
-
-    // ✅ Calculate payout: players × betAmount × 0.9
-    const activePlayers = currentRoom.players ? Object.keys(currentRoom.players).length : 0;
-    const payout = activePlayers * currentRoom.betAmount * 0.9;
-
-    // ✅ Add balance atomically
-    const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
-    await runTransaction(balanceRef, (current) => (current || 0) + payout);
-
-    // ✅ Update room to mark payed = true
-    const roomRef = ref(rtdb, `rooms/${currentRoom.id}`);
-    await update(roomRef, {
-      payout,
-      payed: true,   // 👈 mark payout done
-    });
-
-    // ✅ Update local state
-    setWinnerCard(selectedCard);
-    setShowWinnerPopup(true);
-
-    console.log(`🎉 Bingo! ${user.username} wins: ${payout}`);
-    return true;
-  } catch (err) {
-    console.error("❌ Error processing bingo win:", err);
-    return false;
-  }
-},
 
   fetchBingoCards: () => {
       const { currentRoom } = get();

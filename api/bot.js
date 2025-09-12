@@ -442,7 +442,7 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
   // Account details
   const accountDetails = method === "CBE"
     ? { accNumber: "በቅርቡ ይጠብቁ", accHolder: "Friday Bingo" }
-    : { phone: "0900633195", holder: "Mikeyas" };
+    : { phone: "0948404314", holder: "Mare" };
 
   // Escape Markdown special chars
   const escapeMD = (text) => text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");

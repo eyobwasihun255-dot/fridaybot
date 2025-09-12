@@ -66,7 +66,7 @@ const Room: React.FC = () => {
    
    const { winnerCard, showWinnerPopup, closeWinnerPopup } = useGameStore();
 
-  const { currentRoom, bingoCards, joinRoom, selectCard, placeBet, checkBingo , selectedCard } = useGameStore();
+  const { currentRoom, bingoCards, joinRoom, selectCard, placeBet, selectedCard } = useGameStore();
   const { user, updateBalance } = useAuthStore();
  const userCard = bingoCards.find(
   (card) =>
@@ -389,58 +389,86 @@ const handleBingoClick = async () => {
     }
 
     try {
-      const activePlayersCount = currentRoom.players
-        ? Object.keys(currentRoom.players).length
-        : 0;
-      const payout = activePlayersCount * currentRoom.betAmount * 0.9;
+  const activePlayersCount = currentRoom.players
+    ? Object.keys(currentRoom.players).length
+    : 0;
 
-      // Update player balance
-      const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
-      await runTransaction(balanceRef, (current) => (current || 0) + payout);
+  // ✅ Calculate payout and revenue
+  const payout = activePlayersCount * currentRoom.betAmount * 0.9;
+  const revenueAmount = activePlayersCount * currentRoom.betAmount * 0.1;
 
-      // Register player as winner in room
-      const roomWinnersRef = ref(rtdb, `rooms/${currentRoom.id}/winners`);
-      const newWinner = {
-        cardId: displayedCard.id,
-        telegramId: user.telegramId,
-        username: user.username || `user_${user.telegramId}`,
-        payout,
-        timestamp: Date.now(),
-        checked: false
-      };
-      await runTransaction(roomWinnersRef, (current: any) => {
-        const arr = Array.isArray(current) ? current : [];
-        arr.push(newWinner);
-        return arr;
-      });
+  // Update player balance
+  const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
+  await runTransaction(balanceRef, (current) => (current || 0) + payout);
 
-      // ✅ Additional: log winning history
-      const winningHistoryRef = ref(rtdb, `winningHistory`);
-      const historyEntry = {
-        gameId: currentRoom.gameId,
-        rollNumber: currentRoom.rollNumber ?? 0,
-        roomId: currentRoom.id,
-        playerId: user.telegramId,
-        username: user.username || `user_${user.telegramId}`,
-        cardId: displayedCard.id,
-        date: Date.now(),
-        payout
-      };
-      const newHistoryRef = ref(rtdb, `winningHistory/${currentRoom.gameId}_${user.telegramId}_${Date.now()}`);
-      await update(newHistoryRef, historyEntry);
+  // Register player as winner in room
+  const roomWinnersRef = ref(rtdb, `rooms/${currentRoom.id}/winners`);
+  const newWinner = {
+    cardId: displayedCard.id,
+    telegramId: user.telegramId,
+    username: user.username || `user_${user.telegramId}`,
+    payout,
+    timestamp: Date.now(),
+    checked: false
+  };
+  await runTransaction(roomWinnersRef, (current: any) => {
+    const arr = Array.isArray(current) ? current : [];
+    arr.push(newWinner);
+    return arr;
+  });
 
-      // Mark room as paid (optional if only one winner)
-      await update(ref(rtdb, `rooms/${currentRoom.id}`), { payed: true });
+  // ✅ Log winning history
+  const winningHistoryRef = ref(rtdb, `winningHistory/${currentRoom.gameId}_${user.telegramId}_${Date.now()}`);
+  const historyEntry = {
+    gameId: currentRoom.gameId,
+    rollNumber: currentRoom.rollNumber ?? 0,
+    roomId: currentRoom.id,
+    playerId: user.telegramId,
+    username: user.username || `user_${user.telegramId}`,
+    cardId: displayedCard.id,
+    date: Date.now(),
+    payout
+  };
+  await update(winningHistoryRef, historyEntry);
 
-      // Update local state
-      useGameStore.getState().setWinnerCard(displayedCard);
-      useGameStore.getState().setShowWinnerPopup(true);
-      useGameStore.getState().endGame(currentRoom.id);
+  // ✅ Log revenue data
+  const revenueRef = ref(rtdb, `revenue/${currentRoom.gameId}_${Date.now()}`);
+  const revenueEntry = {
+    gameId: currentRoom.gameId,
+    roomId: currentRoom.id,
+    datetime: Date.now(),
+    amount: revenueAmount,
+    drawned: false
+  };
+  await update(revenueRef, revenueEntry);
 
-    } catch (err) {
-      console.error("❌ Error processing Bingo payout:", err);
-      setGameMessage(t('error_processing_bingo'));
+  // Mark room as paid (optional if only one winner)
+  await update(ref(rtdb, `rooms/${currentRoom.id}`), { payed: true });
+
+  // Update local state
+  // Winner logic
+useGameStore.getState().setWinnerCard(displayedCard);
+useGameStore.getState().setShowWinnerPopup(true);
+
+// 🔴 If this player is not the winner, show loser popup
+Object.entries(currentRoom.players || {}).forEach(([pid]) => {
+  if (pid !== user.telegramId) {
+    // Only losers see this
+    if (useAuthStore.getState().user?.telegramId === pid) {
+      useGameStore.getState().setShowLoserPopup(true);
     }
+  }
+});
+
+// End the game
+useGameStore.getState().endGame(currentRoom.id);
+
+
+} catch (err) {
+  console.error("❌ Error processing Bingo payout:", err);
+  setGameMessage(t('error_processing_bingo'));
+}
+
   } else {
     setGameMessage(t('bingo_not_allowed'));
   }
@@ -491,72 +519,73 @@ return (
 
     {/* Main content row */}
     <div className="flex flex-row gap-2 w-full max-w-full h-full">
-      {loserPopup.visible && (
+        {useGameStore((s) => s.showLoserPopup) && (
   <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
     <div className="bg-white text-black rounded-2xl shadow-2xl p-8 w-96 max-w-full text-center">
-      <h2 className="text-2xl font-bold mb-3"> {loserPopup.message} </h2>
+      <h2 className="text-2xl font-bold mb-3">{t('you_lost')}</h2>
       <button
-        onClick={() => setLoserPopup({ visible: false, message: '' })}
+        onClick={() => useGameStore.getState().setShowLoserPopup(false)}
         className="mt-2 px-5 py-3 bg-red-500 text-white rounded-xl shadow-lg hover:scale-105 transform transition"
       >
-        Close
+        {t('close')}
       </button>
     </div>
   </div>
 )}
 
-{showWinnerPopup && winnerCard && (
-  <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-    <div className="relative bg-gradient-to-br from-red-500 via-yellow-400 to-blue-500 rounded-3xl shadow-2xl p-8 w-96 max-w-full text-center overflow-hidden animate-scale-in">
 
-      {/* Confetti */}
-      {[...Array(25)].map((_, i) => (
-        <div
-          key={i}
-          className="absolute text-lg animate-fall"
-          style={{
-            top: `${Math.random() * 100}%`,
-            left: `${Math.random() * 100}%`,
-            animationDelay: `${Math.random() * 2}s`,
-          }}
+  {showWinnerPopup && winnerCard && (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+      <div className="relative bg-gradient-to-br from-red-500 via-yellow-400 to-blue-500 rounded-3xl shadow-2xl p-8 w-96 max-w-full text-center overflow-hidden animate-scale-in">
+
+        {/* Confetti */}
+        {[...Array(25)].map((_, i) => (
+          <div
+            key={i}
+            className="absolute text-lg animate-fall"
+            style={{
+              top: `${Math.random() * 100}%`,
+              left: `${Math.random() * 100}%`,
+              animationDelay: `${Math.random() * 2}s`,
+            }}
+          >
+            🎉
+          </div>
+        ))}
+
+        {/* Bingo balls */}
+        
+        {/* Trumpets */}
+        <div className="absolute -top-6 -left-10 text-5xl animate-wiggle">🎺</div>
+        <div className="absolute -top-6 -right-10 text-5xl animate-wiggle">🎺</div>
+
+        {/* Close button */}
+        <button
+          onClick={closeWinnerPopup}
+          className="absolute top-2 right-2 text-white hover:text-gray-200"
         >
-          🎉
-        </div>
-      ))}
+          ✕
+        </button>
 
-      {/* Bingo balls */}
-      
-      {/* Trumpets */}
-      <div className="absolute -top-6 -left-10 text-5xl animate-wiggle">🎺</div>
-      <div className="absolute -top-6 -right-10 text-5xl animate-wiggle">🎺</div>
+        {/* BINGO text */}
+        <h2 className="text-5xl font-extrabold tracking-wide text-yellow-300 drop-shadow-lg animate-bounce">
+        {t('bingo')}!
+        </h2>
 
-      {/* Close button */}
-      <button
-        onClick={closeWinnerPopup}
-        className="absolute top-2 right-2 text-white hover:text-gray-200"
-      >
-        ✕
-      </button>
+        <p className="mb-4 text-lg text-white font-semibold">
+          {t('card')} #{winnerCard.serialNumber}  {t('winner')} 🎉
+        </p>
 
-      {/* BINGO text */}
-      <h2 className="text-5xl font-extrabold tracking-wide text-yellow-300 drop-shadow-lg animate-bounce">
-       {t('bingo')}!
-      </h2>
-
-      <p className="mb-4 text-lg text-white font-semibold">
-        {t('card')} #{winnerCard.serialNumber}  {t('winner')} 🎉
-      </p>
-
-      {/* Close button big */}
-      <button
-        onClick={closeWinnerPopup}
-        className="mt-2 px-5 py-3 bg-gradient-to-r from-green-500 to-blue-600 text-white rounded-xl shadow-lg hover:scale-105 transform transition"
-      >
-        Close
-      </button>
+        {/* Close button big */}
+        <button
+          onClick={closeWinnerPopup}
+          className="mt-2 px-5 py-3 bg-gradient-to-r from-green-500 to-blue-600 text-white rounded-xl shadow-lg hover:scale-105 transform transition"
+        >
+          Close
+        </button>
+      </div>
     </div>
-  </div>
-)}
+  )}
 
 
 {/* Game Message Popup */}

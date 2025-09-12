@@ -71,20 +71,60 @@ function generateDrawnNumbersMultiWinner(cards) {
   const winnerCard = cards[Math.floor(Math.random() * cards.length)];
 
   // 2️⃣ Pick one winning pattern for this card
-  const patterns = pickPatternNumbers(winnerCard); // should return array of arrays
+  const patterns = pickPatternNumbers(winnerCard);
   const winnerPattern = patterns[Math.floor(Math.random() * patterns.length)];
 
-  // 3️⃣ Add the full winning pattern numbers
+  // 3️⃣ Add the FULL winning pattern numbers
   winnerPattern.forEach((n) => safeAdd(n));
 
-  // 4️⃣ Fill the rest with random numbers from 1–75 not in usedNumbers
+  // 4️⃣ For other cards: pick a pattern & leave 1 missing
+  const missingNumbers = [];
+  cards.forEach((card) => {
+    if (card.id === winnerCard.id) return; // skip winner
+
+    const pats = pickPatternNumbers(card);
+    const chosen = pats[Math.floor(Math.random() * pats.length)];
+
+    // Randomly drop 1 number from this pattern
+    const missIndex = Math.floor(Math.random() * chosen.length);
+    chosen.forEach((n, i) => {
+      if (i !== missIndex) safeAdd(n);
+    });
+
+    // Save the missing number for later (will be in 26–75 range)
+    missingNumbers.push(chosen[missIndex]);
+  });
+
+  // 5️⃣ Fill up to 25 numbers total
   while (drawnNumbers.length < 25) {
     safeAdd(Math.floor(Math.random() * 75) + 1);
   }
 
+  // Shuffle first 25 numbers
+  const first25 = shuffleArray(drawnNumbers.slice(0, 25));
+
+  // 6️⃣ From 26–75: put missing numbers first, then fill rest
+  const rest = [];
+  missingNumbers.forEach((n) => {
+    if (!usedNumbers.has(n)) {
+      usedNumbers.add(n);
+      rest.push(n);
+    }
+  });
+
+  while (first25.length + rest.length < 75) {
+    const rand = Math.floor(Math.random() * 75) + 1;
+    if (!usedNumbers.has(rand)) {
+      usedNumbers.add(rand);
+      rest.push(rand);
+    }
+  }
+
+  const finalDrawn = [...first25, ...shuffleArray(rest)];
+
   winners.push(winnerCard.id);
 
-  return { drawnNumbers, winners };
+  return { drawnNumbers: finalDrawn, winners };
 }
 
 

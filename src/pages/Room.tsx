@@ -5,10 +5,8 @@ import { useLanguageStore } from '../store/languageStore';
 import { useGameStore } from '../store/gameStore';
 import { useAuthStore } from '../store/authStore';
 import BingoGrid from '../components/BingoGrid';
-
-
 import { rtdb } from '../firebase/config';
-import { ref, runTransaction, update, onValue} from 'firebase/database';
+import { ref, runTransaction, update } from 'firebase/database';
 
 const CountdownOverlay = ({
   countdownEndAt,
@@ -237,25 +235,6 @@ React.useEffect(() => {
 
   
 }, [currentRoom]);
-
-React.useEffect(() => {
-  if (!currentRoom?.id || !user) return;
-
-  const winnersRef = ref(rtdb, `rooms/${currentRoom.id}/winners`);
-  const unsubscribe = onValue(winnersRef, (snap) => {
-    const winners = snap.val() || [];
-    const winnerIds = winners.map(w => w.telegramId);
-
-    const playerData = currentRoom.players?.[user.telegramId];
-
-    // ✅ If user tried bingo but is NOT in winners → show loser popup
-    if (playerData?.attemptedBingo && !winnerIds.includes(user.telegramId)) {
-      useGameStore.getState().setShowLoserPopup(true);
-    }
-  });
-
-  return () => unsubscribe();
-}, [currentRoom?.id, user?.telegramId]);
 
 React.useEffect(() => {
   if (!currentRoom?.countdownEndAt || currentRoom?.gameStatus !== "countdown") return;

@@ -195,17 +195,7 @@ React.useEffect(() => {
   }
 }, [currentRoom?.gameStatus]);
 
-React.useEffect(() => {
-    if (!currentRoom || !user) return;
 
-    const player = currentRoom.players?.[user.telegramId];
-    const winnerIds = currentRoom.winners?.map((w: any) => w.userId) || [];
-
-    // ✅ If player attempted bingo or just in the room and is NOT a winner → show loser popup
-    if (player && !winnerIds.includes(player.id)) {
-      useGameStore.getState().setShowLoserPopup(true);
-    }
-  }, [currentRoom?.winners, currentRoom?.players, user?.telegramId]);
   React.useEffect(() => {
     if (roomId) {
       joinRoom(roomId);

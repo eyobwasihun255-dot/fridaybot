@@ -64,9 +64,12 @@ const Room: React.FC = () => {
   const navigate = useNavigate();
   const { t ,language} = useLanguageStore();
    
-   const { winnerCard, showWinnerPopup, closeWinnerPopup } = useGameStore();
-
-  const { currentRoom, bingoCards, joinRoom, selectCard, placeBet, selectedCard } = useGameStore();
+ const {
+    winnerCard, showWinnerPopup, closeWinnerPopup,
+    currentRoom, bingoCards, joinRoom, selectCard,
+    placeBet, selectedCard,
+    showLoserPopup, setShowLoserPopup
+  } = useGameStore();
   const { user, updateBalance } = useAuthStore();
  const userCard = bingoCards.find(
   (card) =>
@@ -519,7 +522,7 @@ return (
 
     {/* Main content row */}
     <div className="flex flex-row gap-2 w-full max-w-full h-full">
-        {useGameStore((s) => s.showLoserPopup) && (
+      {showLoserPopup && (
   <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
     <div className="bg-white text-black rounded-2xl shadow-2xl p-8 w-96 max-w-full text-center">
       <h2 className="text-2xl font-bold mb-3">{t('you_lost')}</h2>
@@ -533,6 +536,7 @@ return (
   </div>
 )}
 
+        
 
   {showWinnerPopup && winnerCard && (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">

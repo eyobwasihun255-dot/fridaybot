@@ -211,18 +211,40 @@ for (const cardId of winnerIds) {
     const existingGame = gameSnap.val();
 
     if (!existingGame?.betsDeducted) {
-      const roomSnap = await get(roomRef);
-      const roomValue = roomSnap.val();
+  const roomSnap = await get(roomRef);
+  const roomValue = roomSnap.val();
 
-      if (roomValue?.players) {
-        for (const playerId of Object.keys(roomValue.players)) {
-          const balanceRef = ref(rtdb, `users/${playerId}/balance`);
-          await runTransaction(balanceRef, current => (current || 0) - (roomValue.betAmount || 0));
-        }
-      }
+  if (roomValue?.players) {
+    for (const playerId of Object.keys(roomValue.players)) {
+      const betAmount = roomValue.betAmount || 0;
+      const balanceRef = ref(rtdb, `users/${playerId}/balance`);
 
-      await update(gameRef, { betsDeducted: true });
+      // Deduct balance
+      await runTransaction(balanceRef, current => (current || 0) - betAmount);
+
+      // Get user details
+      const userSnap = await get(ref(rtdb, `users/${playerId}`));
+      const userData = userSnap.val() || {};
+      const username = userData.username || "Unknown";
+
+      // Register deduction log
+      const deductId = uuidv4();
+      const deductRef = ref(rtdb, `deductRdbs/${deductId}`);
+      await fbset(deductRef, {
+        id: deductId,
+        username,
+        userId: playerId,
+        amount: betAmount,
+        gameId: gameData.id,
+        roomId,
+        date: Date.now()
+      });
     }
+  }
+
+  await update(gameRef, { betsDeducted: true });
+}
+
 
     await fbset(gameRef, gameData);
 

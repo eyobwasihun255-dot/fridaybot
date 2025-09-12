@@ -49,11 +49,11 @@ interface GameState {
   joinRoom: (roomId: string) => void;
   selectCard: (cardId: string) => void;
   placeBet: () => Promise<boolean>;
-  showLoserPopup: boolean; 
   displayedCalledNumbers: { [roomId: string]: number[] };
   startNumberStream: (roomId: string, gameId: string) => void;
    winnerCard: BingoCard | null;      // Winner card for the current game
   showWinnerPopup: boolean; 
+  showLoserPopup: boolean,
    closeWinnerPopup: () => void; 
    stopNumberDraw: () => void;
   setWinnerCard: (card: BingoCard) => void; // Setter for winner card
@@ -117,7 +117,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   bingoCards: [],
   loading: false,
   startingGame: false, // ✅ Initialize startingGame flag
-  showLoserPopup: false, // default
+   // default
 
 setShowLoserPopup: (show: boolean) => set({ showLoserPopup: show }),
 

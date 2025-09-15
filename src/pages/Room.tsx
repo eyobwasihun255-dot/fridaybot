@@ -250,6 +250,37 @@ React.useEffect(() => {
 }, [currentRoom?.countdownEndAt, currentRoom?.gameStatus]);
 // Countdown tick
 
+// Inside Room.tsx, after your other useEffects
+React.useEffect(() => {
+  if (!currentRoom || !user) return;
+
+  const displayedCard = bingoCards.find(
+    (card) =>
+      card.roomId === currentRoom.id &&
+      card.claimed &&
+      card.claimedBy === user.telegramId
+  ) || selectedCard;
+
+  if (!displayedCard) return;
+
+  // If the card is claimed but user balance < room bet amount → cancel bet
+  if (!currentRoom.isDemoRoom && (user.balance || 0) < currentRoom.betAmount) {
+    (async () => {
+      const cardId = displayedCard.id;
+      const success = await cancelBet(cardId);
+      if (success) {
+        setHasBet(false);
+        setGameMessage(t("insufficient_balance"));
+      }
+    })();
+  } else {
+    // If balance is enough and card is claimed, mark bet as active
+    const playerData = currentRoom.players?.[user.telegramId];
+    if (playerData?.betAmount && playerData.betAmount > 0) {
+      setHasBet(true);
+    }
+  }
+}, [currentRoom, user, bingoCards, selectedCard]);
 
 
   const handleCardSelect = (cardId: string) => {
@@ -678,18 +709,17 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
 
         return (
           <div
-  key={`${col}-${num}`}
-  className={`flex items-center justify-center p-[3px] rounded font-bold text-[11px] transition
-    ${isLastCalled
-      ? "bg-green-500 text-white scale-105"
-      : isPreviouslyCalled
-      ? "bg-red-500 text-white"
-      : "bg-white/20"}
-  `}
->
-  {num}
-</div>
-
+            key={`${col}-${num}`}
+            className={`flex items-center justify-center p-[3px] rounded font-bold text-[11px] transition
+              ${isLastCalled
+                ? "bg-green-500 text-white scale-105"
+                : isPreviouslyCalled
+                ? "bg-red-500 text-white"
+                : "bg-white/20"}
+            `}
+          >
+            {num}
+          </div>
         );
       })
     )}

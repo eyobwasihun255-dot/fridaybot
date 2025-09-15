@@ -2,11 +2,8 @@
   "version": 2,
   "rewrites": [
     {
-      "source": "/:path*",
-      "destination": "/index.html",
-      "has": [
-        { "type": "host", "value": "https://fridaybots.vercel.app/" }
-      ]
+      "source": "/((?!api).*)",
+      "destination": "/index.html"
     }
   ]
 }

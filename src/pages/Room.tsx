@@ -760,11 +760,11 @@ return (
         <div className="grid grid-cols-5 gap-1 mb-1">
          {["B", "I", "N", "G", "O"].map((letter, idx) => {
   const colors = [
-    "bg-gradient-to-br from-red-500 to-pink-500",   // B
-    "bg-gradient-to-br from-orange-500 to-yellow-500", // I
-    "bg-gradient-to-br from-green-500 to-lime-500", // N
-    "bg-gradient-to-br from-blue-500 to-cyan-500",  // G
-    "bg-gradient-to-br from-purple-500 to-pink-500" // O
+    "bg-gradient-to-br from-red-500 to-pink-500 w-8 h-8 flex items-center justify-center rounded font-bold text-[11px]",   // B
+    "bg-gradient-to-br from-orange-500 to-yellow-500 w-8 h-8 flex items-center justify-center rounded font-bold text-[11px]", // I
+    "bg-gradient-to-br from-green-500 to-lime-500 w-8 h-8 flex items-center justify-center rounded font-bold text-[11px]", // N
+    "bg-gradient-to-br from-blue-500 to-cyan-500 w-8 h-8 flex items-center justify-center rounded font-bold text-[11px]",  // G
+    "bg-gradient-to-br from-purple-500 to-pink-500 w-8 h-8 flex items-center justify-center rounded font-bold text-[11px]" // O
   ];
 
   return (

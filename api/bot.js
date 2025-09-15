@@ -427,6 +427,8 @@ if (pending?.type === "awaiting_player_lookup") {
   // Call your API
   try {
     const response = await fetch(`${process.env.WEBAPP_URL}/api/player/${query}`);
+    console.log("Fetching player:", `${process.env.WEBAPP_URL}/api/player/${query}`);
+
     if (!response.ok) {
       await sendMessage(chatId, "❌ Player not found.");
       pendingActions.delete(userId);

@@ -85,8 +85,10 @@ const translations = {
     'players_in_room': 'ተጫዋቾች ',
     'no_card_selected': 'ካርቴላ አልተመረጠም...',
     'game_already_in_progress': 'ጨዋታ በሂደት ላይ ነው',
+    'home': 'back',
   },en: {
     // Header
+    'home': 'back',
     'cards': 'Card',
     'friday_bingo': 'Friday Bingo',
     'balance': 'Balance',

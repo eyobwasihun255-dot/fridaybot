@@ -1,49 +1,55 @@
-import { ref, get, query, orderByChild, equalTo } from "firebase/database";
+import { ref, get } from "firebase/database";
 import { rtdb } from "../bot/firebaseConfig.js";
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
-  const { id } = req.body;
+  const { id } = req.body; // POST body
   if (!id) return res.status(400).json({ error: "Player ID or username is required" });
 
   try {
     let user = null;
 
-    // 1️⃣ Try telegramId directly
-    const userSnap = await get(ref(rtdb, `users/${id}`));
-    if (userSnap.exists()) {
-      user = userSnap.val();
-    } else {
-      // 2️⃣ Try username query
-      const usernameQuery = query(ref(rtdb, "users"), orderByChild("username"), equalTo(id));
-      const usernameSnap = await get(usernameQuery);
-      if (usernameSnap.exists()) {
-        user = Object.values(usernameSnap.val())[0];
-      }
-    }
+    // --- Fetch all users and find by telegramId or username ---
+    const usersSnap = await get(ref(rtdb, "users"));
+    const users = usersSnap.val() || {};
+    user = Object.values(users).find(
+      u => u.telegramId === id || u.username === id
+    );
 
     if (!user) return res.status(404).json({ error: "User not found" });
 
     // --- Aggregate winning history ---
-    const winningSnap = await get(query(ref(rtdb, "winningHistory"), orderByChild("playerId"), equalTo(user.telegramId)));
+    const winningSnap = await get(ref(rtdb, "winningHistory"));
+    const winnings = winningSnap.val() || {};
     let totalWinnings = 0, gamesWon = 0;
-    if (winningSnap.exists()) {
-      Object.values(winningSnap.val()).forEach(entry => {
+
+    Object.values(winnings).forEach(entry => {
+      if (entry.playerId === user.telegramId) {
         totalWinnings += entry.payout || 0;
         gamesWon += 1;
-      });
-    }
+      }
+    });
 
     // --- Aggregate deposits ---
-    const depositSnap = await get(query(ref(rtdb, "deposits"), orderByChild("userId"), equalTo(user.telegramId)));
+    const depositSnap = await get(ref(rtdb, "deposits"));
+    const deposits = depositSnap.val() || {};
     let totalDeposits = 0;
-    if (depositSnap.exists()) Object.values(depositSnap.val()).forEach(entry => totalDeposits += entry.amount || 0);
+
+    Object.values(deposits).forEach(entry => {
+      if (entry.userId === user.telegramId) totalDeposits += entry.amount || 0;
+    });
 
     // --- Aggregate losses ---
-    const deductSnap = await get(query(ref(rtdb, "deductRdbs"), orderByChild("userId"), equalTo(user.telegramId)));
+    const deductSnap = await get(ref(rtdb, "deductRdbs"));
+    const deductions = deductSnap.val() || {};
     let totalLosses = 0;
-    if (deductSnap.exists()) Object.values(deductSnap.val()).forEach(entry => totalLosses += entry.amount || 0);
+
+    Object.values(deductions).forEach(entry => {
+      if (entry.userId === user.telegramId) totalLosses += entry.amount || 0;
+    });
 
     return res.status(200).json({
       telegramId: user.telegramId,

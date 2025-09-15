@@ -581,7 +581,14 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
       const user = snap.val();
       const newBalance = (user.balance || 0) - req.amount;
       await update(userRef, { balance: newBalance });
-
+      const withdrawRef = ref(rtdb, "withdrawals");
+    await push(withdrawRef, {
+      userId: req.userId,
+      amount: req.amount,
+      account: req.account,
+      date: new Date().toISOString(), // store date in ISO format
+      status: "approved", // you can also track "pending", "rejected", etc.
+    });
       await sendMessage(req.userId, t(lang, "approved_withdraw", req.amount, req.account));
       await sendMessage(chatId, t(lang, "admin_approved_withdraw", `@${user.username || req.userId}`, req.amount));
     }

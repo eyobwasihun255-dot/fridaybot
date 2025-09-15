@@ -54,6 +54,7 @@ interface GameState {
    winnerCard: BingoCard | null;      // Winner card for the current game
   showWinnerPopup: boolean; 
   showLoserPopup: boolean,
+  
    closeWinnerPopup: () => void; 
    stopNumberDraw: () => void;
   setWinnerCard: (card: BingoCard) => void; // Setter for winner card
@@ -110,7 +111,11 @@ async function resetAllCardsAndPlayers(roomId: string) {
 export const useGameStore = create<GameState>((set, get) => ({
   rooms: [],
   drawIntervalId: null,
-  displayedCalledNumbers:[],
+  displayedCalledNumbers: {} as { [roomId: string]: number[] },
+ winnerCard: null,
+showWinnerPopup: false,
+showLoserPopup: false,
+
   currentRoom: null,
   isBetActive: false,
   selectedCard: null,

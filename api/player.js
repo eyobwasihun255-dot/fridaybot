@@ -1,5 +1,5 @@
 // api/player/[id].js
-import { rtdb } from "../../bot/firebaseConfig.js";
+import { rtdb } from "../bot/firebaseConfig.js";
 import { ref, get } from "firebase/database";
 
 // Utility: format date

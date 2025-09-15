@@ -1,6 +1,5 @@
-
 import express from "express";
-import { rtdb } from "../bot/firebaseConfig.js";// adjust your path
+import { rtdb } from "../bot/firebaseConfig.js"; // adjust path if needed
 import { ref, get } from "firebase/database";
 
 const app = express();
@@ -12,8 +11,16 @@ function formatDate(ts) {
   return d.toISOString().split("T")[0];
 }
 
-app.get("/api/revenue", async (req, res) => {
+// Revenue route with passcode check
+app.get("/api/revenue/:passcode", async (req, res) => {
   try {
+    const { passcode } = req.params;
+
+    // ✅ Check passcode
+    if (passcode !== "12123434") {
+      return res.status(403).json({ error: "Forbidden: invalid passcode" });
+    }
+
     const revenueRef = ref(rtdb, "revenue");
     const snapshot = await get(revenueRef);
 
@@ -40,14 +47,14 @@ app.get("/api/revenue", async (req, res) => {
       }
     });
 
-    res.json({
+    return res.json({
       totalByDate,
       undrawnedTotal,
       undrawnedDetails,
     });
   } catch (err) {
     console.error("Error fetching revenue:", err);
-    res.status(500).json({ error: "Failed to fetch revenue" });
+    return res.status(500).json({ error: "Failed to fetch revenue" });
   }
 });
 

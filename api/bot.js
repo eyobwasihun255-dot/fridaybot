@@ -411,23 +411,15 @@ async function handleUserMessage(message) {
     pendingActions.delete(userId);
     return;
   }
-  if (text.startsWith("/player")) {
-  if (!ADMIN_IDS.includes(userId)) {
-    await sendMessage(chatId, "❌ You are not authorized to use this command.");
-    return;
-  }
+  if (pending?.type === "awaiting_player_lookup") {
+  const id = text.replace("@", "").trim();
 
-  await sendMessage(chatId, "🔎 Enter the Telegram ID or username of the player:");
-  pendingActions.set(userId, { type: "awaiting_player_lookup" });
-  return;
-}
-if (pending?.type === "awaiting_player_lookup") {
-  const query = text.replace("@", "").trim(); // remove @ if username
-
-  // Call your API
   try {
-    const response = await fetch(`${process.env.WEBAPP_URL}/api/player/${query}`);
-    console.log("Fetching player:", `${process.env.WEBAPP_URL}/api/player/${query}`);
+    const response = await fetch(`${process.env.WEBAPP_URL}/api/player`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
 
     if (!response.ok) {
       await sendMessage(chatId, "❌ Player not found.");
@@ -437,7 +429,6 @@ if (pending?.type === "awaiting_player_lookup") {
 
     const playerData = await response.json();
 
-    // Format the JSON nicely for Telegram
     const info = `
 👤 Username: ${playerData.username}
 🆔 Telegram ID: ${playerData.telegramId}
@@ -460,6 +451,7 @@ if (pending?.type === "awaiting_player_lookup") {
   pendingActions.delete(userId);
   return;
 }
+
 
   // ====================== FALLBACK ======================
   await sendMessage(chatId, t(lang, "fallback"));

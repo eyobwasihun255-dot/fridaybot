@@ -1,14 +1,18 @@
-import { ref, get, query, orderByChild, equalTo, child } from "firebase/database";
+import { ref, get, query, orderByChild, equalTo } from "firebase/database";
 import { rtdb } from "../bot/firebaseConfig.js";
 
 export default async function handler(req, res) {
-  const { id } = req.query;
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  const { id } = req.body; // now POST body
   if (!id) return res.status(400).json({ error: "Player ID or username is required" });
 
   try {
     let user = null;
 
-    // --- Try to get by telegramId (key) first ---
+    // --- Try to get by telegramId first ---
     const userSnap = await get(ref(rtdb, `users/${id}`));
     if (userSnap.exists()) {
       user = userSnap.val();
@@ -17,9 +21,7 @@ export default async function handler(req, res) {
       const usernameQuery = query(ref(rtdb, "users"), orderByChild("username"), equalTo(id));
       const usernameSnap = await get(usernameQuery);
       if (usernameSnap.exists()) {
-        const users = usernameSnap.val();
-        // There should be only one match
-        user = Object.values(users)[0];
+        user = Object.values(usernameSnap.val())[0];
       }
     }
 
@@ -28,16 +30,12 @@ export default async function handler(req, res) {
     // --- Aggregate winning history ---
     const winningQuery = query(ref(rtdb, "winningHistory"), orderByChild("playerId"), equalTo(user.telegramId));
     const winningSnap = await get(winningQuery);
-    let totalWinnings = 0;
-    let gamesWon = 0;
-
+    let totalWinnings = 0, gamesWon = 0;
     if (winningSnap.exists()) {
-      const winningData = winningSnap.val();
-      for (const key in winningData) {
-        const entry = winningData[key];
+      Object.values(winningSnap.val()).forEach(entry => {
         totalWinnings += entry.payout || 0;
         gamesWon += 1;
-      }
+      });
     }
 
     // --- Aggregate deposits ---
@@ -45,21 +43,18 @@ export default async function handler(req, res) {
     const depositSnap = await get(depositQuery);
     let totalDeposits = 0;
     if (depositSnap.exists()) {
-      const depositData = depositSnap.val();
-      for (const key in depositData) totalDeposits += depositData[key].amount || 0;
+      Object.values(depositSnap.val()).forEach(entry => totalDeposits += entry.amount || 0);
     }
 
-    // --- Aggregate losses (deductions) ---
+    // --- Aggregate losses ---
     const deductQuery = query(ref(rtdb, "deductRdbs"), orderByChild("userId"), equalTo(user.telegramId));
     const deductSnap = await get(deductQuery);
     let totalLosses = 0;
     if (deductSnap.exists()) {
-      const deductData = deductSnap.val();
-      for (const key in deductData) totalLosses += deductData[key].amount || 0;
+      Object.values(deductSnap.val()).forEach(entry => totalLosses += entry.amount || 0);
     }
 
-    // --- Construct JSON response ---
-    const response = {
+    return res.status(200).json({
       telegramId: user.telegramId,
       username: user.username,
       balance: user.balance || 0,
@@ -71,11 +66,9 @@ export default async function handler(req, res) {
       totalLosses,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
-    };
-
-    return res.status(200).json(response);
-  } catch (error) {
-    console.error("Error fetching player data:", error);
+    });
+  } catch (err) {
+    console.error("Error fetching player data:", err);
     return res.status(500).json({ error: "Internal Server Error" });
   }
 }

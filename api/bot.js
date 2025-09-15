@@ -411,7 +411,16 @@ async function handleUserMessage(message) {
     pendingActions.delete(userId);
     return;
   }
-  if (pending?.type === "awaiting_player_lookup") {
+  if (text.startsWith("/player")) {
+  if (!ADMIN_IDS.includes(userId)) {
+    await sendMessage(chatId, "❌ You are not authorized to use this command.");
+    return;
+  }
+
+  await sendMessage(chatId, "🔎 Enter the Telegram ID or username of the player:");
+  pendingActions.set(userId, { type: "awaiting_player_lookup" });
+  return;}
+if (pending?.type === "awaiting_player_lookup") {
   const id = text.replace("@", "").trim();
 
   try {

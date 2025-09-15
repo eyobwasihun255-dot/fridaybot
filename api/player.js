@@ -46,10 +46,14 @@ export default async function handler(req, res) {
     const deductSnap = await get(ref(rtdb, "deductRdbs"));
     const deductions = deductSnap.val() || {};
     let totalLosses = 0;
+    let gamesPlayed = 0;
 
     Object.values(deductions).forEach(entry => {
-      if (entry.userId === user.telegramId && !winningGameIds.has(entry.gameId)) {
-        totalLosses += entry.amount || 0;
+      if (entry.userId === user.telegramId) {
+        gamesPlayed += 1; // count games played
+        if (!winningGameIds.has(entry.gameId)) {
+          totalLosses += entry.amount || 0;
+        }
       }
     });
 
@@ -67,7 +71,7 @@ export default async function handler(req, res) {
       username: user.username,
       balance: user.balance || 0,
       lang: user.lang || "en",
-      gamesPlayed: user.gamesPlayed || 0,
+      gamesPlayed,         // now calculated from deductRdbs
       gamesWon,
       totalWinnings,       // total amount won in ETB
       totalDeposits,       // total deposits in ETB

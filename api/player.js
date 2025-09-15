@@ -1,9 +1,10 @@
-// api/player/[id].js
-import { rtdb } from "../bot/firebaseConfig.js";
+// pages/api/player/[id].js
+import { rtdb } from "../../bot/firebaseConfig.js"; // adjust path if needed
 import { ref, get } from "firebase/database";
 
-// Utility: format date
+// Utility: format timestamp → YYYY-MM-DD HH:MM:SS
 function formatDate(tsOrIso) {
+  if (!tsOrIso) return null;
   const d = new Date(tsOrIso);
   return d.toISOString().split("T")[0] + " " + d.toISOString().split("T")[1].slice(0, 8);
 }
@@ -11,6 +12,11 @@ function formatDate(tsOrIso) {
 export default async function handler(req, res) {
   try {
     const { id } = req.query;
+
+    if (!id) {
+      return res.status(400).json({ error: "Missing player ID" });
+    }
+
     const playerId = id.toString();
 
     // --- Get User Info ---
@@ -25,7 +31,10 @@ export default async function handler(req, res) {
     // --- Get Winning History ---
     const historyRef = ref(rtdb, "winningHistory");
     const historySnap = await get(historyRef);
-    let gamesPlayed = 0, gamesWon = 0, totalWinnings = 0;
+
+    let gamesPlayed = 0;
+    let gamesWon = 0;
+    let totalWinnings = 0;
     let historyList = [];
 
     if (historySnap.exists()) {
@@ -40,6 +49,7 @@ export default async function handler(req, res) {
     // --- Get Deposits ---
     const depositsRef = ref(rtdb, "deposits");
     const depositsSnap = await get(depositsRef);
+
     let totalDeposits = 0;
     let depositList = [];
 
@@ -74,7 +84,7 @@ export default async function handler(req, res) {
       })),
     };
 
-    return res.json(profile);
+    return res.status(200).json(profile);
   } catch (err) {
     console.error("Error fetching player profile:", err);
     return res.status(500).json({ error: "Failed to fetch player profile" });

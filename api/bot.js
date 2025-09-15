@@ -411,6 +411,53 @@ async function handleUserMessage(message) {
     pendingActions.delete(userId);
     return;
   }
+  if (text.startsWith("/player")) {
+  if (!ADMIN_IDS.includes(userId)) {
+    await sendMessage(chatId, "❌ You are not authorized to use this command.");
+    return;
+  }
+
+  await sendMessage(chatId, "🔎 Enter the Telegram ID or username of the player:");
+  pendingActions.set(userId, { type: "awaiting_player_lookup" });
+  return;
+}
+if (pending?.type === "awaiting_player_lookup") {
+  const query = text.replace("@", "").trim(); // remove @ if username
+
+  // Call your API
+  try {
+    const response = await fetch(`${process.env.WEBAPP_URL}/api/player/${query}`);
+    if (!response.ok) {
+      await sendMessage(chatId, "❌ Player not found.");
+      pendingActions.delete(userId);
+      return;
+    }
+
+    const playerData = await response.json();
+
+    // Format the JSON nicely for Telegram
+    const info = `
+👤 Username: ${playerData.username}
+🆔 Telegram ID: ${playerData.telegramId}
+💰 Balance: ${playerData.balance}
+🎮 Games Played: ${playerData.gamesPlayed}
+🏆 Games Won: ${playerData.gamesWon}
+💵 Total Winnings: ${playerData.totalWinnings}
+💳 Total Deposits: ${playerData.totalDeposits}
+📉 Total Losses: ${playerData.totalLosses}
+🗓 Created At: ${playerData.createdAt}
+🗓 Updated At: ${playerData.updatedAt}
+    `;
+
+    await sendMessage(chatId, info);
+  } catch (err) {
+    console.error("Error fetching player:", err);
+    await sendMessage(chatId, "❌ Failed to fetch player data.");
+  }
+
+  pendingActions.delete(userId);
+  return;
+}
 
   // ====================== FALLBACK ======================
   await sendMessage(chatId, t(lang, "fallback"));

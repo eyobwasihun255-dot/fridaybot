@@ -1,15 +1,29 @@
-import { ref, get, query, orderByChild, equalTo } from "firebase/database";
+import { ref, get, query, orderByChild, equalTo, child } from "firebase/database";
 import { rtdb } from "../bot/firebaseConfig.js";
 
 export default async function handler(req, res) {
   const { id } = req.query;
-  if (!id) return res.status(400).json({ error: "Player ID is required" });
+  if (!id) return res.status(400).json({ error: "Player ID or username is required" });
 
   try {
-    // --- Get user info ---
+    let user = null;
+
+    // --- Try to get by telegramId (key) first ---
     const userSnap = await get(ref(rtdb, `users/${id}`));
-    if (!userSnap.exists()) return res.status(404).json({ error: "User not found" });
-    const user = userSnap.val();
+    if (userSnap.exists()) {
+      user = userSnap.val();
+    } else {
+      // --- If not found, search by username ---
+      const usernameQuery = query(ref(rtdb, "users"), orderByChild("username"), equalTo(id));
+      const usernameSnap = await get(usernameQuery);
+      if (usernameSnap.exists()) {
+        const users = usernameSnap.val();
+        // There should be only one match
+        user = Object.values(users)[0];
+      }
+    }
+
+    if (!user) return res.status(404).json({ error: "User not found" });
 
     // --- Aggregate winning history ---
     const winningQuery = query(ref(rtdb, "winningHistory"), orderByChild("playerId"), equalTo(user.telegramId));

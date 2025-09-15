@@ -430,7 +430,7 @@ const handleBingoClick = async () => {
     username: user.username || `user_${user.telegramId}`,
     cardId: displayedCard.id,
     date: Date.now(),
-    payout
+    payout : payout - currentRoom.betAmount
   };
   await update(winningHistoryRef, historyEntry);
 

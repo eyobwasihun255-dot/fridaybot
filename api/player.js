@@ -1,20 +1,19 @@
-import { ref, get, child } from "firebase/database";
-import { rtdb } from "../bot/firebaseConfig.js"; // adjust path if needed
+import { ref, get, query, orderByChild, equalTo } from "firebase/database";
+import { rtdb } from "../bot/firebaseConfig.js";
 
 export default async function handler(req, res) {
-  const { id } = req.query; // e.g., 123123
+  const { id } = req.query;
   if (!id) return res.status(400).json({ error: "Player ID is required" });
 
   try {
     // --- Get user info ---
     const userSnap = await get(ref(rtdb, `users/${id}`));
-    if (!userSnap.exists()) {
-      return res.status(404).json({ error: "User not found" });
-    }
+    if (!userSnap.exists()) return res.status(404).json({ error: "User not found" });
     const user = userSnap.val();
 
     // --- Aggregate winning history ---
-    const winningSnap = await get(ref(rtdb, "winningHistory"));
+    const winningQuery = query(ref(rtdb, "winningHistory"), orderByChild("playerId"), equalTo(user.telegramId));
+    const winningSnap = await get(winningQuery);
     let totalWinnings = 0;
     let gamesWon = 0;
 
@@ -22,39 +21,27 @@ export default async function handler(req, res) {
       const winningData = winningSnap.val();
       for (const key in winningData) {
         const entry = winningData[key];
-        if (entry.playerId === user.telegramId) {
-          totalWinnings += entry.payout || 0;
-          gamesWon += 1;
-        }
+        totalWinnings += entry.payout || 0;
+        gamesWon += 1;
       }
     }
 
     // --- Aggregate deposits ---
-    const depositSnap = await get(ref(rtdb, "deposits"));
+    const depositQuery = query(ref(rtdb, "deposits"), orderByChild("userId"), equalTo(user.telegramId));
+    const depositSnap = await get(depositQuery);
     let totalDeposits = 0;
-
     if (depositSnap.exists()) {
       const depositData = depositSnap.val();
-      for (const key in depositData) {
-        const entry = depositData[key];
-        if (entry.userId === user.telegramId) {
-          totalDeposits += entry.amount || 0;
-        }
-      }
+      for (const key in depositData) totalDeposits += depositData[key].amount || 0;
     }
 
     // --- Aggregate losses (deductions) ---
-    const deductSnap = await get(ref(rtdb, "deductRdbs"));
+    const deductQuery = query(ref(rtdb, "deductRdbs"), orderByChild("userId"), equalTo(user.telegramId));
+    const deductSnap = await get(deductQuery);
     let totalLosses = 0;
-
     if (deductSnap.exists()) {
       const deductData = deductSnap.val();
-      for (const key in deductData) {
-        const entry = deductData[key];
-        if (entry.userId === user.telegramId) {
-          totalLosses += entry.amount || 0;
-        }
-      }
+      for (const key in deductData) totalLosses += deductData[key].amount || 0;
     }
 
     // --- Construct JSON response ---

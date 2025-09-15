@@ -668,24 +668,28 @@ return (
     {[...Array(15)].map((_, rowIdx) =>
       ["B", "I", "N", "G", "O"].map((col, colIdx) => {
         const num = rowIdx + 1 + colIdx * 15;
-        const lastCalled = displayedCalledNumbers.at(-1);
-        const isLastCalled = num === lastCalled;
-        const isPreviouslyCalled =
-          displayedCalledNumbers.includes(num) && !isLastCalled;
+       const lastCalled = displayedCalledNumbers.at(-1);
+const previouslyCalledNumbers = lastCalled
+  ? displayedCalledNumbers.slice(0, -1)
+  : [];
+
+const isLastCalled = num === lastCalled;
+const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
 
         return (
           <div
-            key={`${col}-${num}`}
-            className={`flex items-center justify-center p-[3px] rounded font-bold text-[11px] transition
-              ${isLastCalled
-                ? "bg-green-500 text-white scale-105"
-                : isPreviouslyCalled
-                ? "bg-red-500 text-white"
-                : "bg-white/20"}
-            `}
-          >
-            {num}
-          </div>
+  key={`${col}-${num}`}
+  className={`flex items-center justify-center p-[3px] rounded font-bold text-[11px] transition
+    ${isLastCalled
+      ? "bg-green-500 text-white scale-105"
+      : isPreviouslyCalled
+      ? "bg-red-500 text-white"
+      : "bg-white/20"}
+  `}
+>
+  {num}
+</div>
+
         );
       })
     )}

@@ -1,7 +1,7 @@
 // pages/api/player/[id].js
-import { rtdb } from "../bot/firebaseConfig.js"; // adjust path if needed
-import { ref, get } from "firebase/database";
 
+import { rtdb } from "../bot/firebaseConfig";// adjust your path
+import { ref, get } from "firebase/database";
 // Utility: format timestamp → YYYY-MM-DD HH:MM:SS
 function formatDate(tsOrIso) {
   if (!tsOrIso) return null;

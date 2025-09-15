@@ -1,6 +1,6 @@
 
 import express from "express";
-import { rtdb } from "../bot/firebase/config.js"; // adjust your path
+import { rtdb } from "../bot/firebaseConfig"; // adjust your path
 import { ref, get } from "firebase/database";
 
 const app = express();

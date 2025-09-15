@@ -1,5 +1,5 @@
 import express from "express";
-import { rtdb } from "../bot/firebase/config.js";
+import { rtdb } from "../bot/firebaseConfig.js";
 import { ref, get, query, orderByChild, equalTo } from "firebase/database";
 
 const app = express();

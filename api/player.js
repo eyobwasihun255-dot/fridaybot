@@ -1,9 +1,6 @@
-import express from "express";
-import { rtdb } from "../bot/firebaseConfig.js";
-import { ref, get, query, orderByChild, equalTo } from "firebase/database";
-
-const app = express();
-const PORT = process.env.PORT || 5000;
+// api/player/[id].js
+import { rtdb } from "../../bot/firebaseConfig.js";
+import { ref, get } from "firebase/database";
 
 // Utility: format date
 function formatDate(tsOrIso) {
@@ -11,10 +8,10 @@ function formatDate(tsOrIso) {
   return d.toISOString().split("T")[0] + " " + d.toISOString().split("T")[1].slice(0, 8);
 }
 
-// GET player profile by telegramId
-app.get("/player/:id", async (req, res) => {
+export default async function handler(req, res) {
   try {
-    const playerId = req.params.id.toString();
+    const { id } = req.query;
+    const playerId = id.toString();
 
     // --- Get User Info ---
     const userRef = ref(rtdb, `users/${playerId}`);
@@ -71,18 +68,15 @@ app.get("/player/:id", async (req, res) => {
         date: formatDate(h.date),
       })),
       deposits: depositList.map(d => ({
-        id: d.depositId,
         amount: d.amount,
         method: d.method,
         date: formatDate(d.date),
       })),
     };
 
-    res.json(profile);
+    return res.json(profile);
   } catch (err) {
     console.error("Error fetching player profile:", err);
-    res.status(500).json({ error: "Failed to fetch player profile" });
+    return res.status(500).json({ error: "Failed to fetch player profile" });
   }
-});
-
-app.listen(PORT, () => console.log(`Player API running on port ${PORT}`));
+}

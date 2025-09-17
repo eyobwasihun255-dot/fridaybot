@@ -1,7 +1,6 @@
 import express from "express";
-import { ref, get } from "firebase/database";
-import { rtdb } from "../firebase/config.js";  // adjust path to your config
-
+import { ref, get } from "firebase/database"; // adjust path to your config
+import { rtdb } from "../bot/firebaseConfig.js";
 const router = express.Router();
 
 /**

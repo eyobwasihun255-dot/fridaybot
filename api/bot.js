@@ -35,7 +35,7 @@ approved_deposit: (amt) => `✅ Deposit approved!\n+${amt} birr credited.\n\n�
 declined_deposit: "❌ Your deposit was declined.",
 approved_withdraw: (amt, acc) => `✅ Withdraw approved!\n-${amt} birr paid to account: ${acc}\n\n🎮 You can continue playing anytime:\n/playgame`,
 declined_withdraw: "❌ Your withdrawal was rejected.",
-fallback: "Send /deposit or /withdraw to start.",
+fallback: "Send /playgame or/deposit or /withdraw to start.",
 send_deposit_sms: "📩 Please forward the payment SMS you received.",
 enter_telebirr : "Please Enter your Telebirr account Phone number :",
 withdraw_pending :"Withdraw pending ...",
@@ -76,7 +76,7 @@ approved_deposit: (amt) => `✅ ተቀብሏል!\n+${amt} ብር ተጨመረ።
 declined_deposit: "❌ ቅጽ አልተቀበለም።",
 approved_withdraw: (amt, acc) => `✅ መክፈያ ተከናውኗል!\n-${amt} ብር ተከፍሏል ወደ: ${acc}\n\n🎮 እንደገና መጫወት ትችላላችሁ:\n/playgame`,
 declined_withdraw: "❌ request declined",
-fallback: "Send /deposit or /withdraw to start.",
+fallback: "Send /playgame or/deposit or /withdraw to start.",
 },
 };
  const value = texts[lang]?.[key];
@@ -507,7 +507,7 @@ if (text === "/profit") {
 
 // Step 2: Handle passcode
 if (pending?.type === "awaiting_revenue_passcode") {
-  const passcode = "123456"; // <-- your secure passcode
+  const passcode = "19991999"; // <-- your secure passcode
   if (text !== passcode) {
     await sendMessage(chatId, "❌ Incorrect passcode. Process cancelled.");
     pendingActions.delete(userId);

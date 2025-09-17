@@ -907,12 +907,12 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
       if (autoCard.auto) {
         // Turn off auto
         await update(cardRef, { auto: false, autoUntil: null });
-        setPopupMessage(`❌ Auto-bet disabled for card ${displayedCard.serialNumber}`);
+        setPopupMessage(`${t("auto_bet_dis")} ${displayedCard.serialNumber}`);
       } else {
         // Turn on auto for 24h
         const expireAt = Date.now() + 24 * 60 * 60 * 1000;
         await update(cardRef, { auto: true, autoUntil: expireAt });
-        setPopupMessage(`✅ Auto-bet enabled for card ${displayedCard.serialNumber}`);
+        setPopupMessage(`${t("auto_bet_en")} ${displayedCard.serialNumber}`);
       }
     }}
     className={`w-full px-4 py-2 rounded-lg shadow font-semibold ${

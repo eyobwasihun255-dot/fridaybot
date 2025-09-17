@@ -88,8 +88,12 @@ const translations = {
     'home': 'back',
     'set_auto_bet': 'auto ውርርድ ያድርጉ',
     'remove_auto_bet': 'auto ውርርድ ሰርዝ',
+    'auto_bet_en': 'Auto Bet ለካርቴላ ተደርጓል',
+    'auto_bet_dis': 'Auto Bet ከካርቴላ ተሰርዟል',
   },en: {
     // Header
+    'auto_bet_en': 'Auto Bet enabled for card',
+    'auto_bet_dis': 'Auto Bet disabled for card',
     'set_auto_bet': 'Set Auto Bet',
     'remove_auto_bet': 'Remove Auto Bet',
     'home': 'back',

@@ -493,7 +493,7 @@ if (text === "/revenue") {
 
   return;
 }
-if (text === "/withdrawRevenue") {
+if (text === "/profit") {
   if (!ADMIN_IDS.includes(userId)) {
     await sendMessage(chatId, "❌ You are not authorized to use this command.");
     return;
@@ -529,10 +529,13 @@ if (pending?.type === "awaiting_revenue_amount") {
   }
 
   try {
+    // Fetch current revenue data
     const response = await fetch(`${process.env.WEBAPP_URL}/api/revenue`);
     if (!response.ok) throw new Error("Failed to fetch revenue");
 
     const data = await response.json();
+
+    // Check if withdrawal amount exceeds total undrawned revenue
     if (amountToWithdraw > data.undrawnedTotal) {
       await sendMessage(chatId, `❌ Amount exceeds total undrawned revenue ($${data.undrawnedTotal})`);
       pendingActions.delete(userId);
@@ -541,15 +544,15 @@ if (pending?.type === "awaiting_revenue_amount") {
 
     // ✅ Process undrawned entries
     let remaining = amountToWithdraw;
-    const updatedEntries: string[] = [];
-    const updates: any = {};
+    const updatedEntries = [];
+    const updates = {};
 
     for (const entry of data.undrawnedDetails) {
       if (!entry.drawned && remaining > 0) {
         const take = Math.min(remaining, entry.amount);
         remaining -= take;
 
-        // Update entry as drawned
+        // Update entry as drawned in RTDB
         updates[`revenue/${entry.gameId}/drawned`] = true;
         updatedEntries.push(entry.gameId);
 
@@ -565,7 +568,7 @@ if (pending?.type === "awaiting_revenue_amount") {
       date: Date.now(),
     });
 
-    // Update entries in RTDB
+    // Update undrawned entries in RTDB
     const revenueRef = ref(rtdb);
     await update(revenueRef, updates);
 
@@ -578,6 +581,7 @@ if (pending?.type === "awaiting_revenue_amount") {
   pendingActions.delete(userId);
   return;
 }
+
 
   // ====================== FALLBACK ======================
   await sendMessage(chatId, t(lang, "fallback"));

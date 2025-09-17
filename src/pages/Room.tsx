@@ -249,6 +249,14 @@ React.useEffect(() => {
   selectCard("");
 }, [bingoCards, selectedCard, user?.telegramId, selectCard]);
 
+const [popupMessage, setPopupMessage] = useState<string | null>(null);
+React.useEffect(() => {
+  if (!popupMessage) return;
+
+  const timer = setTimeout(() => setPopupMessage(null), 3000); // hide after 3s
+  return () => clearTimeout(timer);
+}, [popupMessage]);
+
   // Start countdown if 2+ players bet
 React.useEffect(() => {
   if (!currentRoom || !currentRoom.players) return; // ✅ guard against null
@@ -305,14 +313,7 @@ React.useEffect(() => {
     }
   }
 }, [currentRoom, user, bingoCards, selectedCard]);
-const [popupMessage, setPopupMessage] = useState<string | null>(null);
 
-// Hide popup after 3 seconds
-React.useEffect(() => {
-  if (!popupMessage) return;
-  const timer = setTimeout(() => setPopupMessage(null), 3000);
-  return () => clearTimeout(timer);
-}, [popupMessage]);
 
   const handleCardSelect = (cardId: string) => {
     if (!hasBet) {
@@ -549,21 +550,6 @@ function getBingoLetter(num: number): string {
   if (num >= 61 && num <= 75) return "O-";
   return "";
 }
-const [prevAuto, setPrevAuto] = useState<boolean | null>(null);
-
-React.useEffect(() => {
-  if (autoCard) {
-    if (prevAuto !== null && prevAuto !== autoCard.auto) {
-      // Auto status changed → show popup
-      setPopupMessage(
-        autoCard.auto
-          ? `✅ Auto-bet enabled for card ${displayedCard?.serialNumber}`
-          : `❌ Auto-bet disabled for card ${displayedCard?.serialNumber}`
-      );
-    }
-    setPrevAuto(autoCard.auto);
-  }
-}, [autoCard, displayedCard?.serialNumber, prevAuto]);
 
 
 
@@ -572,12 +558,6 @@ React.useEffect(() => {
 
 return (
   <div className=" min-h-screen bg-gradient-to-br from-purple-800 via-purple-900 to-blue-900 flex flex-col items-center p-2 text-white">
-    {popupMessage && (
-  <div className="fixed top-4 right-4 bg-gray-800 text-white px-4 py-2 rounded shadow-lg z-50">
-    {popupMessage}
-  </div>
-)}
-
     {/* Header Info Dashboard */}
     <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 mb-3 w-full text-xs">
       <button
@@ -623,6 +603,11 @@ return (
         {t('close')}
       </button>
     </div>
+  </div>
+)}
+{popupMessage && (
+  <div className="fixed top-4 right-4 bg-black/80 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-fade-in-out">
+    {popupMessage}
   </div>
 )}
 
@@ -912,20 +897,22 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
     {autoCard && isBetActive && (
   <button
     onClick={async () => {
-      if (!displayedCard) return;
+      if (!displayedCard || !currentRoom) return;
 
       const cardRef = ref(
         rtdb,
-        `rooms/${currentRoom?.id}/bingoCards/${displayedCard.id}`
+        `rooms/${currentRoom.id}/bingoCards/${displayedCard.id}`
       );
 
       if (autoCard.auto) {
-        // 🔴 Turn off auto
+        // Turn off auto
         await update(cardRef, { auto: false, autoUntil: null });
+        setPopupMessage(`❌ Auto-bet disabled for card ${displayedCard.serialNumber}`);
       } else {
-        // 🟢 Turn on auto for 24h
+        // Turn on auto for 24h
         const expireAt = Date.now() + 24 * 60 * 60 * 1000;
         await update(cardRef, { auto: true, autoUntil: expireAt });
+        setPopupMessage(`✅ Auto-bet enabled for card ${displayedCard.serialNumber}`);
       }
     }}
     className={`w-full px-4 py-2 rounded-lg shadow font-semibold ${

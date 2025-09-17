@@ -449,11 +449,13 @@ cancelBet: async (cardId?: string) => {
   }
 
   try {
-    // ✅ Unclaim the card
+    // ✅ Unclaim the card and reset auto
     const cardRef = ref(rtdb, `rooms/${currentRoom.id}/bingoCards/${targetCardId}`);
     await update(cardRef, {
       claimed: false,
       claimedBy: null,
+      auto: false,       // 🔴 reset auto
+      autoUntil: null,   // 🔴 clear auto timer
     });
 
     // ✅ Remove player entry from the room
@@ -464,14 +466,16 @@ cancelBet: async (cardId?: string) => {
     if (selectedCard?.id === targetCardId) {
       set({ selectedCard: null });
     }
-     set({ isBetActive: false });
-    console.log("✅ Bet canceled successfully");
+
+    set({ isBetActive: false });
+    console.log("✅ Bet canceled successfully (auto disabled)");
     return true;
   } catch (err) {
     console.error("❌ Cancel bet failed:", err);
     return false;
   }
 },
+
 
 
 

@@ -70,44 +70,69 @@ interface GameState {
 async function resetAllCardsAndPlayers(roomId: string) {
   try {
     const cardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
+    const playersRef = ref(rtdb, `rooms/${roomId}/players`);
 
-    // 1) Read all cards once
-    const snapshot = await get(cardsRef);
+    // 1) Reset non-auto cards
+    const cardsSnap = await get(cardsRef);
+    if (cardsSnap.exists()) {
+      const cardUpdates: Promise<any>[] = [];
+      const autoCardsByPlayer: Record<string, boolean> = {};
 
-    if (snapshot.exists()) {
-      const updates: Promise<any>[] = [];
-
-      snapshot.forEach((cardSnap) => {
+      cardsSnap.forEach((cardSnap) => {
         const cardKey = cardSnap.key;
         const cardData = cardSnap.val();
         if (!cardKey) return;
 
-        // ✅ Reset only if auto is false or missing AND autoUntil is null
+        // Track auto cards per player
+        if (cardData.auto) {
+          autoCardsByPlayer[cardData.claimedBy] = true;
+        }
+
+        // Reset non-auto cards
         if ((!cardData?.auto || cardData.auto === false) && !cardData?.autoUntil) {
           const cardRef = ref(rtdb, `rooms/${roomId}/bingoCards/${cardKey}`);
-          updates.push(update(cardRef, { claimed: false, claimedBy: null }));
+          cardUpdates.push(update(cardRef, { claimed: false, claimedBy: null }));
         }
       });
 
-      if (updates.length) {
-        await Promise.all(updates);
+      if (cardUpdates.length) {
+        await Promise.all(cardUpdates);
         console.log("♻️ Non-auto cards reset in room:", roomId);
       } else {
         console.log("ℹ️ No eligible non-auto cards to reset for room:", roomId);
+      }
+
+      // 2) Remove players who have no auto cards
+      const playersSnap = await get(playersRef);
+      if (playersSnap.exists()) {
+        const removePromises: Promise<any>[] = [];
+        playersSnap.forEach((playerSnap) => {
+          const playerKey = playerSnap.key;
+          if (!playerKey) return;
+
+          // If player has no auto cards → remove
+          if (!autoCardsByPlayer[playerKey]) {
+            const playerRef = ref(rtdb, `rooms/${roomId}/players/${playerKey}`);
+            removePromises.push(remove(playerRef));
+          }
+        });
+
+        if (removePromises.length) {
+          await Promise.all(removePromises);
+          console.log("🧹 Non-auto players removed from room:", roomId);
+        } else {
+          console.log("ℹ️ All remaining players have auto cards, none removed");
+        }
       }
     } else {
       console.log("ℹ️ No cards found for room:", roomId);
     }
 
-    // ❌ Do NOT remove players
-    console.log("✅ Players untouched for room:", roomId);
-
   } catch (err) {
-    console.error("❌ Error resetting cards:", err);
+    console.error("❌ Error resetting cards or players:", err);
     throw err;
   }
 }
-
 export const useGameStore = create<GameState>((set, get) => ({
   rooms: [],
   drawIntervalId: null,

@@ -461,6 +461,47 @@ if (pending?.type === "awaiting_player_lookup") {
   return;
 }
 
+if (text === "/revenue") {
+  if (!ADMIN_IDS.includes(userId)) {
+    await sendMessage(chatId, "❌ You are not authorized to use this command.");
+    return;
+  }
+
+  try {
+    const response = await fetch(`${process.env.WEBAPP_URL}/api/revenue`);
+    if (!response.ok) throw new Error("Failed to fetch revenue");
+
+    const data = await response.json();
+
+    // Prepare readable report
+    let report = "💰 Revenue Report 💰\n\n";
+
+    // 1️⃣ Revenue by Date
+    report += "📅 Total By Date:\n";
+    for (const [date, amount] of Object.entries(data.totalByDate)) {
+      report += `• ${date}: $${amount}\n`;
+    }
+
+    // 2️⃣ Undrawned Total
+    report += `\n⏳ Undrawned Total: $${data.undrawnedTotal}\n`;
+
+    // 3️⃣ Undrawned Details
+    if (data.undrawnedDetails?.length) {
+      report += "\n📝 Undrawned Details:\n";
+      data.undrawnedDetails.forEach((d) => {
+        const dateTime = new Date(d.datetime).toLocaleString();
+        report += `• $${d.amount} | Drawned: ${d.drawned ? "✅" : "❌"} | Game: ${d.gameId} | Room: ${d.roomId} | ${dateTime}\n`;
+      });
+    }
+
+    await sendMessage(chatId, report);
+  } catch (err) {
+    console.error("Error fetching revenue:", err);
+    await sendMessage(chatId, "❌ Failed to fetch revenue data.");
+  }
+
+  return;
+}
 
   // ====================== FALLBACK ======================
   await sendMessage(chatId, t(lang, "fallback"));

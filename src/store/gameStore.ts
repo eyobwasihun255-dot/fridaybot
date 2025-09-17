@@ -67,10 +67,9 @@ interface GameState {
   drawIntervalId: ReturnType<typeof setInterval> | null ;
 }
 
-async function resetAllCardsAndPlayers(roomId: string) {
+async function resetNonAutoCards(roomId: string) {
   try {
     const cardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
-    const playersRef = ref(rtdb, `rooms/${roomId}/players`);
 
     // 1) Read all cards once
     const snapshot = await get(cardsRef);
@@ -83,8 +82,8 @@ async function resetAllCardsAndPlayers(roomId: string) {
         const cardData = cardSnap.val();
         if (!cardKey) return;
 
-        // ✅ Reset only if auto is false OR doesn't exist
-        if (!cardData?.auto || cardData.auto === false) {
+        // ✅ Reset only if auto is false or missing AND autoUntil is null
+        if ((!cardData?.auto || cardData.auto === false) && !cardData?.autoUntil) {
           const cardRef = ref(rtdb, `rooms/${roomId}/bingoCards/${cardKey}`);
           updates.push(update(cardRef, { claimed: false, claimedBy: null }));
         }
@@ -92,24 +91,22 @@ async function resetAllCardsAndPlayers(roomId: string) {
 
       if (updates.length) {
         await Promise.all(updates);
-        console.log("♻️ Cards reset (only non-auto) in room:", roomId);
+        console.log("♻️ Non-auto cards reset in room:", roomId);
       } else {
-        console.log("ℹ️ No non-auto cards to reset for room:", roomId);
+        console.log("ℹ️ No eligible non-auto cards to reset for room:", roomId);
       }
     } else {
       console.log("ℹ️ No cards found for room:", roomId);
     }
 
-    // 2) Remove all players
-    await remove(playersRef);
-    console.log("🗑️ All players removed from room:", roomId);
+    // ❌ Do NOT remove players
+    console.log("✅ Players untouched for room:", roomId);
 
   } catch (err) {
-    console.error("❌ Error resetting cards and players:", err);
+    console.error("❌ Error resetting cards:", err);
     throw err;
   }
 }
-
 
 export const useGameStore = create<GameState>((set, get) => ({
   rooms: [],

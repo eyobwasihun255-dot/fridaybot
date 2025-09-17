@@ -477,22 +477,13 @@ if (text === "/revenue") {
     let report = "💰 Revenue Report 💰\n\n";
 
     // 1️⃣ Revenue by Date
-    report += "📅 Total By Date:\n";
+    report += "📅 Total Revenue By Date:\n";
     for (const [date, amount] of Object.entries(data.totalByDate)) {
       report += `• ${date}: $${amount}\n`;
     }
 
-    // 2️⃣ Undrawned Total
-    report += `\n⏳ Undrawned Total: $${data.undrawnedTotal}\n`;
-
-    // 3️⃣ Undrawned Details
-    if (data.undrawnedDetails?.length) {
-      report += "\n📝 Undrawned Details:\n";
-      data.undrawnedDetails.forEach((d) => {
-        const dateTime = new Date(d.datetime).toLocaleString();
-        report += `• $${d.amount} | Drawned: ${d.drawned ? "✅" : "❌"} | Game: ${d.gameId} | Room: ${d.roomId} | ${dateTime}\n`;
-      });
-    }
+    // 2️⃣ Total Undrawned Revenue
+    report += `\n⏳ Total Undrawned Revenue: $${data.undrawnedTotal}\n`;
 
     await sendMessage(chatId, report);
   } catch (err) {
@@ -500,6 +491,91 @@ if (text === "/revenue") {
     await sendMessage(chatId, "❌ Failed to fetch revenue data.");
   }
 
+  return;
+}
+if (text === "/withdrawRevenue") {
+  if (!ADMIN_IDS.includes(userId)) {
+    await sendMessage(chatId, "❌ You are not authorized to use this command.");
+    return;
+  }
+
+  // Step 1: Ask for passcode
+  await sendMessage(chatId, "🔐 Enter admin passcode to confirm revenue withdrawal:");
+  pendingActions.set(userId, { type: "awaiting_revenue_passcode" });
+  return;
+}
+
+// Step 2: Handle passcode
+if (pending?.type === "awaiting_revenue_passcode") {
+  const passcode = "123456"; // <-- your secure passcode
+  if (text !== passcode) {
+    await sendMessage(chatId, "❌ Incorrect passcode. Process cancelled.");
+    pendingActions.delete(userId);
+    return;
+  }
+
+  await sendMessage(chatId, "💰 Passcode verified. Enter the amount to withdraw:");
+  pendingActions.set(userId, { type: "awaiting_revenue_amount" });
+  return;
+}
+
+// Step 3: Handle amount
+if (pending?.type === "awaiting_revenue_amount") {
+  const amountToWithdraw = parseFloat(text);
+  if (isNaN(amountToWithdraw) || amountToWithdraw <= 0) {
+    await sendMessage(chatId, "❌ Invalid amount. Process cancelled.");
+    pendingActions.delete(userId);
+    return;
+  }
+
+  try {
+    const response = await fetch(`${process.env.WEBAPP_URL}/api/revenue`);
+    if (!response.ok) throw new Error("Failed to fetch revenue");
+
+    const data = await response.json();
+    if (amountToWithdraw > data.undrawnedTotal) {
+      await sendMessage(chatId, `❌ Amount exceeds total undrawned revenue ($${data.undrawnedTotal})`);
+      pendingActions.delete(userId);
+      return;
+    }
+
+    // ✅ Process undrawned entries
+    let remaining = amountToWithdraw;
+    const updatedEntries: string[] = [];
+    const updates: any = {};
+
+    for (const entry of data.undrawnedDetails) {
+      if (!entry.drawned && remaining > 0) {
+        const take = Math.min(remaining, entry.amount);
+        remaining -= take;
+
+        // Update entry as drawned
+        updates[`revenue/${entry.gameId}/drawned`] = true;
+        updatedEntries.push(entry.gameId);
+
+        if (remaining <= 0) break;
+      }
+    }
+
+    // Save withdrawal record
+    const withdrawalRef = ref(rtdb, `revenueWithdrawals/${Date.now()}`);
+    await set(withdrawalRef, {
+      adminId: userId,
+      amount: amountToWithdraw,
+      date: Date.now(),
+    });
+
+    // Update entries in RTDB
+    const revenueRef = ref(rtdb);
+    await update(revenueRef, updates);
+
+    await sendMessage(chatId, `✅ Revenue withdrawal of $${amountToWithdraw} successful!`);
+  } catch (err) {
+    console.error("Error withdrawing revenue:", err);
+    await sendMessage(chatId, "❌ Failed to process revenue withdrawal.");
+  }
+
+  pendingActions.delete(userId);
   return;
 }
 

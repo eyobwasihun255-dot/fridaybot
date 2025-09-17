@@ -67,7 +67,7 @@ interface GameState {
   drawIntervalId: ReturnType<typeof setInterval> | null ;
 }
 
-async function resetNonAutoCards(roomId: string) {
+async function resetAllCardsAndPlayers(roomId: string) {
   try {
     const cardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
 

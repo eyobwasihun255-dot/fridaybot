@@ -76,23 +76,25 @@ async function resetAllCardsAndPlayers(roomId: string) {
     const snapshot = await get(cardsRef);
 
     if (snapshot.exists()) {
-      // Build an array of update promises (update each card child)
       const updates: Promise<any>[] = [];
 
       snapshot.forEach((cardSnap) => {
         const cardKey = cardSnap.key;
-        if (!cardKey) return; // skip safety
-        const cardRef = ref(rtdb, `rooms/${roomId}/bingoCards/${cardKey}`);
+        const cardData = cardSnap.val();
+        if (!cardKey) return;
 
-        // Only change claimed fields — this merges with existing child data
-        updates.push(update(cardRef, { claimed: false, claimedBy: null }));
+        // ✅ Reset only if auto is false OR doesn't exist
+        if (!cardData?.auto || cardData.auto === false) {
+          const cardRef = ref(rtdb, `rooms/${roomId}/bingoCards/${cardKey}`);
+          updates.push(update(cardRef, { claimed: false, claimedBy: null }));
+        }
       });
 
       if (updates.length) {
         await Promise.all(updates);
-        console.log("♻️ All cards unclaimed in room:", roomId);
+        console.log("♻️ Cards reset (only non-auto) in room:", roomId);
       } else {
-        console.log("ℹ️ No claimed cards to update for room:", roomId);
+        console.log("ℹ️ No non-auto cards to reset for room:", roomId);
       }
     } else {
       console.log("ℹ️ No cards found for room:", roomId);
@@ -107,6 +109,7 @@ async function resetAllCardsAndPlayers(roomId: string) {
     throw err;
   }
 }
+
 
 export const useGameStore = create<GameState>((set, get) => ({
   rooms: [],

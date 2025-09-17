@@ -858,38 +858,51 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
 
     {/* Auto Bet Toggle Button → only visible if bet is active */}
     {isBetActive && (
-  <button
-    onClick={async () => {
-      const cardRef = ref(
-        rtdb,
-        `rooms/${currentRoom?.id}/bingoCards/${displayedCard.id}`
-      );
+      <button
+        onClick={async () => {
+          const cardRef = ref(
+            rtdb,
+            `rooms/${currentRoom?.id}/bingoCards/${displayedCard.id}`
+          );
 
-      if (displayedCard.auto) {
-        await update(cardRef, { auto: false, autoUntil: null });
-        set({
-          selectedCard: { ...displayedCard, auto: false, autoUntil: null }
-        });
-      } else {
-        const expireAt = Date.now() + 24 * 60 * 60 * 1000;
-        await update(cardRef, { auto: true, autoUntil: expireAt });
-        set({
-          selectedCard: { ...displayedCard, auto: true, autoUntil: expireAt }
-        });
-      }
-    }}
-    className={`w-full px-4 py-2 rounded-lg shadow font-semibold ${
-      displayedCard.auto
-        ? "bg-yellow-600 hover:bg-yellow-700 text-white"
-        : "bg-green-600 hover:bg-green-700 text-white"
-    }`}
-  >
-    {displayedCard.auto
-      ? `${t("remove_auto_bet")} card:${displayedCard.serialNumber}`
-      : `${t("set_auto_bet")} card:${displayedCard.serialNumber}`}
-  </button>
-)}
+          if (displayedCard.auto) {
+            // 🔴 Turn off auto
+            await update(cardRef, { auto: false, autoUntil: null });
 
+            // 🔄 Optimistic local state update so UI changes instantly
+            set((state) => ({
+              selectedCard: {
+                ...state.selectedCard!,
+                auto: false,
+                autoUntil: null,
+              },
+            }));
+          } else {
+            // 🟢 Turn on auto for 24h
+            const expireAt = Date.now() + 24 * 60 * 60 * 1000;
+            await update(cardRef, { auto: true, autoUntil: expireAt });
+
+            // 🔄 Optimistic local state update
+            set((state) => ({
+              selectedCard: {
+                ...state.selectedCard!,
+                auto: true,
+                autoUntil: expireAt,
+              },
+            }));
+          }
+        }}
+        className={`w-full px-4 py-2 rounded-lg shadow font-semibold ${
+          displayedCard.auto
+            ? "bg-yellow-600 hover:bg-yellow-700 text-white"
+            : "bg-green-600 hover:bg-green-700 text-white"
+        }`}
+      >
+        {displayedCard.auto
+          ? `${t("remove_auto_bet")} card:${displayedCard.serialNumber}`
+          : `${t("set_auto_bet")} card:${displayedCard.serialNumber}`}
+      </button>
+    )}
   </div>
 ) : (
   <p className="mt-6 text-gray-400">{t("no_card_selected")}</p>

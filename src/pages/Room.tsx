@@ -6,7 +6,7 @@ import { useGameStore } from '../store/gameStore';
 import { useAuthStore } from '../store/authStore';
 import BingoGrid from '../components/BingoGrid';
 import { rtdb } from '../firebase/config';
-import { ref, runTransaction, update } from 'firebase/database';
+import { ref, runTransaction, update , onValue } from 'firebase/database';
 
 const CountdownOverlay = ({
   countdownEndAt,
@@ -121,7 +121,31 @@ function checkIfLoser(currentRoom: any, t: (key: string) => string) {
   }
 }
 
+const [autoCard, setAutoCard] = useState<{
+  auto: boolean;
+  autoUntil: number | null;
+} | null>(null);
 
+React.useEffect(() => {
+  if (!displayedCard) return;
+
+  const cardRef = ref(
+    rtdb,
+    `rooms/${currentRoom?.id}/bingoCards/${displayedCard.id}`
+  );
+
+  const unsubscribe = onValue(cardRef, (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      setAutoCard({
+        auto: data.auto ?? false,
+        autoUntil: data.autoUntil ?? null,
+      });
+    }
+  });
+
+  return () => unsubscribe();
+}, [displayedCard, currentRoom?.id]);
 function findCoveredPatternByMarks() {
   const patterns = generatePatterns();
   const markedSet = new Set(markedNumbers);
@@ -857,52 +881,37 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
     )}
 
     {/* Auto Bet Toggle Button → only visible if bet is active */}
-    {isBetActive && (
-      <button
-        onClick={async () => {
-          const cardRef = ref(
-            rtdb,
-            `rooms/${currentRoom?.id}/bingoCards/${displayedCard.id}`
-          );
+    {autoCard && isBetActive && (
+  <button
+    onClick={async () => {
+      if (!displayedCard) return;
 
-          if (displayedCard.auto) {
-            // 🔴 Turn off auto
-            await update(cardRef, { auto: false, autoUntil: null });
+      const cardRef = ref(
+        rtdb,
+        `rooms/${currentRoom?.id}/bingoCards/${displayedCard.id}`
+      );
 
-            // 🔄 Optimistic local state update so UI changes instantly
-            set((state) => ({
-              selectedCard: {
-                ...state.selectedCard!,
-                auto: false,
-                autoUntil: null,
-              },
-            }));
-          } else {
-            // 🟢 Turn on auto for 24h
-            const expireAt = Date.now() + 24 * 60 * 60 * 1000;
-            await update(cardRef, { auto: true, autoUntil: expireAt });
+      if (autoCard.auto) {
+        // 🔴 Turn off auto
+        await update(cardRef, { auto: false, autoUntil: null });
+      } else {
+        // 🟢 Turn on auto for 24h
+        const expireAt = Date.now() + 24 * 60 * 60 * 1000;
+        await update(cardRef, { auto: true, autoUntil: expireAt });
+      }
+    }}
+    className={`w-full px-4 py-2 rounded-lg shadow font-semibold ${
+      autoCard.auto
+        ? "bg-yellow-600 hover:bg-yellow-700 text-white"
+        : "bg-green-600 hover:bg-green-700 text-white"
+    }`}
+  >
+    {autoCard.auto
+      ? `${t("remove_auto_bet")} card:${displayedCard?.serialNumber}`
+      : `${t("set_auto_bet")} card:${displayedCard?.serialNumber}`}
+  </button>
+)}
 
-            // 🔄 Optimistic local state update
-            set((state) => ({
-              selectedCard: {
-                ...state.selectedCard!,
-                auto: true,
-                autoUntil: expireAt,
-              },
-            }));
-          }
-        }}
-        className={`w-full px-4 py-2 rounded-lg shadow font-semibold ${
-          displayedCard.auto
-            ? "bg-yellow-600 hover:bg-yellow-700 text-white"
-            : "bg-green-600 hover:bg-green-700 text-white"
-        }`}
-      >
-        {displayedCard.auto
-          ? `${t("remove_auto_bet")} card:${displayedCard.serialNumber}`
-          : `${t("set_auto_bet")} card:${displayedCard.serialNumber}`}
-      </button>
-    )}
   </div>
 ) : (
   <p className="mt-6 text-gray-400">{t("no_card_selected")}</p>

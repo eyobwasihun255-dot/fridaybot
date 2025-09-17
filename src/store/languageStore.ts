@@ -86,8 +86,12 @@ const translations = {
     'no_card_selected': 'ካርቴላ አልተመረጠም...',
     'game_already_in_progress': 'ጨዋታ በሂደት ላይ ነው',
     'home': 'back',
+    'set_auto_bet': 'auto ውርርድ ያድርጉ',
+    'remove_auto_bet': 'auto ውርርድ ሰርዝ',
   },en: {
     // Header
+    'set_auto_bet': 'Set Auto Bet',
+    'remove_auto_bet': 'Remove Auto Bet',
     'home': 'back',
     'cards': 'Card',
     'friday_bingo': 'Friday Bingo',

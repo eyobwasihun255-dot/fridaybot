@@ -836,7 +836,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
        {/* Bet button */}
 {displayedCard ? (
   <div className="mt-6 space-y-3">
-    {/* Normal Bet Button */}
+    {/* Main Bet Button */}
     {["waiting", "countdown"].includes(currentRoom?.gameStatus ?? "") ? (
       <button
         onClick={isBetActive ? handleCancelBet : handlePlaceBet}
@@ -847,8 +847,8 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
         }`}
       >
         {isBetActive
-          ? t("cancel_bet") + " card:" + displayedCard.serialNumber
-          : t("place_bet") + " card:" + displayedCard.serialNumber}
+          ? `${t("cancel_bet")} card:${displayedCard.serialNumber}`
+          : `${t("place_bet")} card:${displayedCard.serialNumber}`}
       </button>
     ) : (
       <p className="text-gray-400 italic text-sm">
@@ -856,33 +856,35 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
       </p>
     )}
 
-    {/* Auto Bet Toggle Button */}
-    <button
-      onClick={async () => {
-        const cardRef = ref(
-          rtdb,
-          `rooms/${currentRoom?.id}/bingoCards/${displayedCard.id}`
-        );
+    {/* Auto Bet Toggle Button → only visible if bet is active */}
+    {isBetActive && (
+      <button
+        onClick={async () => {
+          const cardRef = ref(
+            rtdb,
+            `rooms/${currentRoom?.id}/bingoCards/${displayedCard.id}`
+          );
 
-        if (displayedCard.auto) {
-          // 🔴 Turn off auto
-          await update(cardRef, { auto: false, autoUntil: null });
-        } else {
-          // 🟢 Turn on auto for 24h
-          const expireAt = Date.now() + 24 * 60 * 60 * 1000;
-          await update(cardRef, { auto: true, autoUntil: expireAt });
-        }
-      }}
-      className={`w-full px-4 py-2 rounded-lg shadow font-semibold ${
-        displayedCard.auto
-          ? "bg-yellow-600 hover:bg-yellow-700 text-white"
-          : "bg-green-600 hover:bg-green-700 text-white"
-      }`}
-    >
-      {displayedCard.auto
-        ? t("remove_auto_bet") + " card:" + displayedCard.serialNumber
-        : t("set_auto_bet") + " card:" + displayedCard.serialNumber}
-    </button>
+          if (displayedCard.auto) {
+            // 🔴 Turn off auto
+            await update(cardRef, { auto: false, autoUntil: null });
+          } else {
+            // 🟢 Turn on auto for 24h
+            const expireAt = Date.now() + 24 * 60 * 60 * 1000;
+            await update(cardRef, { auto: true, autoUntil: expireAt });
+          }
+        }}
+        className={`w-full px-4 py-2 rounded-lg shadow font-semibold ${
+          displayedCard.auto
+            ? "bg-yellow-600 hover:bg-yellow-700 text-white"
+            : "bg-green-600 hover:bg-green-700 text-white"
+        }`}
+      >
+        {displayedCard.auto
+          ? `${t("remove_auto_bet")} card:${displayedCard.serialNumber}`
+          : `${t("set_auto_bet")} card:${displayedCard.serialNumber}`}
+      </button>
+    )}
   </div>
 ) : (
   <p className="mt-6 text-gray-400">{t("no_card_selected")}</p>

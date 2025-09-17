@@ -581,6 +581,105 @@ if (pending?.type === "awaiting_revenue_amount") {
   pendingActions.delete(userId);
   return;
 }
+// ====================== TRANSACTION COMMAND ======================
+if (text === "/transaction") {
+  if (!ADMIN_IDS.includes(userId)) {
+    await sendMessage(chatId, "❌ You are not authorized to use this command.");
+    return;
+  }
+
+  const keyboard = {
+    inline_keyboard: [
+      [{ text: "📅 Today", callback_data: "transaction_today" }],
+      [{ text: "📆 This Week", callback_data: "transaction_week" }],
+      [{ text: "🌍 Whole", callback_data: "transaction_whole" }],
+    ],
+  };
+
+  await sendMessage(chatId, "📊 Choose the period for transaction summary:", {
+    reply_markup: keyboard,
+  });
+  return;
+}
+
+// ====================== CALLBACK HANDLER FOR TRANSACTION ======================
+if (message.data?.startsWith("transaction_")) {
+  const option = message.data.split("_")[1]; // today | week | whole
+  const period = option.toLowerCase();
+
+  try {
+    const response = await fetch(`${process.env.WEBAPP_URL}/api/transaction`);
+    if (!response.ok) throw new Error("Failed to fetch transaction data");
+
+    const data = await response.json();
+    const todayDate = new Date().toISOString().split("T")[0];
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    let summary = `📊 Transaction Summary (${period.toUpperCase()})\n\n`;
+
+    // 🔹 Filter function
+    const isWithinWeek = (dateStr) => {
+      const d = new Date(dateStr);
+      return d >= weekAgo;
+    };
+
+    // 🏦 Deposits
+    let deposits = 0;
+    if (period === "today") {
+      deposits = data.deposits.byDate[todayDate] || 0;
+    } else if (period === "week") {
+      for (const date in data.deposits.byDate) {
+        if (isWithinWeek(date)) deposits += data.deposits.byDate[date];
+      }
+    } else {
+      deposits = data.deposits.total;
+    }
+
+    // 💸 Withdrawals
+    let withdrawals = 0;
+    if (period === "today") {
+      withdrawals = data.withdrawals.byDate[todayDate] || 0;
+    } else if (period === "week") {
+      for (const date in data.withdrawals.byDate) {
+        if (isWithinWeek(date)) withdrawals += data.withdrawals.byDate[date];
+      }
+    } else {
+      withdrawals = data.withdrawals.total;
+    }
+
+    // 💰 Revenue
+    let revenueDrawned = 0;
+    let revenueUndrawned = 0;
+    if (period === "today") {
+      const rev = data.revenue.byDate[todayDate] || {};
+      revenueDrawned = rev.drawned || 0;
+      revenueUndrawned = rev.undrawned || 0;
+    } else if (period === "week") {
+      for (const date in data.revenue.byDate) {
+        if (isWithinWeek(date)) {
+          revenueDrawned += data.revenue.byDate[date].drawned || 0;
+          revenueUndrawned += data.revenue.byDate[date].undrawned || 0;
+        }
+      }
+    } else {
+      for (const date in data.revenue.byDate) {
+        revenueDrawned += data.revenue.byDate[date].drawned || 0;
+        revenueUndrawned += data.revenue.byDate[date].undrawned || 0;
+      }
+    }
+
+    summary += `👥 Total Balance: ${data.totalBalance}\n`;
+    summary += `🏦 Deposits: ${deposits}\n`;
+    summary += `💸 Withdrawals: ${withdrawals}\n`;
+    summary += `💰 Revenue (Drawned): ${revenueDrawned}\n`;
+    summary += `💰 Revenue (Undrawned): ${revenueUndrawned}\n`;
+
+    await sendMessage(chatId, summary);
+  } catch (err) {
+    console.error("Error fetching /transaction:", err);
+    await sendMessage(chatId, "❌ Failed to fetch transaction data.");
+  }
+}
 
 
   // ====================== FALLBACK ======================

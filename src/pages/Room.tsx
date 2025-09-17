@@ -498,7 +498,7 @@ const handleBingoClick = async () => {
   await update(winningHistoryRef, historyEntry);
 
   // ✅ Log revenue data
-  const revenueRef = ref(rtdb, `revenue/${currentRoom.gameId}_${Date.now()}`);
+  const revenueRef = ref(rtdb, `revenue/${currentRoom.gameId}`);
   const revenueEntry = {
     gameId: currentRoom.gameId,
     roomId: currentRoom.id,

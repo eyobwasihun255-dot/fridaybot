@@ -305,7 +305,14 @@ React.useEffect(() => {
     }
   }
 }, [currentRoom, user, bingoCards, selectedCard]);
+const [popupMessage, setPopupMessage] = useState<string | null>(null);
 
+// Hide popup after 3 seconds
+React.useEffect(() => {
+  if (!popupMessage) return;
+  const timer = setTimeout(() => setPopupMessage(null), 3000);
+  return () => clearTimeout(timer);
+}, [popupMessage]);
 
   const handleCardSelect = (cardId: string) => {
     if (!hasBet) {
@@ -542,6 +549,21 @@ function getBingoLetter(num: number): string {
   if (num >= 61 && num <= 75) return "O-";
   return "";
 }
+const [prevAuto, setPrevAuto] = useState<boolean | null>(null);
+
+React.useEffect(() => {
+  if (autoCard) {
+    if (prevAuto !== null && prevAuto !== autoCard.auto) {
+      // Auto status changed → show popup
+      setPopupMessage(
+        autoCard.auto
+          ? `✅ Auto-bet enabled for card ${displayedCard?.serialNumber}`
+          : `❌ Auto-bet disabled for card ${displayedCard?.serialNumber}`
+      );
+    }
+    setPrevAuto(autoCard.auto);
+  }
+}, [autoCard, displayedCard?.serialNumber, prevAuto]);
 
 
 
@@ -550,6 +572,12 @@ function getBingoLetter(num: number): string {
 
 return (
   <div className=" min-h-screen bg-gradient-to-br from-purple-800 via-purple-900 to-blue-900 flex flex-col items-center p-2 text-white">
+    {popupMessage && (
+  <div className="fixed top-4 right-4 bg-gray-800 text-white px-4 py-2 rounded shadow-lg z-50">
+    {popupMessage}
+  </div>
+)}
+
     {/* Header Info Dashboard */}
     <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 mb-3 w-full text-xs">
       <button

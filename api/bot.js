@@ -626,49 +626,46 @@ if (message.data?.startsWith("transaction_")) {
     // 🏦 Deposits
     let deposits = 0;
     if (period === "today") {
-      deposits = data.deposits.byDate[todayDate] || 0;
+      deposits = data.deposits.depositsByDate[todayDate] || 0;
     } else if (period === "week") {
-      for (const date in data.deposits.byDate) {
-        if (isWithinWeek(date)) deposits += data.deposits.byDate[date];
+      for (const date in data.deposits.depositsByDate) {
+        if (isWithinWeek(date)) deposits += data.deposits.depositsByDate[date];
       }
     } else {
-      deposits = data.deposits.total;
+      deposits = data.deposits.totalDeposits;
     }
 
     // 💸 Withdrawals
     let withdrawals = 0;
     if (period === "today") {
-      withdrawals = data.withdrawals.byDate[todayDate] || 0;
+      withdrawals = data.withdrawals.withdrawalsByDate[todayDate] || 0;
     } else if (period === "week") {
-      for (const date in data.withdrawals.byDate) {
-        if (isWithinWeek(date)) withdrawals += data.withdrawals.byDate[date];
+      for (const date in data.withdrawals.withdrawalsByDate) {
+        if (isWithinWeek(date)) withdrawals += data.withdrawals.withdrawalsByDate[date];
       }
     } else {
-      withdrawals = data.withdrawals.total;
+      withdrawals = data.withdrawals.totalWithdrawals;
     }
 
     // 💰 Revenue
     let revenueDrawned = 0;
     let revenueUndrawned = 0;
     if (period === "today") {
-      const rev = data.revenue.byDate[todayDate] || {};
-      revenueDrawned = rev.drawned || 0;
-      revenueUndrawned = rev.undrawned || 0;
+      revenueDrawned = data.revenue.drawnedByDate[todayDate] || 0;
+      revenueUndrawned = data.revenue.undrawnedByDate[todayDate] || 0;
     } else if (period === "week") {
-      for (const date in data.revenue.byDate) {
+      for (const date in data.revenue.revenueByDate) {
         if (isWithinWeek(date)) {
-          revenueDrawned += data.revenue.byDate[date].drawned || 0;
-          revenueUndrawned += data.revenue.byDate[date].undrawned || 0;
+          revenueDrawned += data.revenue.drawnedByDate[date] || 0;
+          revenueUndrawned += data.revenue.undrawnedByDate[date] || 0;
         }
       }
     } else {
-      for (const date in data.revenue.byDate) {
-        revenueDrawned += data.revenue.byDate[date].drawned || 0;
-        revenueUndrawned += data.revenue.byDate[date].undrawned || 0;
-      }
+      revenueDrawned = data.revenue.totalDrawned;
+      revenueUndrawned = data.revenue.totalUndrawned;
     }
 
-    summary += `👥 Total Balance: ${data.totalBalance}\n`;
+    summary += `👥 Total Balance: ${data.balances.totalBalance}\n`;
     summary += `🏦 Deposits: ${deposits}\n`;
     summary += `💸 Withdrawals: ${withdrawals}\n`;
     summary += `💰 Revenue (Drawned): ${revenueDrawned}\n`;
@@ -680,6 +677,7 @@ if (message.data?.startsWith("transaction_")) {
     await sendMessage(chatId, "❌ Failed to fetch transaction data.");
   }
 }
+
 
 
   // ====================== FALLBACK ======================

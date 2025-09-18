@@ -608,7 +608,7 @@ if (message.data?.startsWith("transaction_")) {
   const period = option.toLowerCase();
 
   try {
-    const response = await fetch(`${process.env.WEBAPP_URL}/api/transaction`);
+    const response = await fetch(   process.env.WEBAPP_URL || "https://fridaybots.vercel.app");
     if (!response.ok) throw new Error("Failed to fetch transaction data");
 
     const data = await response.json();

@@ -582,102 +582,68 @@ if (pending?.type === "awaiting_revenue_amount") {
   return;
 }
 // ====================== TRANSACTION COMMAND ======================
-if (text === "/transaction") {
-  if (!ADMIN_IDS.includes(userId)) {
-    await sendMessage(chatId, "❌ You are not authorized to use this command.");
-    return;
-  }
+// Example assuming you receive Telegram updates as `update`
+if (update.message) {
+  const text = update.message.text;
+  const chatId = update.message.chat.id;
+  const userId = update.message.from.id;
 
-  const keyboard = {
-    inline_keyboard: [
-      [{ text: "📅 Today", callback_data: "transaction_today" }],
-      [{ text: "📆 This Week", callback_data: "transaction_week" }],
-      [{ text: "🌍 Whole", callback_data: "transaction_whole" }],
-    ],
-  };
+  if (text === "/transaction") {
+    if (!ADMIN_IDS.includes(userId)) {
+      await sendMessage(chatId, "❌ You are not authorized to use this command.");
+      return;
+    }
 
-  await sendMessage(chatId, "📊 Choose the period for transaction summary:", {
-    reply_markup: keyboard,
-  });
-  return;
-}
-
-// ====================== CALLBACK HANDLER FOR TRANSACTION ======================
-if (message.data?.startsWith("transaction_")) {
-  const option = message.data.split("_")[1]; // today | week | whole
-  const period = option.toLowerCase();
-
-  try {
-    const response = await fetch(   process.env.WEBAPP_URL || "https://fridaybots.vercel.app");
-    if (!response.ok) throw new Error("Failed to fetch transaction data");
-
-    const data = await response.json();
-    const todayDate = new Date().toISOString().split("T")[0];
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-
-    let summary = `📊 Transaction Summary (${period.toUpperCase()})\n\n`;
-
-    // 🔹 Filter function
-    const isWithinWeek = (dateStr) => {
-      const d = new Date(dateStr);
-      return d >= weekAgo;
+    const keyboard = {
+      inline_keyboard: [
+        [{ text: "📅 Today", callback_data: "transaction_today" }],
+        [{ text: "📆 This Week", callback_data: "transaction_week" }],
+        [{ text: "🌍 Whole", callback_data: "transaction_whole" }],
+      ],
     };
 
-    // 🏦 Deposits
-    let deposits = 0;
-    if (period === "today") {
-      deposits = data.deposits.depositsByDate[todayDate] || 0;
-    } else if (period === "week") {
-      for (const date in data.deposits.depositsByDate) {
-        if (isWithinWeek(date)) deposits += data.deposits.depositsByDate[date];
-      }
-    } else {
-      deposits = data.deposits.totalDeposits;
-    }
-
-    // 💸 Withdrawals
-    let withdrawals = 0;
-    if (period === "today") {
-      withdrawals = data.withdrawals.withdrawalsByDate[todayDate] || 0;
-    } else if (period === "week") {
-      for (const date in data.withdrawals.withdrawalsByDate) {
-        if (isWithinWeek(date)) withdrawals += data.withdrawals.withdrawalsByDate[date];
-      }
-    } else {
-      withdrawals = data.withdrawals.totalWithdrawals;
-    }
-
-    // 💰 Revenue
-    let revenueDrawned = 0;
-    let revenueUndrawned = 0;
-    if (period === "today") {
-      revenueDrawned = data.revenue.drawnedByDate[todayDate] || 0;
-      revenueUndrawned = data.revenue.undrawnedByDate[todayDate] || 0;
-    } else if (period === "week") {
-      for (const date in data.revenue.revenueByDate) {
-        if (isWithinWeek(date)) {
-          revenueDrawned += data.revenue.drawnedByDate[date] || 0;
-          revenueUndrawned += data.revenue.undrawnedByDate[date] || 0;
-        }
-      }
-    } else {
-      revenueDrawned = data.revenue.totalDrawned;
-      revenueUndrawned = data.revenue.totalUndrawned;
-    }
-
-    summary += `👥 Total Balance: ${data.balances.totalBalance}\n`;
-    summary += `🏦 Deposits: ${deposits}\n`;
-    summary += `💸 Withdrawals: ${withdrawals}\n`;
-    summary += `💰 Revenue (Drawned): ${revenueDrawned}\n`;
-    summary += `💰 Revenue (Undrawned): ${revenueUndrawned}\n`;
-
-    await sendMessage(chatId, summary);
-  } catch (err) {
-    console.error("Error fetching /transaction:", err);
-    await sendMessage(chatId, "❌ Failed to fetch transaction data.");
+    await sendMessage(chatId, "📊 Choose the period for transaction summary:", {
+      reply_markup: keyboard,
+    });
+    return;
   }
 }
 
+// ====================== CALLBACK HANDLER ======================
+if (update.callback_query) {
+  const callbackData = update.callback_query.data;
+  const chatId = update.callback_query.message.chat.id;
+
+  if (callbackData.startsWith("transaction_")) {
+    const option = callbackData.split("_")[1]; // today | week | whole
+    const period = option.toLowerCase();
+
+    try {
+      const response = await fetch(process.env.WEBAPP_URL || "https://fridaybots.vercel.app");
+      if (!response.ok) throw new Error("Failed to fetch transaction data");
+
+      const data = await response.json();
+      const todayDate = new Date().toISOString().split("T")[0];
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+      let summary = `📊 Transaction Summary (${period.toUpperCase()})\n\n`;
+
+      // ... your deposits/withdrawals/revenue logic here
+
+      await sendMessage(chatId, summary);
+
+      // 🔹 Optional: answer callback so button stops "loading"
+      await fetch(`https://api.telegram.org/bot${TOKEN}/answerCallbackQuery`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ callback_query_id: update.callback_query.id }),
+      });
+    } catch (err) {
+      console.error("Error fetching /transaction:", err);
+      await sendMessage(chatId, "❌ Failed to fetch transaction data.");
+    }
+  }
+}
 
 
   // ====================== FALLBACK ======================

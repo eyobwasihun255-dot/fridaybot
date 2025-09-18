@@ -1,88 +1,112 @@
 import express from "express";
-import { ref, get } from "firebase/database"; // adjust path to your config
-import { rtdb } from "../bot/firebaseConfig.js";
+import { rtdb } from "../bot/firebaseConfig.js"; // adjust path
+import { ref, get } from "firebase/database";
+
 const router = express.Router();
 
-/**
- * Helper: group by date (YYYY-MM-DD)
- */
-function groupByDate(entries, field = "amount") {
-  const totals = {};
-  for (const entry of entries) {
-    const date = new Date(entry.datetime).toISOString().split("T")[0];
-    if (!totals[date]) totals[date] = 0;
-    totals[date] += entry[field] || 0;
-  }
-  return totals;
+// Utility: format timestamp → YYYY-MM-DD
+function formatDate(ts) {
+  const d = new Date(ts);
+  return d.toISOString().split("T")[0];
 }
 
-/**
- * GET /api/transaction
- */
 router.get("/transaction", async (req, res) => {
   try {
-    // 1️⃣ Total balance across all users
-    const usersSnap = await get(ref(rtdb, "users"));
+    // --- 1. User balances ---
+    const usersRef = ref(rtdb, "users");
+    const usersSnap = await get(usersRef);
     let totalBalance = 0;
     if (usersSnap.exists()) {
       const users = usersSnap.val();
-      for (const uid in users) {
-        totalBalance += users[uid].balance || 0;
-      }
+      Object.values(users).forEach((u) => {
+        totalBalance += u?.balance || 0;
+      });
     }
 
-    // 2️⃣ Deposits
-    const depositsSnap = await get(ref(rtdb, "deposits"));
+    // --- 2. Deposits ---
+    const depositsRef = ref(rtdb, "deposits");
+    const depositsSnap = await get(depositsRef);
+    const depositsByDate = {};
     let totalDeposits = 0;
-    let depositsByDate = {};
     if (depositsSnap.exists()) {
-      const deposits = Object.values(depositsSnap.val());
-      totalDeposits = deposits.reduce((sum, d) => sum + (d.amount || 0), 0);
-      depositsByDate = groupByDate(deposits);
+      const deposits = depositsSnap.val();
+      Object.values(deposits).forEach((dep) => {
+        if (!dep?.amount || !dep?.datetime) return;
+        const dateKey = formatDate(dep.datetime);
+        depositsByDate[dateKey] = (depositsByDate[dateKey] || 0) + dep.amount;
+        totalDeposits += dep.amount;
+      });
     }
 
-    // 3️⃣ Withdrawals
-    const withdrawSnap = await get(ref(rtdb, "withdrawals"));
+    // --- 3. Withdrawals ---
+    const withdrawalsRef = ref(rtdb, "withdrawals");
+    const withdrawalsSnap = await get(withdrawalsRef);
+    const withdrawalsByDate = {};
     let totalWithdrawals = 0;
-    let withdrawalsByDate = {};
-    if (withdrawSnap.exists()) {
-      const withdrawals = Object.values(withdrawSnap.val());
-      totalWithdrawals = withdrawals.reduce((sum, w) => sum + (w.amount || 0), 0);
-      withdrawalsByDate = groupByDate(withdrawals);
+    if (withdrawalsSnap.exists()) {
+      const withdrawals = withdrawalsSnap.val();
+      Object.values(withdrawals).forEach((wd) => {
+        if (!wd?.amount || !wd?.datetime) return;
+        const dateKey = formatDate(wd.datetime);
+        withdrawalsByDate[dateKey] = (withdrawalsByDate[dateKey] || 0) + wd.amount;
+        totalWithdrawals += wd.amount;
+      });
     }
 
-    // 4️⃣ Revenues
-    const revenueSnap = await get(ref(rtdb, "revenue"));
+    // --- 4. Revenues ---
+    const revenueRef = ref(rtdb, "revenue");
+    const revenueSnap = await get(revenueRef);
+    const revenueByDate = {};
+    const drawnedByDate = {};
+    const undrawnedByDate = {};
     let totalRevenue = 0;
-    let revenueByDate = {};
-    if (revenueSnap.exists()) {
-      const revenues = Object.values(revenueSnap.val());
-      for (const r of revenues) {
-        const date = new Date(r.datetime).toISOString().split("T")[0];
-        if (!revenueByDate[date]) {
-          revenueByDate[date] = { drawned: 0, undrawned: 0 };
-        }
+    let totalDrawned = 0;
+    let totalUndrawned = 0;
 
-        if (r.drawned) {
-          revenueByDate[date].drawned += r.amount || 0;
+    if (revenueSnap.exists()) {
+      const revenues = revenueSnap.val();
+      Object.values(revenues).forEach((rev) => {
+        if (!rev?.amount || !rev?.datetime) return;
+        const dateKey = formatDate(rev.datetime);
+
+        // Total revenue
+        revenueByDate[dateKey] = (revenueByDate[dateKey] || 0) + rev.amount;
+        totalRevenue += rev.amount;
+
+        if (rev.drawned) {
+          drawnedByDate[dateKey] = (drawnedByDate[dateKey] || 0) + rev.amount;
+          totalDrawned += rev.amount;
         } else {
-          revenueByDate[date].undrawned += r.amount || 0;
+          undrawnedByDate[dateKey] = (undrawnedByDate[dateKey] || 0) + rev.amount;
+          totalUndrawned += rev.amount;
         }
-        totalRevenue += r.amount || 0;
-      }
+      });
     }
 
-    // ✅ Return as JSON
     res.json({
-      totalBalance,
-      deposits: { total: totalDeposits, byDate: depositsByDate },
-      withdrawals: { total: totalWithdrawals, byDate: withdrawalsByDate },
-      revenue: { total: totalRevenue, byDate: revenueByDate },
+      balances: {
+        totalBalance,
+      },
+      deposits: {
+        totalDeposits,
+        depositsByDate,
+      },
+      withdrawals: {
+        totalWithdrawals,
+        withdrawalsByDate,
+      },
+      revenue: {
+        totalRevenue,
+        revenueByDate,
+        totalDrawned,
+        drawnedByDate,
+        totalUndrawned,
+        undrawnedByDate,
+      },
     });
-
   } catch (err) {
-    console.error("❌ Error fetching transaction summary:", err);
-    res.status(500).json({ error: "Internal server error" });
+    console.error("Error fetching transaction data:", err);
+    res.status(500).json({ error: "Failed to fetch transaction data" });
   }
 });
 

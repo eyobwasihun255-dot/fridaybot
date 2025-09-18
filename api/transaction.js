@@ -32,8 +32,8 @@ app.get("/api/transaction", async (req, res) => {
     if (depositsSnap.exists()) {
       const deposits = depositsSnap.val();
       Object.values(deposits).forEach((dep) => {
-        if (!dep?.amount || !dep?.datetime) return;
-        const dateKey = formatDate(dep.datetime);
+        if (!dep?.amount || !dep?.date) return;
+        const dateKey = formatDate(dep.date);
         depositsByDate[dateKey] = (depositsByDate[dateKey] || 0) + dep.amount;
         totalDeposits += dep.amount;
       });
@@ -47,8 +47,8 @@ app.get("/api/transaction", async (req, res) => {
     if (withdrawalsSnap.exists()) {
       const withdrawals = withdrawalsSnap.val();
       Object.values(withdrawals).forEach((wd) => {
-        if (!wd?.amount || !wd?.datetime) return;
-        const dateKey = formatDate(wd.datetime);
+        if (!wd?.amount || !wd?.date) return;
+        const dateKey = formatDate(wd.date);
         withdrawalsByDate[dateKey] = (withdrawalsByDate[dateKey] || 0) + wd.amount;
         totalWithdrawals += wd.amount;
       });

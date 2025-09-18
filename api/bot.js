@@ -590,30 +590,6 @@ if (text === "/transaction") {
     return;
   }
 
-  // Step 1: Ask user to choose period
-  const keyboard = {
-    inline_keyboard: [
-      [{ text: "📅 Today", callback_data: "transaction_today" }],
-      [{ text: "📆 This Week", callback_data: "transaction_week" }],
-      [{ text: "🌍 Whole", callback_data: "transaction_whole" }],
-    ],
-  };
-
-  await sendMessage(chatId, "📊 Choose the period for transaction summary:", {
-    reply_markup: keyboard,
-  });
-
-  // Save pending action for callback
-  pendingActions.set(userId, { type: "awaiting_transaction_period" });
-  return;
-}
-
-// ====================== HANDLE CALLBACK ======================
-if (pending?.type === "awaiting_transaction_period" && message.data?.startsWith("transaction_")) {
-  const option = message.data.split("_")[1]; // today | week | whole
-  pendingActions.set(userId, { type: "transaction_selected", period: option });
-  await sendMessage(chatId, `🔹 You selected *${option.toUpperCase()}*. Fetching data...`, { parse_mode: "Markdown" });
-
   try {
     // Fetch transaction data
     const response = await fetch(
@@ -626,53 +602,64 @@ if (pending?.type === "awaiting_transaction_period" && message.data?.startsWith(
     const todayDate = new Date().toISOString().split("T")[0];
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    let summary = `📊 Transaction Summary (${option.toUpperCase()})\n\n`;
-
     const isWithinWeek = (dateStr) => new Date(dateStr) >= weekAgo;
 
-    // 🏦 Deposits
-    let deposits = 0;
-    if (option === "today") deposits = data.deposits.depositsByDate[todayDate] || 0;
-    else if (option === "week") {
-      for (const date in data.deposits.depositsByDate) if (isWithinWeek(date)) deposits += data.deposits.depositsByDate[date];
-    } else deposits = data.deposits.totalDeposits;
+    // Helper function to calculate summary for a period
+    const calculateSummary = (period) => {
+      let deposits = 0, withdrawals = 0, revenueDrawned = 0, revenueUndrawned = 0;
 
-    // 💸 Withdrawals
-    let withdrawals = 0;
-    if (option === "today") withdrawals = data.withdrawals.withdrawalsByDate[todayDate] || 0;
-    else if (option === "week") {
-      for (const date in data.withdrawals.withdrawalsByDate) if (isWithinWeek(date)) withdrawals += data.withdrawals.withdrawalsByDate[date];
-    } else withdrawals = data.withdrawals.totalWithdrawals;
+      if (period === "today") {
+        deposits = data.deposits.depositsByDate[todayDate] || 0;
+        withdrawals = data.withdrawals.withdrawalsByDate[todayDate] || 0;
+        revenueDrawned = data.revenue.drawnedByDate[todayDate] || 0;
+        revenueUndrawned = data.revenue.undrawnedByDate[todayDate] || 0;
+      } else if (period === "week") {
+        for (const date in data.deposits.depositsByDate) if (isWithinWeek(date)) deposits += data.deposits.depositsByDate[date];
+        for (const date in data.withdrawals.withdrawalsByDate) if (isWithinWeek(date)) withdrawals += data.withdrawals.withdrawalsByDate[date];
+        for (const date in data.revenue.drawnedByDate) if (isWithinWeek(date)) revenueDrawned += data.revenue.drawnedByDate[date] || 0;
+        for (const date in data.revenue.undrawnedByDate) if (isWithinWeek(date)) revenueUndrawned += data.revenue.undrawnedByDate[date] || 0;
+      } else if (period === "whole") {
+        deposits = data.deposits.totalDeposits;
+        withdrawals = data.withdrawals.totalWithdrawals;
+        revenueDrawned = data.revenue.totalDrawned;
+        revenueUndrawned = data.revenue.totalUndrawned;
+      }
 
-    // 💰 Revenue
-    let revenueDrawned = 0;
-    let revenueUndrawned = 0;
-    if (option === "today") {
-      revenueDrawned = data.revenue.drawnedByDate[todayDate] || 0;
-      revenueUndrawned = data.revenue.undrawnedByDate[todayDate] || 0;
-    } else if (option === "week") {
-      for (const date in data.revenue.drawnedByDate) if (isWithinWeek(date)) revenueDrawned += data.revenue.drawnedByDate[date] || 0;
-      for (const date in data.revenue.undrawnedByDate) if (isWithinWeek(date)) revenueUndrawned += data.revenue.undrawnedByDate[date] || 0;
-    } else {
-      revenueDrawned = data.revenue.totalDrawned;
-      revenueUndrawned = data.revenue.totalUndrawned;
-    }
+      return { deposits, withdrawals, revenueDrawned, revenueUndrawned };
+    };
 
-    // Final summary
-    summary += `👥 Total Balance: ${data.balances.totalBalance}\n`;
-    summary += `🏦 Deposits: ${deposits}\n`;
-    summary += `💸 Withdrawals: ${withdrawals}\n`;
-    summary += `💰 Revenue (Drawned): ${revenueDrawned}\n`;
-    summary += `💰 Revenue (Undrawned): ${revenueUndrawned}\n`;
+    // Generate summaries
+    const today = calculateSummary("today");
+    const week = calculateSummary("week");
+    const whole = calculateSummary("whole");
+
+    // Build final message
+    let summary = `📊 Transaction Summary\n\n`;
+    summary += `👥 Total Balance: ${data.balances.totalBalance}\n\n`;
+
+    summary += `📅 Today:\n`;
+    summary += `🏦 Deposits: ${today.deposits}\n`;
+    summary += `💸 Withdrawals: ${today.withdrawals}\n`;
+    summary += `💰 Revenue (Drawned): ${today.revenueDrawned}\n`;
+    summary += `💰 Revenue (Undrawned): ${today.revenueUndrawned}\n\n`;
+
+    summary += `📆 This Week:\n`;
+    summary += `🏦 Deposits: ${week.deposits}\n`;
+    summary += `💸 Withdrawals: ${week.withdrawals}\n`;
+    summary += `💰 Revenue (Drawned): ${week.revenueDrawned}\n`;
+    summary += `💰 Revenue (Undrawned): ${week.revenueUndrawned}\n\n`;
+
+    summary += `🌍 Whole Period:\n`;
+    summary += `🏦 Deposits: ${whole.deposits}\n`;
+    summary += `💸 Withdrawals: ${whole.withdrawals}\n`;
+    summary += `💰 Revenue (Drawned): ${whole.revenueDrawned}\n`;
+    summary += `💰 Revenue (Undrawned): ${whole.revenueUndrawned}\n`;
 
     await sendMessage(chatId, summary);
   } catch (err) {
     console.error("Error fetching /transaction:", err);
     await sendMessage(chatId, "❌ Failed to fetch transaction data.");
   }
-
-  pendingActions.delete(userId);
-  return;
 }
 
   // ====================== FALLBACK ======================

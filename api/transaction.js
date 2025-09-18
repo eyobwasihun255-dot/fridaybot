@@ -2,7 +2,8 @@ import express from "express";
 import { rtdb } from "../bot/firebaseConfig.js"; // adjust path
 import { ref, get } from "firebase/database";
 
-const router = express.Router();
+const app = express();
+const PORT = process.env.PORT || 5000;
 
 // Utility: format timestamp → YYYY-MM-DD
 function formatDate(ts) {
@@ -10,7 +11,7 @@ function formatDate(ts) {
   return d.toISOString().split("T")[0];
 }
 
-router.get("/transaction", async (req, res) => {
+app.get("/api/transaction", async (req, res) => {
   try {
     // --- 1. User balances ---
     const usersRef = ref(rtdb, "users");
@@ -110,4 +111,4 @@ router.get("/transaction", async (req, res) => {
   }
 });
 
-export default router;
+app.listen(PORT, () => console.log(`Transaction API running on port ${PORT}`));

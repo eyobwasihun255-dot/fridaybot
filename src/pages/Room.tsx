@@ -1027,6 +1027,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
   ) : (
     <div className="col-span-full text-center text-gray-300">
       No players have bet yet...
+      {displayedCard?.claimed}
     </div>
   )}
 </div>

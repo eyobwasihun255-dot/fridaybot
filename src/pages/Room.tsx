@@ -83,7 +83,7 @@ const [remaining, setRemaining] = useState<number | null>(null);
  const cardNumbers = displayedCard?.numbers ?? [];
   const [hasBet, setHasBet] = useState(false);
   const [gameMessage, setGameMessage] = useState('');
-  
+  const [claim, setclaim] = useState(false);
 const [markedNumbers, setMarkedNumbers] = React.useState<number[]>([]);
   const cancelBet = useGameStore((state) => state.cancelBet);
 const displayedCalledNumbers = useGameStore(
@@ -128,7 +128,7 @@ const [autoCard, setAutoCard] = useState<{
 
 React.useEffect(() => {
   if (!displayedCard) return;
-
+  setclaim(displayedCard.claimed);
   const cardRef = ref(
     rtdb,
     `rooms/${currentRoom?.id}/bingoCards/${displayedCard.id}`
@@ -894,7 +894,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
     )}
 
     {/* Auto Bet Toggle Button → only visible if bet is active */}
-    {autoCard && isBetActive && displayedCard.claimed && (
+    {autoCard && isBetActive && claim && (
   <button
     onClick={async () => {
       if (!displayedCard || !currentRoom) return;

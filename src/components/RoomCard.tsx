@@ -68,14 +68,26 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
 
       {/* Content */}
       <div className="relative p-6 flex flex-col justify-between h-full">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-white font-bold text-xl">{room.name}</h3>
-          {room.isDemoRoom && (
-            <span className="bg-green-500 text-white text-xs px-2 py-1 rounded-full">
-              {t('free_play')}
-            </span>
-          )}
-        </div>
+        <div className="flex items-center justify-between mb-4 space-x-3">
+  {/* Room Name */}
+  <h3 className="text-white font-bold text-xl flex items-center space-x-2">
+    <span>{room.name}</span>
+
+    {/* 🔥 Bet Amount Badge */}
+    {!room.isDemoRoom && (
+      <span className="bg-yellow-400 text-black font-bold px-3 py-1 rounded-full shadow-lg animate-pulse">
+        {Number(room.betAmount ?? 0).toFixed(2)} ETB
+      </span>
+    )}
+  </h3>
+
+  {/* Demo Room Badge */}
+  {room.isDemoRoom && (
+    <span className="bg-green-500 text-white text-xs px-2 py-1 rounded-full shadow-md">
+      {t('free_play')}
+    </span>
+  )}
+</div>
 
         <div className="space-y-3 mb-6">
           <div className="flex items-center justify-between">

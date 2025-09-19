@@ -894,7 +894,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
     )}
 
     {/* Auto Bet Toggle Button → only visible if bet is active */}
-    {autoCard && displayedCard?.claimed && (
+    {autoCard && isBetActive && displayedCard.claimed && (
   <button
     onClick={async () => {
       if (!displayedCard || !currentRoom) return;
@@ -926,7 +926,6 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
       : `${t("set_auto_bet")} card:${displayedCard?.serialNumber}`}
   </button>
 )}
-
 
   </div>
 ) : (

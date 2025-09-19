@@ -129,6 +129,7 @@ function generateDrawnNumbersMultiWinner(cards) {
 
 
 // --- API Handler ---
+// --- API Handler ---
 export default async function handler(req, res) {
   const { roomId } = req.body;
   if (!roomId) return res.status(400).json({ error: "Missing roomId" });
@@ -167,7 +168,7 @@ export default async function handler(req, res) {
         status: "active",
         totalPayout,
         betsDeducted: false,
-        winners: [] // will be filled with {id, userId, username, checked}
+        winners: []
       };
 
       room.gameStatus = "playing";
@@ -183,68 +184,74 @@ export default async function handler(req, res) {
 
     if (!gameData) return res.status(400).json({ error: "Game already started or invalid state" });
 
-    // ✅ Add checked & userId for each winner
-   // Fetch current room data snapshot
-const roomSnap = await get(roomRef);
-const roomValue = roomSnap.val() || { bingoCards: {} };
+    // ✅ Reset attemptedBingo for all players in this room
+    const roomSnap = await get(roomRef);
+    const roomValue = roomSnap.val() || {};
+    if (roomValue?.players) {
+      const updates = {};
+      Object.keys(roomValue.players).forEach(pid => {
+        updates[`players/${pid}/attemptedBingo`] = false;
+      });
+      await update(roomRef, updates);
+    }
 
-// Add checked, userId & cardId for each winner
-for (const cardId of winnerIds) {
-  const card = Object.values(roomValue.bingoCards).find(c => c.id === cardId);
-  const userId = card?.claimedBy || cardId;
-  const userSnap = await get(ref(rtdb, `users/${userId}`));
-  const userData = userSnap.val();
-  const username = userData?.username || "Unknown";
+    // ✅ Add winners with userId & checked
+    const roomValue2 = (await get(roomRef)).val() || { bingoCards: {} };
+    for (const cardId of winnerIds) {
+      const card = Object.values(roomValue2.bingoCards).find(c => c.id === cardId);
+      const userId = card?.claimedBy || cardId;
+      const userSnap = await get(ref(rtdb, `users/${userId}`));
+      const userData = userSnap.val();
+      const username = userData?.username || "Unknown";
 
-  gameData.winners.push({
-    id: uuidv4(),    // unique winner record ID
-    cardId,
-    userId,
-    username,
-    checked: false
-  });
-}
+      gameData.winners.push({
+        id: uuidv4(),
+        cardId,
+        userId,
+        username,
+        checked: false
+      });
+    }
 
-
+    // ✅ Deduct bets (same as before)...
     const gameRef = ref(rtdb, `games/${gameData.id}`);
     const gameSnap = await get(gameRef);
     const existingGame = gameSnap.val();
 
     if (!existingGame?.betsDeducted) {
-  const roomSnap = await get(roomRef);
-  const roomValue = roomSnap.val();
+      const roomSnap = await get(roomRef);
+      const roomValue = roomSnap.val();
 
-  if (roomValue?.players) {
-    for (const playerId of Object.keys(roomValue.players)) {
-      const betAmount = roomValue.betAmount || 0;
-      const balanceRef = ref(rtdb, `users/${playerId}/balance`);
+      if (roomValue?.players) {
+        for (const playerId of Object.keys(roomValue.players)) {
+          const betAmount = roomValue.betAmount || 0;
+          const balanceRef = ref(rtdb, `users/${playerId}/balance`);
 
-      // Deduct balance
-      await runTransaction(balanceRef, current => (current || 0) - betAmount);
+          // Deduct balance
+          await runTransaction(balanceRef, current => (current || 0) - betAmount);
 
-      // Get user details
-      const userSnap = await get(ref(rtdb, `users/${playerId}`));
-      const userData = userSnap.val() || {};
-      const username = userData.username || "Unknown";
+          // Get user details
+          const userSnap = await get(ref(rtdb, `users/${playerId}`));
+          const userData = userSnap.val() || {};
+          const username = userData.username || "Unknown";
 
-      // Register deduction log
-      const deductId = uuidv4();
-      const deductRef = ref(rtdb, `deductRdbs/${deductId}`);
-      await fbset(deductRef, {
-        id: deductId,
-        username,
-        userId: playerId,
-        amount: betAmount,
-        gameId: gameData.id,
-        roomId,
-        date: Date.now()
-      });
+          // Register deduction log
+          const deductId = uuidv4();
+          const deductRef = ref(rtdb, `deductRdbs/${deductId}`);
+          await fbset(deductRef, {
+            id: deductId,
+            username,
+            userId: playerId,
+            amount: betAmount,
+            gameId: gameData.id,
+            roomId,
+            date: Date.now()
+          });
+        }
+      }
+
+      await update(gameRef, { betsDeducted: true });
     }
-  }
-
-  await update(gameRef, { betsDeducted: true });
-}
-
 
     await fbset(gameRef, gameData);
 

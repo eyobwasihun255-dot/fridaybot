@@ -327,69 +327,96 @@ if (user?.telegramId) {
 joinRoom: (roomId: string) => {
   const roomRef = ref(rtdb, "rooms/" + roomId);
 
-  onValue(roomRef, (snapshot) => {
-  if (!snapshot.exists()) {
-    set({ currentRoom: null });
-    return;
-  }
+  onValue(roomRef, async (snapshot) => {
+    if (!snapshot.exists()) {
+      set({ currentRoom: null });
+      return;
+    }
 
-  const updatedRoom = { id: roomId, ...snapshot.val() } as Room;
-  set({ currentRoom: updatedRoom });
-  // ✅ Always fetch cards
-  get().fetchBingoCards();
+    const updatedRoom = { id: roomId, ...snapshot.val() } as Room;
+    set({ currentRoom: updatedRoom });
 
-  // ✅ Count how many players actually placed bets (claimed cards)
-  const activePlayers = updatedRoom.players
-    ? Object.values(updatedRoom.players).filter(
-        (p: any) => p.betAmount && p.cardId
-      )
-    : [];
+    // ✅ Always fetch cards
+    get().fetchBingoCards();
 
-  const countdownRef = ref(rtdb, `rooms/${roomId}`);
+    // ✅ Get bet amount (default 0)
+    const betAmount = updatedRoom.betAmount || 0;
 
-  // ❌ Cancel stale countdown if <2 players
-if (
-  activePlayers.length < 2 &&
-  updatedRoom.gameStatus === "countdown" &&
-  updatedRoom.countdownEndAt > Date.now()
-) {
-  (async () => {
-    await update(countdownRef, {
-      gameStatus: "waiting",
-      countdownEndAt: null,
-      countdownStartedBy: null,
+    // ✅ Filter active players who placed bets
+    let activePlayers = updatedRoom.players
+      ? Object.values(updatedRoom.players).filter(
+          (p: any) => p.betAmount && p.cardId
+        )
+      : [];
+
+    const countdownRef = ref(rtdb, `rooms/${roomId}`);
+
+    // ✅ Remove players with insufficient balance
+    const updates: Record<string, any> = {};
+    Object.entries(updatedRoom.players || {}).forEach(([playerId, player]: any) => {
+      if (player.betAmount && player.cardId) {
+        if ((player.balance || 0) < betAmount) {
+          // ❌ Not enough balance → unclaim player
+          updates[`players/${playerId}/cardId`] = null;
+          updates[`players/${playerId}/betAmount`] = null;
+        }
+      }
     });
-  })();
-  return;
-}
 
-// ✅ Start countdown if 2+ active players, room waiting, and no countdown in progress
-if (
-  activePlayers.length >= 2 &&
-  updatedRoom.gameStatus === "waiting" &&
-  (!updatedRoom.countdownEndAt || updatedRoom.countdownEndAt < Date.now()) &&
-  !updatedRoom.countdownStartedBy
-) {
-  const { user } = useAuthStore.getState();
-  if (!user?.telegramId) return;
+    if (Object.keys(updates).length > 0) {
+      await update(roomRef, updates);
 
-  const countdownDuration = 30 * 1000; // 30s
-  const countdownEndAt = Date.now() + countdownDuration;
+      // Refresh active players after cleanup
+      activePlayers = Object.values(updatedRoom.players).filter(
+        (p: any) => p.betAmount && p.cardId && (p.balance || 0) >= betAmount
+      );
+    }
 
-  update(countdownRef, {
-    gameStatus: "countdown",
-    countdownEndAt,
-    countdownStartedBy: user.telegramId,
+    // ❌ Cancel stale countdown if <2 players
+    if (
+      activePlayers.length < 2 &&
+      updatedRoom.gameStatus === "countdown" &&
+      updatedRoom.countdownEndAt > Date.now()
+    ) {
+      await update(countdownRef, {
+        gameStatus: "waiting",
+        countdownEndAt: null,
+        countdownStartedBy: null,
+      });
+      return;
+    }
+
+    // ✅ Start countdown if 2+ valid players
+    if (
+      activePlayers.length >= 2 &&
+      updatedRoom.gameStatus === "waiting" &&
+      (!updatedRoom.countdownEndAt || updatedRoom.countdownEndAt < Date.now()) &&
+      !updatedRoom.countdownStartedBy
+    ) {
+      const { user } = useAuthStore.getState();
+      if (!user?.telegramId) return;
+
+      const countdownDuration = 30 * 1000; // 30s
+      const countdownEndAt = Date.now() + countdownDuration;
+
+      update(countdownRef, {
+        gameStatus: "countdown",
+        countdownEndAt,
+        countdownStartedBy: user.telegramId,
+      });
+    }
+
+    // ✅ Reset room after ended game
+    if (
+      updatedRoom.gameStatus === "ended" &&
+      updatedRoom.nextGameCountdownEndAt <= Date.now()
+    ) {
+      update(ref(rtdb, `rooms/${roomId}`), {
+        gameStatus: "waiting",
+        nextGameCountdownEndAt: null,
+      });
+    }
   });
-}
-if (updatedRoom.gameStatus === "ended" && updatedRoom.nextGameCountdownEndAt <= Date.now()) {
-  update(ref(rtdb, `rooms/${roomId}`), {
-    gameStatus: "waiting",
-    nextGameCountdownEndAt: null,
-  });
-}
-
-});
 },
 
   

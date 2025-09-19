@@ -9,7 +9,7 @@ interface Room {
   name: string;
   betAmount: number;
   maxPlayers: number;
-  players: { [id: string]: any } | number; // if number, fallback
+  players: { [id: string]: any } | number; // could be number or object
   gameStatus: string;
   isDemoRoom?: boolean;
 }
@@ -21,10 +21,7 @@ interface RoomCardProps {
 const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
   const { t } = useLanguageStore();
   const navigate = useNavigate();
-  const { user } = useAuthStore(); // Get current user
-  const userId = user?.telegramId;
-
-  const isUserInRoom = userId && room.players && typeof room.players === 'object' && room.players[userId];
+  const { user } = useAuthStore.getState();
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -58,9 +55,17 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
     }
   };
 
+  // ✅ Check if current user claimed a card in this room
+  const hasClaimedCard =
+    room.players &&
+    typeof room.players === 'object' &&
+    user &&
+    room.players[user.telegramId];
+
   return (
     <div
-      className="relative rounded-xl overflow-hidden border border-white/20 shadow-lg hover:scale-105 transition-all duration-300"
+      className={`relative rounded-xl overflow-hidden border border-white/20 shadow-lg hover:scale-105 transition-all duration-300
+        ${hasClaimedCard ? 'animate-green-blink' : ''}`}
       style={{
         backgroundImage: `url(${getBillboardImage()})`,
         backgroundSize: 'cover',
@@ -70,21 +75,14 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
       {/* Dark overlay */}
       <div className="absolute inset-0 bg-black/50" />
 
+      {/* Content */}
       <div className="relative p-6 flex flex-col justify-between h-full">
-        {/* Room Name & Badges */}
         <div className="flex items-center justify-between mb-4 space-x-3">
+          {/* Room Name */}
           <h3 className="text-white font-bold text-xl flex items-center space-x-2">
             <span>{room.name}</span>
 
-            {/* 🔴 User presence indicator */}
-            {isUserInRoom && (
-              <span
-                className="ml-2 w-3 h-3 rounded-full bg-red-500 animate-ping"
-                title="You have claimed a card in this room"
-              />
-            )}
-
-            {/* 🔥 Bet Amount Badge */}
+            {/* Bet Amount Badge */}
             {!room.isDemoRoom && (
               <span className="bg-yellow-400 text-black font-bold px-3 py-1 rounded-full shadow-lg animate-pulse">
                 {Number(room.betAmount ?? 0).toFixed(2)} {t('etb')}
@@ -100,9 +98,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
           )}
         </div>
 
-        {/* Room Info */}
         <div className="space-y-3 mb-6">
-          {/* Players */}
           <div className="flex items-center justify-between">
             <span className="text-white/80">{t('players')}:</span>
             <div className="flex items-center space-x-1">
@@ -110,15 +106,12 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
               <span className="text-white">
                 {room.players && typeof room.players === 'object'
                   ? Object.keys(room.players).length
-                  : typeof room.players === 'number'
-                  ? room.players
                   : 0}
                 /{room.maxPlayers}
               </span>
             </div>
           </div>
 
-          {/* Status */}
           <div className="flex items-center justify-between">
             <span className="text-white/80">{t('status')}:</span>
             <span className={`font-medium ${getStatusColor(room.gameStatus)}`}>
@@ -127,7 +120,6 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
           </div>
         </div>
 
-        {/* Join Button */}
         <button
           onClick={handleJoinRoom}
           className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white font-bold py-3 px-4 rounded-lg transition-all duration-200 flex items-center justify-center space-x-2 shadow-md hover:shadow-xl"
@@ -136,6 +128,20 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
           <span>{t('join_room')}</span>
         </button>
       </div>
+
+      {/* ✅ Tailwind Keyframes for green blinking */}
+      <style>
+        {`
+          @keyframes green-blink {
+            0%, 100% { box-shadow: 0 0 20px 4px rgba(0,255,0,0.7); }
+            50% { box-shadow: 0 0 40px 10px rgba(0,255,0,1); }
+          }
+          .animate-green-blink {
+            animation: green-blink 1.2s infinite;
+            border-color: #00ff00;
+          }
+        `}
+      </style>
     </div>
   );
 };

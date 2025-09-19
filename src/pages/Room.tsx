@@ -83,7 +83,7 @@ const [remaining, setRemaining] = useState<number | null>(null);
  const cardNumbers = displayedCard?.numbers ?? [];
   const [hasBet, setHasBet] = useState(false);
   const [gameMessage, setGameMessage] = useState('');
-  const [claim, setclaim] = useState(false);
+ 
 const [markedNumbers, setMarkedNumbers] = React.useState<number[]>([]);
   const cancelBet = useGameStore((state) => state.cancelBet);
 const displayedCalledNumbers = useGameStore(
@@ -120,6 +120,20 @@ function checkIfLoser(currentRoom: any, t: (key: string) => string) {
     setLoserPopup({ visible: true, message: t('you_lost') });
   }
 }
+const [claimed, setClaimed] = useState(false);
+
+React.useEffect(() => {
+  if (!displayedCard || !currentRoom) return;
+  const cardRef = ref(rtdb, `rooms/${currentRoom.id}/bingoCards/${displayedCard.id}`);
+
+  const unsubscribe = onValue(cardRef, (snap) => {
+    if (snap.exists()) {
+      setClaimed(!!snap.val().claimed);
+    }
+  });
+
+  return () => unsubscribe();
+}, [displayedCard?.id, currentRoom?.id]);
 
 const [autoCard, setAutoCard] = useState<{
   auto: boolean;
@@ -128,7 +142,6 @@ const [autoCard, setAutoCard] = useState<{
 
 React.useEffect(() => {
   if (!displayedCard) return;
-  setclaim(displayedCard.claimed);
   const cardRef = ref(
     rtdb,
     `rooms/${currentRoom?.id}/bingoCards/${displayedCard.id}`
@@ -610,6 +623,23 @@ return (
     {popupMessage}
   </div>
 )}
+{loserPopup.visible && (
+  <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+    <div className="bg-white rounded-2xl shadow-lg p-6 max-w-sm w-full text-center">
+      <h2 className="text-xl font-bold text-red-600 mb-4">
+        {t("game_result")}
+      </h2>
+      <p className="text-gray-800 mb-6">{loserPopup.message}</p>
+      <button
+        onClick={() => setLoserPopup({ visible: false, message: "" })}
+        className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold"
+      >
+        {t("close")}
+      </button>
+    </div>
+  </div>
+)}
+
 
         
 
@@ -894,7 +924,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
     )}
 
     {/* Auto Bet Toggle Button → only visible if bet is active */}
-    {autoCard && isBetActive && claim && (
+    {autoCard && isBetActive && claimed && (
   <button
     onClick={async () => {
       if (!displayedCard || !currentRoom) return;

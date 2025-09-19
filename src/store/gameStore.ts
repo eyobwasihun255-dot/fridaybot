@@ -69,63 +69,82 @@ interface GameState {
 
 async function resetAllCardsAndPlayers(roomId: string) {
   try {
+    const roomRef = ref(rtdb, `rooms/${roomId}`);
     const cardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
     const playersRef = ref(rtdb, `rooms/${roomId}/players`);
 
-    // 1) Reset non-auto cards
+    // ✅ Get room bet amount
+    const roomSnap = await get(roomRef);
+    if (!roomSnap.exists()) {
+      console.log("❌ Room not found:", roomId);
+      return;
+    }
+    const roomData = roomSnap.val();
+    const betAmount = roomData.betAmount || 0;
+
+    // 1) Reset cards
     const cardsSnap = await get(cardsRef);
+    const autoCardsByPlayer: Record<string, boolean> = {};
+    const cardUpdates: Promise<any>[] = [];
+
     if (cardsSnap.exists()) {
-      const cardUpdates: Promise<any>[] = [];
-      const autoCardsByPlayer: Record<string, boolean> = {};
+      for (const cardKey in cardsSnap.val()) {
+        const cardData = cardsSnap.val()[cardKey];
+        const cardRef = ref(rtdb, `rooms/${roomId}/bingoCards/${cardKey}`);
 
-      cardsSnap.forEach((cardSnap) => {
-        const cardKey = cardSnap.key;
-        const cardData = cardSnap.val();
-        if (!cardKey) return;
-
-        // Track auto cards per player
         if (cardData.auto) {
-          autoCardsByPlayer[cardData.claimedBy] = true;
-        }
+          // ✅ Check player balance
+          const userSnap = await get(ref(rtdb, `users/${cardData.claimedBy}`));
+          const userBalance = userSnap.val()?.balance || 0;
 
-        // Reset non-auto cards
-        if ((!cardData?.auto || cardData.auto === false) && !cardData?.autoUntil) {
-          const cardRef = ref(rtdb, `rooms/${roomId}/bingoCards/${cardKey}`);
+          if (userBalance < betAmount) {
+                    // ❌ Not enough balance → reset card & auto
+            cardUpdates.push(
+              update(cardRef, {
+                claimed: false,
+                claimedBy: null,
+                auto: false,
+                autoUntil: null,
+              })
+            );
+          }
+        } else {
+          // Reset non-auto cards
           cardUpdates.push(update(cardRef, { claimed: false, claimedBy: null }));
         }
-      });
+      }
 
       if (cardUpdates.length) {
         await Promise.all(cardUpdates);
-        console.log("♻️ Non-auto cards reset in room:", roomId);
+        console.log("♻️ Cards reset (including low-balance autos) in room:", roomId);
       } else {
-        console.log("ℹ️ No eligible non-auto cards to reset for room:", roomId);
-      }
-
-      // 2) Remove players who have no auto cards
-      const playersSnap = await get(playersRef);
-      if (playersSnap.exists()) {
-        const removePromises: Promise<any>[] = [];
-        playersSnap.forEach((playerSnap) => {
-          const playerKey = playerSnap.key;
-          if (!playerKey) return;
-
-          // If player has no auto cards → remove
-          if (!autoCardsByPlayer[playerKey]) {
-            const playerRef = ref(rtdb, `rooms/${roomId}/players/${playerKey}`);
-            removePromises.push(remove(playerRef));
-          }
-        });
-
-        if (removePromises.length) {
-          await Promise.all(removePromises);
-          console.log("🧹 Non-auto players removed from room:", roomId);
-        } else {
-          console.log("ℹ️ All remaining players have auto cards, none removed");
-        }
+        console.log("ℹ️ No cards needed reset for room:", roomId);
       }
     } else {
       console.log("ℹ️ No cards found for room:", roomId);
+    }
+
+    // 2) Remove players who have no valid auto cards
+    const playersSnap = await get(playersRef);
+    if (playersSnap.exists()) {
+      const removePromises: Promise<any>[] = [];
+      playersSnap.forEach((playerSnap) => {
+        const playerKey = playerSnap.key;
+        if (!playerKey) return;
+
+        // If player has no valid auto card → remove
+        if (!autoCardsByPlayer[playerKey]) {
+          const playerRef = ref(rtdb, `rooms/${roomId}/players/${playerKey}`);
+          removePromises.push(remove(playerRef));
+        }
+      });
+
+      if (removePromises.length) {
+        await Promise.all(removePromises);
+        console.log("🧹 Removed players without valid auto cards from room:", roomId);
+      } else {
+        console.log("ℹ️ All remaining players have valid auto cards");
+      }
     }
 
   } catch (err) {
@@ -133,6 +152,7 @@ async function resetAllCardsAndPlayers(roomId: string) {
     throw err;
   }
 }
+
 export const useGameStore = create<GameState>((set, get) => ({
   rooms: [],
   drawIntervalId: null,
@@ -327,96 +347,69 @@ if (user?.telegramId) {
 joinRoom: (roomId: string) => {
   const roomRef = ref(rtdb, "rooms/" + roomId);
 
-  onValue(roomRef, async (snapshot) => {
-    if (!snapshot.exists()) {
-      set({ currentRoom: null });
-      return;
-    }
+  onValue(roomRef, (snapshot) => {
+  if (!snapshot.exists()) {
+    set({ currentRoom: null });
+    return;
+  }
 
-    const updatedRoom = { id: roomId, ...snapshot.val() } as Room;
-    set({ currentRoom: updatedRoom });
+  const updatedRoom = { id: roomId, ...snapshot.val() } as Room;
+  set({ currentRoom: updatedRoom });
+  // ✅ Always fetch cards
+  get().fetchBingoCards();
 
-    // ✅ Always fetch cards
-    get().fetchBingoCards();
+  // ✅ Count how many players actually placed bets (claimed cards)
+  const activePlayers = updatedRoom.players
+    ? Object.values(updatedRoom.players).filter(
+        (p: any) => p.betAmount && p.cardId
+      )
+    : [];
 
-    // ✅ Get bet amount (default 0)
-    const betAmount = updatedRoom.betAmount || 0;
+  const countdownRef = ref(rtdb, `rooms/${roomId}`);
 
-    // ✅ Filter active players who placed bets
-    let activePlayers = updatedRoom.players
-      ? Object.values(updatedRoom.players).filter(
-          (p: any) => p.betAmount && p.cardId
-        )
-      : [];
-
-    const countdownRef = ref(rtdb, `rooms/${roomId}`);
-
-    // ✅ Remove players with insufficient balance
-    const updates: Record<string, any> = {};
-    Object.entries(updatedRoom.players || {}).forEach(([playerId, player]: any) => {
-      if (player.betAmount && player.cardId) {
-        if ((player.balance || 0) < betAmount) {
-          // ❌ Not enough balance → unclaim player
-          updates[`players/${playerId}/cardId`] = null;
-          updates[`players/${playerId}/betAmount`] = null;
-        }
-      }
+  // ❌ Cancel stale countdown if <2 players
+if (
+  activePlayers.length < 2 &&
+  updatedRoom.gameStatus === "countdown" &&
+  updatedRoom.countdownEndAt > Date.now()
+) {
+  (async () => {
+    await update(countdownRef, {
+      gameStatus: "waiting",
+      countdownEndAt: null,
+      countdownStartedBy: null,
     });
+  })();
+  return;
+}
 
-    if (Object.keys(updates).length > 0) {
-      await update(roomRef, updates);
+// ✅ Start countdown if 2+ active players, room waiting, and no countdown in progress
+if (
+  activePlayers.length >= 2 &&
+  updatedRoom.gameStatus === "waiting" &&
+  (!updatedRoom.countdownEndAt || updatedRoom.countdownEndAt < Date.now()) &&
+  !updatedRoom.countdownStartedBy
+) {
+  const { user } = useAuthStore.getState();
+  if (!user?.telegramId) return;
 
-      // Refresh active players after cleanup
-      activePlayers = Object.values(updatedRoom.players).filter(
-        (p: any) => p.betAmount && p.cardId && (p.balance || 0) >= betAmount
-      );
-    }
+  const countdownDuration = 30 * 1000; // 30s
+  const countdownEndAt = Date.now() + countdownDuration;
 
-    // ❌ Cancel stale countdown if <2 players
-    if (
-      activePlayers.length < 2 &&
-      updatedRoom.gameStatus === "countdown" &&
-      updatedRoom.countdownEndAt > Date.now()
-    ) {
-      await update(countdownRef, {
-        gameStatus: "waiting",
-        countdownEndAt: null,
-        countdownStartedBy: null,
-      });
-      return;
-    }
-
-    // ✅ Start countdown if 2+ valid players
-    if (
-      activePlayers.length >= 2 &&
-      updatedRoom.gameStatus === "waiting" &&
-      (!updatedRoom.countdownEndAt || updatedRoom.countdownEndAt < Date.now()) &&
-      !updatedRoom.countdownStartedBy
-    ) {
-      const { user } = useAuthStore.getState();
-      if (!user?.telegramId) return;
-
-      const countdownDuration = 30 * 1000; // 30s
-      const countdownEndAt = Date.now() + countdownDuration;
-
-      update(countdownRef, {
-        gameStatus: "countdown",
-        countdownEndAt,
-        countdownStartedBy: user.telegramId,
-      });
-    }
-
-    // ✅ Reset room after ended game
-    if (
-      updatedRoom.gameStatus === "ended" &&
-      updatedRoom.nextGameCountdownEndAt <= Date.now()
-    ) {
-      update(ref(rtdb, `rooms/${roomId}`), {
-        gameStatus: "waiting",
-        nextGameCountdownEndAt: null,
-      });
-    }
+  update(countdownRef, {
+    gameStatus: "countdown",
+    countdownEndAt,
+    countdownStartedBy: user.telegramId,
   });
+}
+if (updatedRoom.gameStatus === "ended" && updatedRoom.nextGameCountdownEndAt <= Date.now()) {
+  update(ref(rtdb, `rooms/${roomId}`), {
+    gameStatus: "waiting",
+    nextGameCountdownEndAt: null,
+  });
+}
+
+});
 },
 
   

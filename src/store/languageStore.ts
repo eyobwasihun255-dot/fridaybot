@@ -90,8 +90,10 @@ const translations = {
     'remove_auto_bet': 'auto ውርርድ ሰርዝ',
     'auto_bet_en': 'Auto Bet ለካርቴላ ተደርጓል',
     'auto_bet_dis': 'Auto Bet ከካርቴላ ተሰርዟል',
+    'etb': 'ብር'
   },en: {
     // Header
+    'etb' :'ETB',
     'auto_bet_en': 'Auto Bet enabled for card',
     'auto_bet_dis': 'Auto Bet disabled for card',
     'set_auto_bet': 'Set Auto Bet',

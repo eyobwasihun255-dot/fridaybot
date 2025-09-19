@@ -309,7 +309,7 @@ React.useEffect(() => {
   if (!displayedCard) return;
 
   // If the card is claimed but user balance < room bet amount → cancel bet
-  if (!currentRoom.isDemoRoom && (user.balance || 0) < currentRoom.betAmount) {
+  if (!currentRoom.isDemoRoom && currentRoom.gameStatus !== "playing" && (user.balance || 0) < currentRoom.betAmount) {
     (async () => {
       const cardId = displayedCard.id;
       const success = await cancelBet(cardId);

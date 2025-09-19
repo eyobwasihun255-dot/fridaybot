@@ -73,7 +73,7 @@ async function resetAllCardsAndPlayers(roomId: string) {
     const cardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
     const playersRef = ref(rtdb, `rooms/${roomId}/players`);
 
-    // ✅ Get room bet amount
+    // ✅ Fetch room to get bet amount
     const roomSnap = await get(roomRef);
     if (!roomSnap.exists()) {
       console.log("❌ Room not found:", roomId);
@@ -82,23 +82,28 @@ async function resetAllCardsAndPlayers(roomId: string) {
     const roomData = roomSnap.val();
     const betAmount = roomData.betAmount || 0;
 
-    // 1) Reset cards
+    // 1️⃣ Reset cards
     const cardsSnap = await get(cardsRef);
     const autoCardsByPlayer: Record<string, boolean> = {};
     const cardUpdates: Promise<any>[] = [];
 
     if (cardsSnap.exists()) {
-      for (const cardKey in cardsSnap.val()) {
-        const cardData = cardsSnap.val()[cardKey];
+      const cardsData = cardsSnap.val();
+      for (const cardKey in cardsData) {
+        const cardData = cardsData[cardKey];
         const cardRef = ref(rtdb, `rooms/${roomId}/bingoCards/${cardKey}`);
 
         if (cardData.auto) {
           // ✅ Check player balance
-          const userSnap = await get(ref(rtdb, `users/${cardData.claimedBy}`));
+          const userId = cardData.claimedBy;
+          const userSnap = await get(ref(rtdb, `users/${userId}`));
           const userBalance = userSnap.val()?.balance || 0;
 
-          if (userBalance < betAmount) {
-                    // ❌ Not enough balance → reset card & auto
+          if (userBalance >= betAmount) {
+            // ✅ Player has enough balance → keep auto
+            autoCardsByPlayer[userId] = true;
+          } else {
+            // ❌ Low balance → reset card & auto
             cardUpdates.push(
               update(cardRef, {
                 claimed: false,
@@ -124,7 +129,7 @@ async function resetAllCardsAndPlayers(roomId: string) {
       console.log("ℹ️ No cards found for room:", roomId);
     }
 
-    // 2) Remove players who have no valid auto cards
+    // 2️⃣ Remove players without any valid auto cards
     const playersSnap = await get(playersRef);
     if (playersSnap.exists()) {
       const removePromises: Promise<any>[] = [];
@@ -146,7 +151,6 @@ async function resetAllCardsAndPlayers(roomId: string) {
         console.log("ℹ️ All remaining players have valid auto cards");
       }
     }
-
   } catch (err) {
     console.error("❌ Error resetting cards or players:", err);
     throw err;

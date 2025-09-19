@@ -363,11 +363,12 @@ joinRoom: (roomId: string) => {
   get().fetchBingoCards();
 
   // ✅ Count how many players actually placed bets (claimed cards)
-  const activePlayers = updatedRoom.players
-    ? Object.values(updatedRoom.players).filter(
-        (p: any) => p.betAmount && p.cardId
-      )
-    : [];
+ const activePlayers = updatedRoom.players
+  ? Object.values(updatedRoom.players).filter((p: any) => {
+      if (updatedRoom.isDemoRoom) return p.cardId; // only need claimed card
+      return p.betAmount !== undefined && p.cardId; // real rooms: need betAmount
+    })
+  : [];
 
   const countdownRef = ref(rtdb, `rooms/${roomId}`);
 

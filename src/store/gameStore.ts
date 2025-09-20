@@ -187,12 +187,11 @@ stopNumberDraw: () => {
       clearInterval(id);
       set({ drawIntervalId: null });
     
-  }},
-  startGameIfCountdownEnded: async () => {
-  const { currentRoom, startingGame } = get();
+  }}, 
+ startGameIfCountdownEnded: async () => {
+  const { currentRoom, startingGame, initializeUser, user } = get();
   if (!currentRoom || startingGame) return;
 
-  // Only trigger if countdown ended
   if (currentRoom.gameStatus !== "countdown" || !currentRoom.countdownEndAt) return;
   if (Date.now() < currentRoom.countdownEndAt) return;
 
@@ -207,16 +206,25 @@ stopNumberDraw: () => {
 
     const data = await res.json();
     console.log("✅ Game started:", data);
-   if (data.winnerCard && data.winnerCard.length > 0) {
-  get().setWinnerCard(data.winnerCard[0]); // take the first winner
-}
+
+    if (data.winnerCard && data.winnerCard.length > 0) {
+      get().setWinnerCard(data.winnerCard[0]);
+    }
+
+    // 🔄 Reload balance after starting game
+    if (user) {
+      const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
+      const snapshot = await dbGet(balanceRef);
+      const balance = snapshot.val() ?? 0;
+      initializeUser({ ...user, balance });
+    }
 
   } catch (err) {
     console.error("❌ Failed to start game:", err);
   } finally {
     set({ startingGame: false });
   }
-},
+}
  startNumberStream: (roomId, gameId) => {
   const { currentRoom } = get();
   if (currentRoom.gameStatus !== "playing") return;

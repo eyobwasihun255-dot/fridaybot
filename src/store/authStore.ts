@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { rtdb } from '../firebase/config';
-import { ref, get as dbGet, set as dbSet, update as dbUpdate, onValue } from 'firebase/database';
+import { ref, get as dbGet } from 'firebase/database';
 
 export interface User {
   telegramId: string;
@@ -15,25 +15,45 @@ export interface User {
   updatedAt: string;
 }
 
-
 interface AuthState {
   user: User | null;
   loading: boolean;
   initializeUser: (user: User) => void;
+  reloadBalance: () => Promise<void>;
   logout: () => void;
 }
 
-// Use the persist middleware properly with the correct typing.
-export const useAuthStore = create<AuthState>(
+// ✅ Use persist with zustand and add reloadBalance
+export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({ 
-      user : null, 
+    (set, get) => ({
+      user: null,
       loading: false,
+
       initializeUser: (user) =>
         set({
           user,
           loading: false,
         }),
+
+      // 🔄 Reload balance from Firebase
+      reloadBalance: async () => {
+        const user = get().user;
+        if (!user) return;
+
+        try {
+          const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
+          const snapshot = await dbGet(balanceRef);
+          const balance = snapshot.val() ?? 0;
+
+          set({
+            user: { ...user, balance },
+          });
+        } catch (err) {
+          console.error('❌ Failed to reload balance:', err);
+        }
+      },
+
       logout: () => set({ user: null, loading: false }),
     }),
     {

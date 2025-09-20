@@ -1,32 +1,29 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Zap, Coins, RefreshCw } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
+import { useGameStore } from '../store/gameStore'; // ✅ import game store
 import LanguageToggle from './LanguageToggle';
-import { ref, get as dbGet } from 'firebase/database';
-import { rtdb } from '../firebase/config';
 
 const Header: React.FC = () => {
-  const { user, initializeUser } = useAuthStore();
+  const { user, reloadBalance } = useAuthStore();
   const { t } = useLanguageStore();
+  const { currentRoom } = useGameStore(); // ✅ access currentRoom
   const [loading, setLoading] = useState(false);
 
-  const reloadBalance = async () => {
-    if (!user) return;
-
-    setLoading(true);
-    try {
-      const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
-      const snapshot = await dbGet(balanceRef);
-      const balance = snapshot.val() ?? 0;
-
-      // Update user in store
-      initializeUser({ ...user, balance });
-    } catch (err) {
-      console.error('❌ Failed to reload balance:', err);
-    } finally {
-      setLoading(false);
+  // 🔄 Auto reload when game starts
+  useEffect(() => {
+    if (currentRoom?.gameStatus === 'playing' && user) {
+      setLoading(true);
+      reloadBalance().finally(() => setLoading(false));
     }
+  }, [currentRoom?.gameStatus, user, reloadBalance]);
+
+  const handleReloadClick = async () => {
+    if (!user) return;
+    setLoading(true);
+    await reloadBalance();
+    setLoading(false);
   };
 
   return (
@@ -44,10 +41,10 @@ const Header: React.FC = () => {
             <div className="flex items-center space-x-2 bg-white/10 rounded-lg px-3 py-1.5">
               <Coins className="w-4 h-4 text-yellow-400" />
               <span className="text-white font-medium">
-                {typeof user?.balance === 'number' ? user.balance.toFixed(2)+" ETB" : '0.00 ETB'}
+                {typeof user?.balance === 'number' ? user.balance.toFixed(2) + " ETB" : '0.00 ETB'}
               </span>
               <button 
-                onClick={reloadBalance} 
+                onClick={handleReloadClick} 
                 disabled={loading} 
                 className="ml-2 p-1 rounded hover:bg-white/20"
               >

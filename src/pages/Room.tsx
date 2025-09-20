@@ -473,8 +473,9 @@ const handleBingoClick = async () => {
     : 0;
 
   // ✅ Calculate payout and revenue
-  const payout = activePlayersCount * currentRoom.betAmount * 0.9;
-  const revenueAmount = activePlayersCount * currentRoom.betAmount * 0.1;
+  const pay = (activePlayersCount -1 ) * currentRoom.betAmount * 0.9;
+  const payout = pay + currentRoom.betAmount;
+  const revenueAmount = (activePlayersCount-1) * currentRoom.betAmount * 0.1;
 
   // Update player balance
   const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
@@ -587,10 +588,9 @@ return (
     Math.max(
       0,
       Math.floor(
-        (Object.keys(currentRoom.players || {}).length || 0) *
-          currentRoom.betAmount *
-          0.9 -
-          currentRoom.betAmount
+        ((Object.keys(currentRoom.players || {}).length || 0) *
+          currentRoom.betAmount) - currentRoom.betAmount * 0.9
+
       )
     )
   }

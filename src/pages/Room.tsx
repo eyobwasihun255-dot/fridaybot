@@ -588,8 +588,7 @@ return (
     Math.max(
       0,
       Math.floor(
-        ((Object.keys(currentRoom.players || {}).length || 0) *
-          currentRoom.betAmount) - currentRoom.betAmount * 0.9
+        (((Object.keys(currentRoom.players || {}).length || 0) - 1)* currentRoom.betAmount * 0.9)
 
       )
     )

@@ -591,7 +591,7 @@ return (
         ((Object.keys(currentRoom.players || {}).length-1 || 0)* currentRoom.betAmount * 0.9)
 
       )
-    )
+    ) 
   }
 </div>
 

@@ -224,7 +224,7 @@ stopNumberDraw: () => {
   } finally {
     set({ startingGame: false });
   }
-}
+},
  startNumberStream: (roomId, gameId) => {
   const { currentRoom } = get();
   if (currentRoom.gameStatus !== "playing") return;

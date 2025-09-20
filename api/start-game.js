@@ -74,44 +74,55 @@ function generateDrawnNumbersMultiWinner(cards) {
   const patterns = pickPatternNumbers(winnerCard);
   const winnerPattern = patterns[Math.floor(Math.random() * patterns.length)];
 
-  // 3️⃣ Add the FULL winning pattern numbers
-  winnerPattern.forEach((n) => safeAdd(n));
+  // Randomly choose 1 missing number from the winner pattern
+  const winnerMissIndex = Math.floor(Math.random() * winnerPattern.length);
+  const winnerMissing = winnerPattern[winnerMissIndex];
 
-  // 4️⃣ For other cards: pick a pattern & leave 1 missing
-  const missingNumbers = [];
+  // Add all other numbers from the winning pattern into pool (first 24)
+  winnerPattern.forEach((n, i) => {
+    if (i !== winnerMissIndex) safeAdd(n);
+  });
+
+  // 3️⃣ For other cards: pick a pattern & leave 1 missing
+  const loserMissingNumbers = [];
   cards.forEach((card) => {
-    if (card.id === winnerCard.id) return; // skip winner
+    if (card.id === winnerCard.id) return;
 
     const pats = pickPatternNumbers(card);
     const chosen = pats[Math.floor(Math.random() * pats.length)];
 
-    // Randomly drop 1 number from this pattern
     const missIndex = Math.floor(Math.random() * chosen.length);
     chosen.forEach((n, i) => {
       if (i !== missIndex) safeAdd(n);
     });
 
-    // Save the missing number for later (will be in 26–75 range)
-    missingNumbers.push(chosen[missIndex]);
+    loserMissingNumbers.push(chosen[missIndex]);
   });
 
-  // 5️⃣ Fill up to 25 numbers total
-  while (drawnNumbers.length < 25) {
+  // 4️⃣ Fill up to 24 numbers with random fillers
+  while (drawnNumbers.length < 24) {
     safeAdd(Math.floor(Math.random() * 75) + 1);
   }
 
-  // Shuffle first 25 numbers
-  const first25 = shuffleArray(drawnNumbers.slice(0, 25));
+  // Shuffle first 24 numbers
+  const first24 = shuffleArray(drawnNumbers.slice(0, 24));
 
-  // 6️⃣ From 26–75: put missing numbers first, then fill rest
+  // 5️⃣ Make 25th number the winner’s missing number
+  const first25 = [...first24, winnerMissing];
+  usedNumbers.add(winnerMissing);
+
+  // 6️⃣ Build 26–75 pool
   const rest = [];
-  missingNumbers.forEach((n) => {
+
+  // Add loser missing numbers FIRST with higher probability in early slots
+  shuffleArray(loserMissingNumbers).forEach((n) => {
     if (!usedNumbers.has(n)) {
       usedNumbers.add(n);
       rest.push(n);
     }
   });
 
+  // Fill remaining with random unused numbers
   while (first25.length + rest.length < 75) {
     const rand = Math.floor(Math.random() * 75) + 1;
     if (!usedNumbers.has(rand)) {
@@ -120,7 +131,16 @@ function generateDrawnNumbersMultiWinner(cards) {
     }
   }
 
-  const finalDrawn = [...first25, ...shuffleArray(rest)];
+  // Shuffle rest, but bias missing numbers into first 10 of rest
+  const loserChunk = rest.slice(0, loserMissingNumbers.length);
+  const fillerChunk = rest.slice(loserMissingNumbers.length);
+
+  const finalRest = [
+    ...shuffleArray(loserChunk),
+    ...shuffleArray(fillerChunk),
+  ];
+
+  const finalDrawn = [...first25, ...finalRest];
 
   winners.push(winnerCard.id);
 

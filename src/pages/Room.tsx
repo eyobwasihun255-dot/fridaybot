@@ -473,9 +473,30 @@ const handleBingoClick = async () => {
     : 0;
 
   // ✅ Calculate payout and revenue
-  const pay = (activePlayersCount -1 ) * currentRoom.betAmount * 0.85;
-  const payout = pay + currentRoom.betAmount;
-  const revenueAmount = (activePlayersCount-1) * currentRoom.betAmount * 0.15;
+  const betAmount = Number(currentRoom.betAmount || 0);
+const players = Number(activePlayersCount || 0);
+
+if (players <= 0 || betAmount <= 0) {
+  console.error("Invalid players or bet amount", { players, betAmount });
+  setGameMessage(t("error_processing_bingo"));
+  return;
+}
+
+// Calculate payout safely
+const pay = (players - 1) * betAmount * 0.85;
+const payout = betAmount + pay;
+const revenueAmount = (players - 1) * betAmount * 0.15;
+
+// Round to integer if your balance is integer-based
+const payoutRounded = Math.round(payout);
+const revenueRounded = Math.round(revenueAmount);
+
+// Update balance safely
+const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
+await runTransaction(balanceRef, (current) => {
+  const currentBal = Number(current || 0);
+  return currentBal + payoutRounded;
+});
 
 
   // Register player as winner in room

@@ -506,28 +506,7 @@ await update(ref(rtdb, userPath), {
   
 
   // ✅ Log winning history
-  const winningHistoryRef = ref(rtdb, `winningHistory/${currentRoom.gameId}_${user.telegramId}_${Date.now()}`);
-  const historyEntry = {
-    gameId: currentRoom.gameId,
-    roomId: currentRoom.id,
-    playerId: user.telegramId,
-    username: user.username || `user_${user.telegramId}`,
-    cardId: displayedCard.id,
-    date: Date.now(),
-    payout : payout - currentRoom.betAmount
-  };
-  await update(winningHistoryRef, historyEntry);
-
-  // ✅ Log revenue data
-  const revenueRef = ref(rtdb, `revenue/${currentRoom.gameId}`);
-  const revenueEntry = {
-    gameId: currentRoom.gameId,
-    roomId: currentRoom.id,
-    datetime: Date.now(),
-    amount: revenueAmount,
-    drawned: false
-  };
-  await update(revenueRef, revenueEntry);
+ 
 
   // Mark room as paid (optional if only one winner)
   await update(ref(rtdb, `rooms/${currentRoom.id}`), { payed: true });

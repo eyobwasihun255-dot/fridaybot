@@ -7,6 +7,9 @@ import { useAuthStore } from '../store/authStore';
 import BingoGrid from '../components/BingoGrid';
 import { rtdb } from '../firebase/config';
 import { ref, runTransaction, update , onValue } from 'firebase/database';
+import { RefreshCw } from "lucide-react"; // 🔄 icon
+
+// Inside Room component
 
 const CountdownOverlay = ({
   countdownEndAt,
@@ -564,6 +567,38 @@ function getBingoLetter(num: number): string {
   if (num >= 61 && num <= 75) return "O-";
   return "";
 }
+const handleRefresh = async () => {
+  if (!roomId) return;
+
+  try {
+    // 🔹 Force re-fetch the room data from Firebase
+    const roomRef = ref(rtdb, `rooms/${roomId}`);
+    const snapshot = await new Promise<any>((resolve, reject) => {
+      onValue(
+        roomRef,
+        (snap) => {
+          if (snap.exists()) {
+            resolve(snap.val());
+          } else {
+            reject("Room not found");
+          }
+        },
+        { onlyOnce: true }
+      );
+    });
+
+    // ✅ Update game store manually
+    useGameStore.getState().joinRoom(roomId); // re-sync players & room state
+    if (snapshot.gameStatus === "playing" && snapshot.gameId) {
+      useGameStore.getState().startNumberStream(snapshot.id, snapshot.gameId);
+    }
+
+    setGameMessage("🔄 Synced with server");
+  } catch (err) {
+    console.error("❌ Error refreshing:", err);
+    setGameMessage("⚠️ Failed to refresh");
+  }
+};
 
 
 
@@ -601,7 +636,12 @@ return (
          {currentRoom?.gameStatus ?? t('waiting')}
       </div>
       
-
+     <button
+    onClick={handleRefresh}
+    className="flex items-center justify-center gap-1 bg-gradient-to-r from-blue-500 to-indigo-600 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition"
+  >
+    <RefreshCw className="w-4 h-4" /> {t("refresh")}
+  </button>
     {/* Main content row */}
     <div className="flex flex-row gap-2 w-full max-w-full h-full">
       {showLoserPopup && (

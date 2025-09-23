@@ -197,6 +197,7 @@ await sendMessage(chatId, t("en", "choose_lang"), { reply_markup: keyboard });
 
 
 import crypto from "crypto";
+const API = `https://api.telegram.org/bot${TOKEN}`;
 const commands = [
   { command: "playgame", description: t("am", "start_bingo") },
   { command: "deposit", description:  t("am", "deposit") },
@@ -321,7 +322,6 @@ async function handleUserMessage(message) {
   if (text === "/playgame") return handlePlaygame(message);
 
   const pending = pendingActions.get(userId);
-  const API = `https://api.telegram.org/bot${TOKEN}`;
 
 // Define your commands
 

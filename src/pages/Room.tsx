@@ -6,7 +6,7 @@ import { useGameStore } from '../store/gameStore';
 import { useAuthStore } from '../store/authStore';
 import BingoGrid from '../components/BingoGrid';
 import { rtdb } from '../firebase/config';
-import { ref, runTransaction, update , onValue } from 'firebase/database';
+import { ref, runTransaction, get , update , onValue } from 'firebase/database';
 
 const CountdownOverlay = ({
   countdownEndAt,

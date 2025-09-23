@@ -62,6 +62,17 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
     user &&
     room.players[user.telegramId];
 
+  // ✅ Calculate payout
+  const playerCount =
+    room.players && typeof room.players === 'object'
+      ? Object.keys(room.players).length
+      : 0;
+
+  const payout =
+    !room.isDemoRoom && playerCount > 1
+      ? Math.max(0, Math.floor((playerCount - 1) * room.betAmount * 0.9))
+      : 0;
+
   return (
     <div
       className={`relative rounded-xl overflow-hidden border border-white/20 shadow-lg hover:scale-105 transition-all duration-300
@@ -104,10 +115,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
             <div className="flex items-center space-x-1">
               <Users className="w-4 h-4 text-blue-300" />
               <span className="text-white">
-                {room.players && typeof room.players === 'object'
-                  ? Object.keys(room.players).length
-                  : 0}
-                /{room.maxPlayers}
+                {playerCount}/{room.maxPlayers}
               </span>
             </div>
           </div>
@@ -118,6 +126,19 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
               {t(room.gameStatus)}
             </span>
           </div>
+
+          {/* ✅ Payout Display */}
+          {!room.isDemoRoom && (
+            <div className="flex items-center justify-between">
+              <span className="text-white/80">{t('payout')}:</span>
+              <div className="flex items-center space-x-1">
+                <Coins className="w-4 h-4 text-yellow-300" />
+                <span className="text-yellow-300 font-bold">
+                  {payout} {t('etb')}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         <button

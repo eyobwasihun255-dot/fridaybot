@@ -197,7 +197,26 @@ await sendMessage(chatId, t("en", "choose_lang"), { reply_markup: keyboard });
 
 
 import crypto from "crypto";
+const commands = [
+  { command: "playgame", description: t("am", "start_bingo") },
+  { command: "deposit", description:  t("am", "deposit") },
+  { command: "withdrawn", description:  t("am", "withdraw") },
+  { command: "help", description: t("am", "help") },
+];
 
+// Register the commands with Telegram
+async function setCommands() {
+  const response = await fetch(`${API}/setMyCommands`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ commands }),
+  });
+
+  const data = await response.json();
+  console.log("Set Commands Response:", data);
+}
+
+setCommands();
 async function handlePlaygame(message) {
   const chatId = message.chat.id;
   const telegramId = String(message.from.id);
@@ -705,26 +724,7 @@ if (text === "/transaction") {
   // ====================== FALLBACK ======================
   await sendMessage(chatId, t(lang, "fallback"));
 }
-const commands = [
-  { command: "playgame", description: t("am", "start_bingo") },
-  { command: "deposit", description:  t("am", "deposit") },
-  { command: "withdrawn", description:  t("am", "withdraw") },
-  { command: "help", description: t("am", "help") },
-];
 
-// Register the commands with Telegram
-async function setCommands() {
-  const response = await fetch(`${API}/setMyCommands`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ commands }),
-  });
-
-  const data = await response.json();
-  console.log("Set Commands Response:", data);
-}
-
-setCommands();
 // ====================== CALLBACKS ======================
 async function handleCallback(callbackQuery) {
   const chatId = callbackQuery.message.chat.id;

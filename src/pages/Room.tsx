@@ -494,7 +494,7 @@ const payout = Math.round(pay + betAmount);
 // Update balance
 const userPath = `users/${user.telegramId}`;
 const balanceChange = Math.round(payout);
-
+console.log("Balance change:", balanceChange);
 await update(ref(rtdb, userPath), {
   balance: (user.balance || 0) + balanceChange,
  

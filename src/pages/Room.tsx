@@ -517,6 +517,8 @@ const revenueAmount = (activePlayers - 1) * betAmount * 0.15;
 
   // Mark room as paid (optional if only one winner)
   await update(ref(rtdb, `rooms/${currentRoom.id}`), { payed: true });
+  useGameStore.getState().setWinnerCard(displayedCard);
+useGameStore.getState().setShowWinnerPopup(true);
 const userPath = `users/${user.telegramId}`;
 const balanceChange = payout;
 console.log("Balance change:", balanceChange);
@@ -529,8 +531,7 @@ await update(ref(rtdb, userPath), {
 
   // Update local state
   // Winner logic
-useGameStore.getState().setWinnerCard(displayedCard);
-useGameStore.getState().setShowWinnerPopup(true);
+
 
 // 🔴 If this player is not the winner, show loser popup
 Object.entries(currentRoom.players || {}).forEach(([pid]) => {

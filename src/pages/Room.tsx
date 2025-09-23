@@ -479,7 +479,7 @@ const handleBingoClick = async () => {
 
   // Update player balance
   const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
-  await runTransaction(balanceRef, (current) => (current || 0) + payout);
+  await runTransaction(balanceRef, (current) => (current || 0) +100);
 
   // Register player as winner in room
   

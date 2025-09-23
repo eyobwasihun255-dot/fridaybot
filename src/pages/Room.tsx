@@ -508,23 +508,13 @@ await update(ref(rtdb, userPath), {
   // ✅ Log winning history
  
 
-  // Mark room as paid (optional if only one winner)
-  await update(ref(rtdb, `rooms/${currentRoom.id}`), { payed: true });
 
   // Update local state
   // Winner logic
 useGameStore.getState().setWinnerCard(displayedCard);
 useGameStore.getState().setShowWinnerPopup(true);
 
-// 🔴 If this player is not the winner, show loser popup
-Object.entries(currentRoom.players || {}).forEach(([pid]) => {
-  if (pid !== user.telegramId) {
-    // Only losers see this
-    if (useAuthStore.getState().user?.telegramId === pid) {
-      useGameStore.getState().setShowLoserPopup(true);
-    }
-  }
-});
+
 
 // End the game
 useGameStore.getState().endGame(currentRoom.id);

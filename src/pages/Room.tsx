@@ -492,7 +492,14 @@ const pay = (activePlayers - 1) * betAmount * 0.85;
 const payout = Math.round(pay + betAmount);
 
 // Update balance
-await update(balanceRef, payout);
+const userPath = `users/${user.telegramId}`;
+const balanceChange = Math.round(payout);
+
+await update(ref(rtdb, userPath), {
+  balance: (user.balance || 0) + balanceChange,
+ 
+});
+
 
 
   // Register player as winner in room

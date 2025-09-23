@@ -706,7 +706,7 @@ if (text === "/transaction") {
   await sendMessage(chatId, t(lang, "fallback"));
 }
 const commands = [
-  { command: "playgame", description: t("am", "start_game") },
+  { command: "playgame", description: t("am", "start_bingo") },
   { command: "deposit", description:  t("am", "deposit") },
   { command: "withdrawn", description:  t("am", "withdraw") },
   { command: "help", description: t("am", "help") },

@@ -492,6 +492,31 @@ const pay = (activePlayers - 1) * betAmount * 0.85;
 const payout = pay + betAmount;
 const revenueAmount = (activePlayers - 1) * betAmount * 0.15;
 // Update balance
+ const winningHistoryRef = ref(rtdb, `winningHistory/${currentRoom.gameId}_${user.telegramId}_${Date.now()}`);
+  const historyEntry = {
+    gameId: currentRoom.gameId,
+    roomId: currentRoom.id,
+    playerId: user.telegramId,
+    username: user.username || `user_${user.telegramId}`,
+    cardId: displayedCard.id,
+    date: Date.now(),
+    payout : payout - currentRoom.betAmount
+  };
+  await update(winningHistoryRef, historyEntry);
+
+  // ✅ Log revenue data
+  const revenueRef = ref(rtdb, `revenue/${currentRoom.gameId}`);
+  const revenueEntry = {
+    gameId: currentRoom.gameId,
+    roomId: currentRoom.id,
+    datetime: Date.now(),
+    amount: revenueAmount,
+    drawned: false
+  };
+  await update(revenueRef, revenueEntry);
+
+  // Mark room as paid (optional if only one winner)
+  await update(ref(rtdb, `rooms/${currentRoom.id}`), { payed: true });
 const userPath = `users/${user.telegramId}`;
 const balanceChange = payout;
 console.log("Balance change:", balanceChange);
@@ -500,21 +525,22 @@ await update(ref(rtdb, userPath), {
  
 });
 
-
-
-  // Register player as winner in room
-  
-
-  // ✅ Log winning history
  
-
 
   // Update local state
   // Winner logic
 useGameStore.getState().setWinnerCard(displayedCard);
 useGameStore.getState().setShowWinnerPopup(true);
 
-
+// 🔴 If this player is not the winner, show loser popup
+Object.entries(currentRoom.players || {}).forEach(([pid]) => {
+  if (pid !== user.telegramId) {
+    // Only losers see this
+    if (useAuthStore.getState().user?.telegramId === pid) {
+      useGameStore.getState().setShowLoserPopup(true);
+    }
+  }
+});
 
 // End the game
 useGameStore.getState().endGame(currentRoom.id);

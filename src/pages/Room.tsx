@@ -629,6 +629,12 @@ return (
     ) 
   }
 </div>
+ <button
+    onClick={handleRefresh}
+    className="flex items-center justify-center gap-1 bg-gradient-to-r from-blue-500 to-indigo-600 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition"
+  >
+    <RefreshCw className="w-4 h-4" /> {t("refresh")}
+  </button>
 
   
     </div>
@@ -636,12 +642,7 @@ return (
          {currentRoom?.gameStatus ?? t('waiting')}
       </div>
       
-     <button
-    onClick={handleRefresh}
-    className="flex items-center justify-center gap-1 bg-gradient-to-r from-blue-500 to-indigo-600 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition"
-  >
-    <RefreshCw className="w-4 h-4" /> {t("refresh")}
-  </button>
+    
     {/* Main content row */}
     <div className="flex flex-row gap-2 w-full max-w-full h-full">
       {showLoserPopup && (

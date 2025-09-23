@@ -435,124 +435,123 @@ function checkCardBingo(cardNumbers: number[][], calledNumbers: number[]) {
     );
   };
 const handleBingoClick = async () => {
-  if (currentRoom?.gameStatus === "playing" || currentRoom?.gameStatus === "ended") {
-    if (!displayedCard || !currentRoom || !user) {
-      setGameMessage(t('error_player_card'));
-      return;
-    }
+  if (currentRoom?.gameStatus !== "playing" && currentRoom?.gameStatus !== "ended") {
+    setGameMessage(t("bingo_not_allowed"));
+    return;
+  }
 
-    if (hasAttemptedBingo) return;
+  if (!displayedCard || !currentRoom || !user) {
+    setGameMessage(t("error_player_card"));
+    return;
+  }
 
-    const playerPath = `rooms/${currentRoom.id}/players/${user.telegramId}`;
-    const playerData = currentRoom.players?.[user.telegramId];
-    if (playerData?.attemptedBingo) {
-      setGameMessage(t('already_attempted_bingo'));
-      setHasAttemptedBingo(true);
-      return;
-    }
+  // Prevent duplicate attempts
+  const playerPath = `rooms/${currentRoom.id}/players/${user.telegramId}`;
+  const playerData = currentRoom.players?.[user.telegramId];
+  if (playerData?.attemptedBingo || hasAttemptedBingo) {
+    setGameMessage(t("already_attempted_bingo"));
+    return;
+  }
 
-    setHasAttemptedBingo(true);
-
-    await update(ref(rtdb, playerPath), { attemptedBingo: true });
-
-    if (currentRoom.payed) {
-      setGameMessage(t('already_paid'));
-      return;
-    }
-
+  try {
+    // ✅ Check if the card actually covers a winning pattern
     const covered = findCoveredPatternByMarks();
-    if (!covered || !patternExistsInCalled(covered.patternNumbers)) {
-      setGameMessage(t('not_a_winner'));
+    const isWinner = covered && patternExistsInCalled(covered.patternNumbers);
+
+    if (!isWinner) {
+      // ❌ Not a valid winner → mark attempt + disqualify
+      await update(ref(rtdb, playerPath), { attemptedBingo: true });
+      setHasAttemptedBingo(true);
+      setGameMessage(t("not_a_winner"));
       setIsDisqualified(true);
       return;
     }
 
-    try {
-  const activePlayersCount = currentRoom.players
-    ? Object.keys(currentRoom.players).length
-    : 0;
+    // ✅ Valid winner
+    const activePlayersCount = currentRoom.players
+      ? Object.keys(currentRoom.players).length
+      : 0;
 
-  // ✅ Calculate payout and revenue
-  const pay = (activePlayersCount -1 ) * currentRoom.betAmount * 0.9;
-  const payout = pay + currentRoom.betAmount;
-  const revenueAmount = (activePlayersCount-1) * currentRoom.betAmount * 0.1;
+    const pay = (activePlayersCount - 1) * currentRoom.betAmount * 0.9;
+    const payout = pay + currentRoom.betAmount;
+    const revenueAmount = (activePlayersCount - 1) * currentRoom.betAmount * 0.1;
 
-  // Update player balance
-  const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
-  await runTransaction(balanceRef, (current) => (current || 0) + payout);
+    // Update balance
+    const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
+    await runTransaction(balanceRef, (current) => (current || 0) + payout);
 
-  // Register player as winner in room
-  const roomWinnersRef = ref(rtdb, `rooms/${currentRoom.id}/winners`);
-  const newWinner = {
-    cardId: displayedCard.id,
-    telegramId: user.telegramId,
-    username: user.username || `user_${user.telegramId}`,
-    payout,
-    timestamp: Date.now(),
-    checked: false
-  };
-  await runTransaction(roomWinnersRef, (current: any) => {
-    const arr = Array.isArray(current) ? current : [];
-    arr.push(newWinner);
-    return arr;
-  });
+    // Save winner to room
+    const roomWinnersRef = ref(rtdb, `rooms/${currentRoom.id}/winners`);
+    const newWinner = {
+      cardId: displayedCard.id,
+      telegramId: user.telegramId,
+      username: user.username || `user_${user.telegramId}`,
+      payout,
+      timestamp: Date.now(),
+      checked: false,
+    };
+    await runTransaction(roomWinnersRef, (current: any) => {
+      const arr = Array.isArray(current) ? current : [];
+      arr.push(newWinner);
+      return arr;
+    });
 
-  // ✅ Log winning history
-  const winningHistoryRef = ref(rtdb, `winningHistory/${currentRoom.gameId}_${user.telegramId}_${Date.now()}`);
-  const historyEntry = {
-    gameId: currentRoom.gameId,
-    rollNumber: currentRoom.rollNumber ?? 0,
-    roomId: currentRoom.id,
-    playerId: user.telegramId,
-    username: user.username || `user_${user.telegramId}`,
-    cardId: displayedCard.id,
-    date: Date.now(),
-    payout : payout - currentRoom.betAmount
-  };
-  await update(winningHistoryRef, historyEntry);
+    // Log winning history
+    const winningHistoryRef = ref(
+      rtdb,
+      `winningHistory/${currentRoom.gameId}_${user.telegramId}_${Date.now()}`
+    );
+    const historyEntry = {
+      gameId: currentRoom.gameId,
+      rollNumber: currentRoom.rollNumber ?? 0,
+      roomId: currentRoom.id,
+      playerId: user.telegramId,
+      username: user.username || `user_${user.telegramId}`,
+      cardId: displayedCard.id,
+      date: Date.now(),
+      payout: payout - currentRoom.betAmount,
+    };
+    await update(winningHistoryRef, historyEntry);
 
-  // ✅ Log revenue data
-  const revenueRef = ref(rtdb, `revenue/${currentRoom.gameId}`);
-  const revenueEntry = {
-    gameId: currentRoom.gameId,
-    roomId: currentRoom.id,
-    datetime: Date.now(),
-    amount: revenueAmount,
-    drawned: false
-  };
-  await update(revenueRef, revenueEntry);
+    // Log revenue
+    const revenueRef = ref(rtdb, `revenue/${currentRoom.gameId}`);
+    const revenueEntry = {
+      gameId: currentRoom.gameId,
+      roomId: currentRoom.id,
+      datetime: Date.now(),
+      amount: revenueAmount,
+      drawned: false,
+    };
+    await update(revenueRef, revenueEntry);
 
-  // Mark room as paid (optional if only one winner)
-  await update(ref(rtdb, `rooms/${currentRoom.id}`), { payed: true });
+    // Mark room as paid
+    await update(ref(rtdb, `rooms/${currentRoom.id}`), { payed: true });
 
-  // Update local state
-  // Winner logic
-useGameStore.getState().setWinnerCard(displayedCard);
-useGameStore.getState().setShowWinnerPopup(true);
+    // Mark attempt AFTER successful payout
+    await update(ref(rtdb, playerPath), { attemptedBingo: true });
+    setHasAttemptedBingo(true);
 
-// 🔴 If this player is not the winner, show loser popup
-Object.entries(currentRoom.players || {}).forEach(([pid]) => {
-  if (pid !== user.telegramId) {
-    // Only losers see this
-    if (useAuthStore.getState().user?.telegramId === pid) {
-      useGameStore.getState().setShowLoserPopup(true);
-    }
-  }
-});
+    // Update local state → winner popup
+    useGameStore.getState().setWinnerCard(displayedCard);
+    useGameStore.getState().setShowWinnerPopup(true);
 
-// End the game
-useGameStore.getState().endGame(currentRoom.id);
+    // Loser popup for others
+    Object.entries(currentRoom.players || {}).forEach(([pid]) => {
+      if (pid !== user.telegramId) {
+        if (useAuthStore.getState().user?.telegramId === pid) {
+          useGameStore.getState().setShowLoserPopup(true);
+        }
+      }
+    });
 
-
-} catch (err) {
-  console.error("❌ Error processing Bingo payout:", err);
-  setGameMessage(t('error_processing_bingo'));
-}
-
-  } else {
-    setGameMessage(t('bingo_not_allowed'));
+    // End game
+    useGameStore.getState().endGame(currentRoom.id);
+  } catch (err) {
+    console.error("❌ Error processing Bingo payout:", err);
+    setGameMessage(t("error_processing_bingo"));
   }
 };
+
 
 
 

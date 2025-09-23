@@ -489,11 +489,11 @@ if (activePlayers <= 0 || betAmount <= 0) {
 }
 
 const pay = (activePlayers - 1) * betAmount * 0.85;
-const payout = Math.round(pay + betAmount);
-
+const payout = pay + betAmount;
+const revenueAmount = (activePlayers - 1) * betAmount * 0.15;
 // Update balance
 const userPath = `users/${user.telegramId}`;
-const balanceChange = Math.round(payout);
+const balanceChange = payout;
 console.log("Balance change:", balanceChange);
 await update(ref(rtdb, userPath), {
   balance: (user.balance || 0) + balanceChange,
@@ -509,7 +509,6 @@ await update(ref(rtdb, userPath), {
   const winningHistoryRef = ref(rtdb, `winningHistory/${currentRoom.gameId}_${user.telegramId}_${Date.now()}`);
   const historyEntry = {
     gameId: currentRoom.gameId,
-    rollNumber: currentRoom.rollNumber ?? 0,
     roomId: currentRoom.id,
     playerId: user.telegramId,
     username: user.username || `user_${user.telegramId}`,
@@ -1057,7 +1056,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
           className={`${bgColor} rounded p-2 flex flex-col items-center text-center transition`}
         >
           <span className="font-semibold">{maskedUsername}</span>
-          <span className="text-xs">Bet: {player.betAmount}</span>
+          <span className="text-xs">{t("bet")}: {player.betAmount}</span>
         </div>
       );
     })

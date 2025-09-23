@@ -475,27 +475,14 @@ const handleBingoClick = async () => {
   // ✅ Calculate payout and revenue
   const pay = (activePlayersCount -1 ) * currentRoom.betAmount * 0.85;
   const payout = pay + currentRoom.betAmount;
-  const revenueAmount = (activePlayersCount-1) * currentRoom.betAmount * 0.1;
+  const revenueAmount = (activePlayersCount-1) * currentRoom.betAmount * 0.15;
 
   // Update player balance
   const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
   await runTransaction(balanceRef, (current) => (current || 0) + payout);
 
   // Register player as winner in room
-  const roomWinnersRef = ref(rtdb, `rooms/${currentRoom.id}/winners`);
-  const newWinner = {
-    cardId: displayedCard.id,
-    telegramId: user.telegramId,
-    username: user.username || `user_${user.telegramId}`,
-    payout,
-    timestamp: Date.now(),
-    checked: false
-  };
-  await runTransaction(roomWinnersRef, (current: any) => {
-    const arr = Array.isArray(current) ? current : [];
-    arr.push(newWinner);
-    return arr;
-  });
+  
 
   // ✅ Log winning history
   const winningHistoryRef = ref(rtdb, `winningHistory/${currentRoom.gameId}_${user.telegramId}_${Date.now()}`);

@@ -43,9 +43,40 @@ admin_declined_withdraw : "❌ Admin declined Request ! ",
 admin_approved_withdraw :  "✅ Admin approved Request ! ",
 admin_approved_deposit:  "✅ Admin approved Request ! ",
 admin_declined_deposit : "❌ Admin declined Request ! ",
+star_bingo:"Start bingo game",
+withdraw : "Withdraw",
+deposit : "Deposit",
+help : "Help",
+help_text: `
+🎮 *How to Play Bingo*
 
+1️⃣ Use /deposit to add balance.  
+2️⃣ Use /playgame to join a room.  
+3️⃣ Wait until enough players join.  
+4️⃣ Numbers will be drawn automatically.  
+5️⃣ Tap numbers on your card when drawn.  
+6️⃣ If you complete a the winning pattern → You win!  
+7️⃣ Use /withdraw to cash out your winnings.
+
+Good luck and have fun 🎉`,
 },
 am: {
+  start_bingo:"ጀምር ቢንጎ ጨዋታ",
+  withdraw : "ገንዘብ ለማውጣት",
+  deposit : "ገንዘብ ለመጨመር",
+  help : "መመሪያ",
+  help_text: `
+🎮 *ቢንጎ እንዴት እንደሚጫወት*
+
+1️⃣ /deposit በመጠቀም በአካውንትዎ ገንዘብ ያክሉ።  
+2️⃣ /playgame በመጠቀም ወደ ክፍል ይግቡ።  
+3️⃣ በቂ ተጫዋቾች እስኪገቡ ይጠብቁ።  
+4️⃣ ቁጥሮች በራስ-ሰር ይተላለፋሉ።  
+5️⃣ በካርድዎ ላይ የተሰየመውን ቁጥር ይነኩ።  
+6️⃣ /withdraw በመጠቀም ማሸነፍዎን ያውጡ።
+
+መልካም እድል 🍀
+    `,
 welcome:"🎯 Welcom to Friday Bingo!\nለማንኛውም ጥያቄዎች @Natii4545 \n\nትዕዛዞች:\n/playgame - ጨዋታ ጀምር\n/deposit - ገንዘብ ጨምር\n/withdraw - ትርፍ ወስድ",
 choose_lang: "🌍 ቋንቋ ይምረጡ:",
 receipt_used : "ደረሰኝ ጥቅም ላይ ይውላል!",
@@ -104,30 +135,6 @@ function homeKeyboard(lang) {
   };
 }
 
-const API = `https://api.telegram.org/bot${TOKEN}`;
-
-// Define your commands
-const commands = [
-  { command: "start", description: "Start the bot" },
-  { command: "help", description: "Show help information" },
-  { command: "rooms", description: "List available rooms" },
-  { command: "profile", description: "View your profile" },
-  { command: "leaderboard", description: "View leaderboard" },
-];
-
-// Register the commands with Telegram
-async function setCommands() {
-  const response = await fetch(`${API}/setMyCommands`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ commands }),
-  });
-
-  const data = await response.json();
-  console.log("Set Commands Response:", data);
-}
-
-setCommands();
 
 
 async function sendMessage(chatId, text, extra = {}) {
@@ -295,6 +302,29 @@ async function handleUserMessage(message) {
   if (text === "/playgame") return handlePlaygame(message);
 
   const pending = pendingActions.get(userId);
+  const API = `https://api.telegram.org/bot${TOKEN}`;
+
+// Define your commands
+const commands = [
+  { command: "playgame", description: t(lang, "start_game") },
+  { command: "deposit", description:  t(lang, "deposit") },
+  { command: "withdrawn", description:  t(lang, "withdraw") },
+  { command: "help", description: t(lang, "help") },
+];
+
+// Register the commands with Telegram
+async function setCommands() {
+  const response = await fetch(`${API}/setMyCommands`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ commands }),
+  });
+
+  const data = await response.json();
+  console.log("Set Commands Response:", data);
+}
+
+setCommands();
 
   // ====================== DEPOSIT AMOUNT STEP ======================
   if (pending?.type === "awaiting_deposit_amount") {
@@ -372,6 +402,10 @@ async function handleUserMessage(message) {
     pendingActions.delete(userId);
     return;
   }
+  if (text === "/help") {
+  await sendMessage(chatId, t(lang, "help_text"), { parse_mode: "Markdown" });
+  return;
+}
 
   // ====================== WITHDRAW AMOUNT STEP ======================
   if (pending?.type === "awaiting_withdraw_amount") {

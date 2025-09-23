@@ -17,6 +17,10 @@ const Header: React.FC = () => {
       setLoading(true);
       reloadBalance().finally(() => setLoading(false));
     }
+    if (currentRoom?.gameStatus === 'ended' && user) {
+      setLoading(true);
+      reloadBalance().finally(() => setLoading(false));
+    }
   }, [currentRoom?.gameStatus, user, reloadBalance]);
 
   const handleReloadClick = async () => {

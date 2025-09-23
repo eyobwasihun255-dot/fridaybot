@@ -103,6 +103,22 @@ function homeKeyboard(lang) {
     ],
   };
 }
+// ====================== BOT COMMAND MENU ======================
+async function setBotCommands() {
+  const commands = [
+    { command: "start", description: "Start the bot / Choose language" },
+    { command: "playgame", description: "🎮 Play Friday Bingo" },
+    { command: "deposit", description: "💳 Deposit funds" },
+    { command: "withdraw", description: "💵 Withdraw winnings" },
+  ];
+
+  return telegram("setMyCommands", { commands });
+}
+
+// Call this once when the bot starts
+setBotCommands()
+  .then(() => console.log("✅ Bot commands menu set successfully"))
+  .catch((err) => console.error("❌ Failed to set bot commands:", err));
 
 
 async function sendMessage(chatId, text, extra = {}) {

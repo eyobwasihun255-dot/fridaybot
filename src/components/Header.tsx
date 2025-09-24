@@ -1,18 +1,45 @@
 import React, { useEffect, useState } from 'react';
 import { Zap, Coins, RefreshCw } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
-import { useLanguageStore } from '../store/languageStore'; 
+import { useLanguageStore } from '../store/languageStore';
+import { useGameStore } from '../store/gameStore';
 import LanguageToggle from './LanguageToggle';
 
 const Header: React.FC = () => {
-  const { user } = useAuthStore();
+  const { user, reloadBalance } = useAuthStore();
   const { t } = useLanguageStore();
+  const { currentRoom } = useGameStore();
   const [loading, setLoading] = useState(false);
 
+  // 🔄 Auto reload balance when component mounts
+  useEffect(() => {
+    const syncBalance = async () => {
+      if (!user) return;
+      setLoading(true);
+      await reloadBalance();
+      setLoading(false);
+    };
+
+    // Initial sync
+    syncBalance();
+
+    // Optional: Poll every 10 seconds
+    const interval = setInterval(syncBalance, 10000);
+
+    return () => clearInterval(interval);
+  }, [user, reloadBalance]);
+
+  // 🔄 Optionally sync when game status changes
+  useEffect(() => {
+    if (currentRoom?.gameStatus === 'playing') {
+      reloadBalance();
+    }
+  }, [currentRoom?.gameStatus, reloadBalance]);
+
   const handleReloadClick = async () => {
-    // optional fallback reload
+    if (!user) return;
     setLoading(true);
-    await useAuthStore.getState().reloadBalance();
+    await reloadBalance();
     setLoading(false);
   };
 
@@ -24,28 +51,24 @@ const Header: React.FC = () => {
             <Zap className="w-6 h-6 text-yellow-400" />
             <span className="text-white font-bold text-lg">{t('friday_bingo')}</span>
           </div>
-
+          
           <div className="flex items-center space-x-4">
             <LanguageToggle />
-
+            
             <div className="flex items-center space-x-2 bg-white/10 rounded-lg px-3 py-1.5">
               <Coins className="w-4 h-4 text-yellow-400" />
               <span className="text-white font-medium">
-                {typeof user?.balance === "number"
-                  ? user.balance.toFixed(2) + " ETB"
-                  : "0.00 ETB"}
+                {typeof user?.balance === 'number' ? user.balance.toFixed(2) + " ETB" : '0.00 ETB'}
               </span>
-              <button
-                onClick={handleReloadClick}
-                disabled={loading}
+              <button 
+                onClick={handleReloadClick} 
+                disabled={loading} 
                 className="ml-2 p-1 rounded hover:bg-white/20"
               >
-                <RefreshCw
-                  className={`w-4 h-4 text-white ${loading ? "animate-spin" : ""}`}
-                />
+                <RefreshCw className={`w-4 h-4 text-white ${loading ? 'animate-spin' : ''}`} />
               </button>
             </div>
-
+            
             <div className="text-white text-sm">
               <div className="font-medium">{user?.username}</div>
             </div>
@@ -55,4 +78,5 @@ const Header: React.FC = () => {
     </header>
   );
 };
+
 export default Header;

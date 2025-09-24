@@ -121,6 +121,34 @@ function checkIfLoser(currentRoom: any, t: (key: string) => string) {
   }
 }
 const [claimed, setClaimed] = useState(false);
+// 👇 New useEffect inside Room.tsx
+React.useEffect(() => {
+  if (!currentRoom || !user || !currentRoom.gameId) return;
+
+  const winnerRef = ref(rtdb, `games/${currentRoom.gameId}/winner`);
+
+  const unsubscribe = onValue(winnerRef, (snapshot) => {
+    const data = snapshot.val();
+    if (!data) return;
+
+    const { winnerId, winningPattern } = data;
+
+    // If the winner is NOT this user, show winner popup with pattern
+    if (winnerId !== user.telegramId && winningPattern) {
+      // Construct a dummy card with the winning pattern highlighted
+      const dummyCard = {
+        id: 'winner-pattern-card',
+        serialNumber: 'Winner',
+        numbers: Array.from({ length: 25 }, (_, i) => (winningPattern.includes(i) ? i + 1 : 0)),
+      };
+
+      useGameStore.getState().setWinnerCard(dummyCard);
+      useGameStore.getState().setShowWinnerPopup(true);
+    }
+  });
+
+  return () => unsubscribe();
+}, [currentRoom?.gameId, user?.telegramId]);
 
 React.useEffect(() => {
   if (!displayedCard || !currentRoom) return;
@@ -549,34 +577,6 @@ useGameStore.getState().endGame(currentRoom.id);
   }
 };
 
-// 👇 New useEffect inside Room.tsx
-React.useEffect(() => {
-  if (!currentRoom || !user || !currentRoom.gameId) return;
-
-  const winnerRef = ref(rtdb, `games/${currentRoom.gameId}/winner`);
-
-  const unsubscribe = onValue(winnerRef, (snapshot) => {
-    const data = snapshot.val();
-    if (!data) return;
-
-    const { winnerId, winningPattern } = data;
-
-    // If the winner is NOT this user, show winner popup with pattern
-    if (winnerId !== user.telegramId && winningPattern) {
-      // Construct a dummy card with the winning pattern highlighted
-      const dummyCard = {
-        id: 'winner-pattern-card',
-        serialNumber: 'Winner',
-        numbers: Array.from({ length: 25 }, (_, i) => (winningPattern.includes(i) ? i + 1 : 0)),
-      };
-
-      useGameStore.getState().setWinnerCard(dummyCard);
-      useGameStore.getState().setShowWinnerPopup(true);
-    }
-  });
-
-  return () => unsubscribe();
-}, [currentRoom?.gameId, user?.telegramId]);
 
 
 function getBingoLetter(num: number): string {

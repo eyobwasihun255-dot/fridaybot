@@ -333,6 +333,51 @@ React.useEffect(() => {
 
   
 }, [currentRoom]);
+// At the top inside Room.tsx
+const [loserWinnerCard, setLoserWinnerCard] = useState<any | null>(null);
+const [showLoserWinnerPopup, setShowLoserWinnerPopup] = useState(false);
+
+React.useEffect(() => {
+  if (!currentRoom || !user) return;
+
+  const gameRef = ref(rtdb, `games/${currentRoom.id}`);
+  
+  const unsubscribe = onValue(gameRef, async (snapshot) => {
+    const gameData = snapshot.val();
+    if (!gameData) return;
+
+    const { winner, winners } = gameData;
+    if (!winner || !winners) return;
+
+    const isPaid = currentRoom.payed ?? false;
+
+    // Only proceed if user is NOT the winner and game is paid
+    if (isPaid && winner.winnerId !== user.telegramId) {
+      try {
+        // Find the winner object to get cardId
+        const winnerObj = winners.find((w: any) => w.userId === winner.winnerId);
+        if (!winnerObj) return;
+
+        // Fetch winner card data
+        const cardSnap = await get(ref(rtdb, `rooms/${currentRoom.id}/bingoCards/${winnerObj.cardId}`));
+        const cardData = cardSnap.val();
+        if (!cardData) return;
+
+        // Highlight winning numbers
+        const highlightedNumbers = cardData.numbers.map(
+          (num: number, idx: number) => winner.winningPattern.includes(idx) ? num : 0
+        );
+
+        setLoserWinnerCard({ ...cardData, numbers: highlightedNumbers });
+        setShowLoserWinnerPopup(true);
+      } catch (err) {
+        console.error("Failed to fetch winner card for loser popup:", err);
+      }
+    }
+  });
+
+  return () => unsubscribe();
+}, [currentRoom?.id, user?.telegramId]);
 
 React.useEffect(() => {
   if (!currentRoom?.countdownEndAt || currentRoom?.gameStatus !== "countdown") return;
@@ -652,19 +697,37 @@ return (
 
     {/* Main content row */}
     <div className="flex flex-row gap-2 w-full max-w-full h-full">
-      {showLoserPopup && (
+      {/* Loser sees winner's card pattern */}
+{showLoserWinnerPopup && loserWinnerCard && (
   <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-    <div className="bg-white text-black rounded-2xl shadow-2xl p-8 w-96 max-w-full text-center">
-      <h2 className="text-2xl font-bold mb-3">{t('you_lost')}</h2>
+    <div className="bg-white rounded-2xl shadow-2xl p-6 w-96 max-w-full text-center">
+      <h2 className="text-2xl font-bold mb-3 text-red-600">{t('winner_pattern')}</h2>
+      <p className="mb-4">{t('you_lost')}</p>
+      
+      {/* Display winner card pattern */}
+      <div className="grid grid-cols-5 gap-1 mb-4">
+        {loserWinnerCard.numbers.flat().map((num: number, idx: number) => (
+          <div
+            key={idx}
+            className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm
+              ${num !== 0 ? 'bg-green-500 text-white' : 'bg-gray-200 text-black'}
+            `}
+          >
+            {num === 0 ? "★" : num}
+          </div>
+        ))}
+      </div>
+
       <button
-        onClick={() => useGameStore.getState().setShowLoserPopup(false)}
-        className="mt-2 px-5 py-3 bg-red-500 text-white rounded-xl shadow-lg hover:scale-105 transform transition"
+        onClick={() => setShowLoserWinnerPopup(false)}
+        className="mt-2 px-5 py-2 bg-red-600 text-white rounded-lg shadow hover:bg-red-700"
       >
         {t('close')}
       </button>
     </div>
   </div>
 )}
+
 {popupMessage && (
   <div className="fixed top-4 right-4 bg-black/80 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-fade-in-out">
     {popupMessage}

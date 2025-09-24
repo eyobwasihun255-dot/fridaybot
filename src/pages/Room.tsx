@@ -201,6 +201,7 @@ React.useEffect(() => {
   return () => unsubscribe();
 }, [displayedCard, currentRoom?.id]);
 // Auto Bingo: checks every time called numbers update
+// Auto Bingo with visual marking
 React.useEffect(() => {
   if (
     !displayedCard ||
@@ -214,15 +215,27 @@ React.useEffect(() => {
   const calledSet = new Set(displayedCalledNumbers);
 
   const bingoPatterns = generatePatterns();
-  const hasBingo = bingoPatterns.some((pattern) =>
+  
+  // Find a pattern that is fully covered by called numbers
+  const winningPattern = bingoPatterns.find((pattern) =>
     pattern.every((idx) => flatNumbers[idx] === 0 || calledSet.has(flatNumbers[idx]))
   );
 
-  if (hasBingo) {
-    // Automatically trigger bingo for this player
-    handleBingoClick();
+  if (winningPattern) {
+    // Mark numbers in the winning pattern visually
+    const markedNums = winningPattern
+      .map((idx) => flatNumbers[idx])
+      .filter((n) => n !== 0); // skip free space if you want
+
+    setMarkedNumbers((prev) => Array.from(new Set([...prev, ...markedNums])));
+
+    // Give a tiny delay so the user sees the numbers marked before claiming
+    setTimeout(() => {
+      handleBingoClick();
+    }, 500); // 0.5s delay
   }
 }, [displayedCalledNumbers, displayedCard, autoCard, currentRoom?.gameStatus, hasAttemptedBingo]);
+
 
 function findCoveredPatternByMarks() {
   const patterns = generatePatterns();

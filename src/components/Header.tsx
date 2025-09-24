@@ -12,19 +12,13 @@ const Header: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   // 🔄 Auto reload when game starts
-  useEffect(() => {
-  const run = async () => {
-    if ((currentRoom?.gameStatus === "playing" || currentRoom?.gameStatus === "ended") && user) {
-      setLoading(true);
-      try {
-        await reloadBalance();
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-  run();
-}, [currentRoom?.gameStatus, user, reloadBalance]);
+useEffect(() => {
+  if ((currentRoom?.gameStatus === 'playing' || currentRoom?.gameStatus === 'ended') && user) {
+    setLoading(true);
+    reloadBalance().finally(() => setLoading(false));
+  }
+}, [currentRoom?.gameStatus, user]); // 🚀 removed reloadBalance
+
 
   const handleReloadClick = async () => {
     if (!user) return;

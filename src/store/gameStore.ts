@@ -73,7 +73,6 @@ async function resetAllCardsAndPlayers(roomId: string) {
     const cardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
     const playersRef = ref(rtdb, `rooms/${roomId}/players`);
 
-    // ✅ Fetch room to get bet amount
     const roomSnap = await get(roomRef);
     if (!roomSnap.exists()) {
       console.log("❌ Room not found:", roomId);
@@ -94,7 +93,6 @@ async function resetAllCardsAndPlayers(roomId: string) {
         const cardRef = ref(rtdb, `rooms/${roomId}/bingoCards/${cardKey}`);
 
         if (cardData.auto) {
-          // ✅ Check player balance
           const userId = cardData.claimedBy;
           const userSnap = await get(ref(rtdb, `users/${userId}`));
           const userBalance = userSnap.val()?.balance || 0;
@@ -129,26 +127,29 @@ async function resetAllCardsAndPlayers(roomId: string) {
       console.log("ℹ️ No cards found for room:", roomId);
     }
 
-    // 2️⃣ Remove players without any valid auto cards
+    // 2️⃣ Reset attemptedBingo for auto-card players
     const playersSnap = await get(playersRef);
     if (playersSnap.exists()) {
-      const removePromises: Promise<any>[] = [];
-      playersSnap.forEach((playerSnap) => {
-        const playerKey = playerSnap.key;
-        if (!playerKey) return;
+      const playerUpdates: Promise<any>[] = [];
 
-        // If player has no valid auto card → remove
-        if (!autoCardsByPlayer[playerKey]) {
-          const playerRef = ref(rtdb, `rooms/${roomId}/players/${playerKey}`);
-          removePromises.push(remove(playerRef));
+      playersSnap.forEach((playerSnap) => {
+        const playerId = playerSnap.key;
+        if (!playerId) return;
+
+        if (autoCardsByPlayer[playerId]) {
+          // ✅ Reset attemptedBingo
+          const playerRef = ref(rtdb, `rooms/${roomId}/players/${playerId}`);
+          playerUpdates.push(update(playerRef, { attemptedBingo: false }));
+        } else {
+          // ❌ Remove players without valid auto cards
+          const playerRef = ref(rtdb, `rooms/${roomId}/players/${playerId}`);
+          playerUpdates.push(remove(playerRef));
         }
       });
 
-      if (removePromises.length) {
-        await Promise.all(removePromises);
-        console.log("🧹 Removed players without valid auto cards from room:", roomId);
-      } else {
-        console.log("ℹ️ All remaining players have valid auto cards");
+      if (playerUpdates.length) {
+        await Promise.all(playerUpdates);
+        console.log("♻️ Players updated (attemptedBingo reset or removed) in room:", roomId);
       }
     }
   } catch (err) {
@@ -156,6 +157,7 @@ async function resetAllCardsAndPlayers(roomId: string) {
     throw err;
   }
 }
+
 
 export const useGameStore = create<GameState>((set, get) => ({
   rooms: [],

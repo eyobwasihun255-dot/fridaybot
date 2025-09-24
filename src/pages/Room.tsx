@@ -238,13 +238,21 @@ React.useEffect(() => {
 
 
 function findCoveredPatternByMarks() {
-  const patterns = generatePatterns();
+  if (!displayedCard) return null;
+
+  // Flatten card numbers, replace free space (if any) with 0
+  const flatCard = displayedCard.numbers.flat().map((n) => n || 0);
+
   const markedSet = new Set(markedNumbers);
+
+  const patterns = generatePatterns(); // array of index arrays
 
   for (let pIdx = 0; pIdx < patterns.length; pIdx++) {
     const indices = patterns[pIdx];
+
     const fullyCovered = indices.every((i) => {
       const num = flatCard[i];
+      // Free space (0) is always considered marked
       return num === 0 || markedSet.has(num);
     });
 
@@ -256,6 +264,7 @@ function findCoveredPatternByMarks() {
       };
     }
   }
+
   return null;
 }
 

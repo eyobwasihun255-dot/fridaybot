@@ -230,7 +230,7 @@ React.useEffect(() => {
     // Tiny delay so the user sees the numbers marked before claiming
     setTimeout(() => {
       handleBingoClick();
-    }, 5000); // 0.5s delay
+    }, 300); // 0.3s delay
   }
 }, [displayedCalledNumbers, displayedCard, autoCard, currentRoom?.gameStatus, hasAttemptedBingo]);
 

@@ -12,6 +12,12 @@ const Header: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   // 🔄 Auto reload when game starts
+  useEffect(() => {
+    if (currentRoom?.gameStatus === 'playing' && user) {
+      setLoading(true);
+      reloadBalance().finally(() => setLoading(false));
+    }
+  }, [currentRoom?.gameStatus, user, reloadBalance]);
 
   const handleReloadClick = async () => {
     if (!user) return;

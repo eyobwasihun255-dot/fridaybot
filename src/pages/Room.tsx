@@ -557,27 +557,6 @@ useGameStore.getState().endGame(currentRoom.id);
   }
 };
 
-// --- Auto-bingo effect ---
-React.useEffect(() => {
-  if (!currentRoom || !displayedCard || !user) return;
-
-  // Only check if the card is set to auto
-  if (autoCard?.auto && currentRoom.gameStatus === "playing") {
-    const hasBingo = checkCardBingo(displayedCard.numbers, displayedCalledNumbers);
-
-    if (hasBingo && !hasAttemptedBingo) {
-      console.log("🎯 Auto-bingo detected, claiming bingo for:", user.telegramId);
-      handleBingoClick();
-    }
-  }
-}, [
-  currentRoom?.calledNumbers,
-  currentRoom?.gameStatus,
-  displayedCard,
-  displayedCalledNumbers,
-  autoCard?.auto,
-  hasAttemptedBingo
-]);
 
 
 function getBingoLetter(num: number): string {

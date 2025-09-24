@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, Coins, Clock, Trophy } from 'lucide-react';
 import { useLanguageStore } from '../store/languageStore';
 import { useGameStore } from '../store/gameStore';
 import { useAuthStore } from '../store/authStore';
-import BingoGrid from '../components/BingoGrid';
 import { rtdb } from '../firebase/config';
 import { ref, runTransaction, update, get , onValue } from 'firebase/database';
 
@@ -202,6 +200,30 @@ React.useEffect(() => {
 
   return () => unsubscribe();
 }, [displayedCard, currentRoom?.id]);
+// Auto Bingo: checks every time called numbers update
+React.useEffect(() => {
+  if (
+    !displayedCard ||
+    !currentRoom ||
+    !autoCard?.auto ||
+    hasAttemptedBingo ||
+    currentRoom.gameStatus !== "playing"
+  ) return;
+
+  const flatNumbers = displayedCard.numbers.flat();
+  const calledSet = new Set(displayedCalledNumbers);
+
+  const bingoPatterns = generatePatterns();
+  const hasBingo = bingoPatterns.some((pattern) =>
+    pattern.every((idx) => flatNumbers[idx] === 0 || calledSet.has(flatNumbers[idx]))
+  );
+
+  if (hasBingo) {
+    // Automatically trigger bingo for this player
+    handleBingoClick();
+  }
+}, [displayedCalledNumbers, displayedCard, autoCard, currentRoom?.gameStatus, hasAttemptedBingo]);
+
 function findCoveredPatternByMarks() {
   const patterns = generatePatterns();
   const markedSet = new Set(markedNumbers);

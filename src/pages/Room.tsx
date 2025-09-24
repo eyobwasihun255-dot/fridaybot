@@ -6,7 +6,7 @@ import { useGameStore } from '../store/gameStore';
 import { useAuthStore } from '../store/authStore';
 import BingoGrid from '../components/BingoGrid';
 import { rtdb } from '../firebase/config';
-import { ref, runTransaction,get, update , onValue } from 'firebase/database';
+import { ref, runTransaction, update , onValue } from 'firebase/database';
 
 const CountdownOverlay = ({
   countdownEndAt,
@@ -271,7 +271,6 @@ React.useEffect(() => {
 }, [popupMessage]);
 
   // Start countdown if 2+ players bet
-
 React.useEffect(() => {
   if (!currentRoom || !currentRoom.players) return; // ✅ guard against null
 
@@ -474,27 +473,30 @@ const handleBingoClick = async () => {
     : 0;
 
   // ✅ Calculate payout and revenue
- const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
+  const pay = (activePlayersCount -1  ) * currentRoom.betAmount * 0.85;
+  const payout = pay + currentRoom.betAmount;
+  const revenueAmount = (activePlayersCount) * currentRoom.betAmount * 0.15;
 
-// Get current balance
-const balanceSnap = await get(balanceRef);
-const currentBalance = balanceSnap.exists() ? Number(balanceSnap.val()) : 0;
+  // Update player balance
+  const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
+  await runTransaction(balanceRef, (current) => (current || 0) + payout);
 
-// Calculate payout safely
-const activePlayers = Number(activePlayersCount || 0);
-const betAmount = Number(currentRoom.betAmount || 0);
+  // Register player as winner in room
+  // ✅ Register player as winner in room
+const winnerDataRef = ref(rtdb, `games/${currentRoom.gameId}/winner`);
+const winnerData = {
+  winnerId: user.telegramId,                // Store winner's Telegram ID
+  winningPattern: covered.patternNumbers,   // Store the winning pattern
+};
+await update(winnerDataRef, winnerData);
 
-if (activePlayers <= 0 || betAmount <= 0) {
-  setGameMessage(t("error_processing_bingo"));
-  return;
-}
 
-const payout = activePlayers * betAmount * 0.85;
-const revenueAmount = (activePlayers - 1) * betAmount * 0.15;
-// Update balance
- const winningHistoryRef = ref(rtdb, `winningHistory/${currentRoom.gameId}_${user.telegramId}_${Date.now()}`);
+
+  // ✅ Log winning history
+  const winningHistoryRef = ref(rtdb, `winningHistory/${currentRoom.gameId}_${user.telegramId}_${Date.now()}`);
   const historyEntry = {
     gameId: currentRoom.gameId,
+    rollNumber: currentRoom.rollNumber ?? 0,
     roomId: currentRoom.id,
     playerId: user.telegramId,
     username: user.username || `user_${user.telegramId}`,
@@ -517,21 +519,11 @@ const revenueAmount = (activePlayers - 1) * betAmount * 0.15;
 
   // Mark room as paid (optional if only one winner)
   await update(ref(rtdb, `rooms/${currentRoom.id}`), { payed: true });
-  useGameStore.getState().setWinnerCard(displayedCard);
-useGameStore.getState().setShowWinnerPopup(true);
-const userPath = `users/${user.telegramId}`;
-const balanceChange = payout;
-console.log("Balance change:", balanceChange);
-await update(ref(rtdb, userPath), {
-  balance: (user.balance || 0) + balanceChange,
- 
-});
-
- 
 
   // Update local state
   // Winner logic
-
+useGameStore.getState().setWinnerCard(displayedCard);
+useGameStore.getState().setShowWinnerPopup(true);
 
 // 🔴 If this player is not the winner, show loser popup
 Object.entries(currentRoom.players || {}).forEach(([pid]) => {
@@ -557,6 +549,34 @@ useGameStore.getState().endGame(currentRoom.id);
   }
 };
 
+// 👇 New useEffect inside Room.tsx
+React.useEffect(() => {
+  if (!currentRoom || !user || !currentRoom.gameId) return;
+
+  const winnerRef = ref(rtdb, `games/${currentRoom.gameId}/winner`);
+
+  const unsubscribe = onValue(winnerRef, (snapshot) => {
+    const data = snapshot.val();
+    if (!data) return;
+
+    const { winnerId, winningPattern } = data;
+
+    // If the winner is NOT this user, show winner popup with pattern
+    if (winnerId !== user.telegramId && winningPattern) {
+      // Construct a dummy card with the winning pattern highlighted
+      const dummyCard = {
+        id: 'winner-pattern-card',
+        serialNumber: 'Winner',
+        numbers: Array.from({ length: 25 }, (_, i) => (winningPattern.includes(i) ? i + 1 : 0)),
+      };
+
+      useGameStore.getState().setWinnerCard(dummyCard);
+      useGameStore.getState().setShowWinnerPopup(true);
+    }
+  });
+
+  return () => unsubscribe();
+}, [currentRoom?.gameId, user?.telegramId]);
 
 
 function getBingoLetter(num: number): string {
@@ -1052,7 +1072,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
           className={`${bgColor} rounded p-2 flex flex-col items-center text-center transition`}
         >
           <span className="font-semibold">{maskedUsername}</span>
-          <span className="text-xs">{t("bet")}: {player.betAmount}</span>
+          <span className="text-xs">Bet: {player.betAmount}</span>
         </div>
       );
     })

@@ -141,7 +141,7 @@ React.useEffect(() => {
 
       try {
         // Fetch the actual card by cardId
-        const cardSnap = await get(ref(rtdb, `cards/${winnerObj.cardId}`));
+        const cardSnap = await get(ref(rtdb, `rooms/room0/bingoCards/${winnerObj.cardId}`));
         const cardData = cardSnap.val();
         if (!cardData) return;
 

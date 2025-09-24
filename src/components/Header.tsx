@@ -2,39 +2,17 @@ import React, { useEffect, useState } from 'react';
 import { Zap, Coins, RefreshCw } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
-import { useGameStore } from '../store/gameStore';
+import { useGameStore } from '../store/gameStore'; // ✅ import game store
 import LanguageToggle from './LanguageToggle';
 
 const Header: React.FC = () => {
   const { user, reloadBalance } = useAuthStore();
   const { t } = useLanguageStore();
-  const { currentRoom } = useGameStore();
+  const { currentRoom } = useGameStore(); // ✅ access currentRoom
   const [loading, setLoading] = useState(false);
 
-  // 🔄 Auto reload balance when component mounts
-  useEffect(() => {
-    const syncBalance = async () => {
-      if (!user) return;
-      setLoading(true);
-      await reloadBalance();
-      setLoading(false);
-    };
-
-    // Initial sync
-    syncBalance();
-
-    // Optional: Poll every 10 seconds
-    const interval = setInterval(syncBalance, 10000);
-
-    return () => clearInterval(interval);
-  }, [user, reloadBalance]);
-
-  // 🔄 Optionally sync when game status changes
-  useEffect(() => {
-    if (currentRoom?.gameStatus === 'playing') {
-      reloadBalance();
-    }
-  }, [currentRoom?.gameStatus, reloadBalance]);
+  // 🔄 Auto reload when game starts
+ 
 
   const handleReloadClick = async () => {
     if (!user) return;

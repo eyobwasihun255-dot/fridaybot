@@ -189,9 +189,8 @@ stopNumberDraw: () => {
     
   }}, 
  startGameIfCountdownEnded: async () => {
-  const { currentRoom, startingGame, initializeUser, user } = get();
+  const { currentRoom, startingGame, user } = get();
   if (!currentRoom || startingGame) return;
-
   if (currentRoom.gameStatus !== "countdown" || !currentRoom.countdownEndAt) return;
   if (Date.now() < currentRoom.countdownEndAt) return;
 
@@ -213,10 +212,7 @@ stopNumberDraw: () => {
 
     // 🔄 Reload balance after starting game
     if (user) {
-      const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
-      const snapshot = await dbGet(balanceRef);
-      const balance = snapshot.val() ?? 0;
-      initializeUser({ ...user, balance });
+      await useAuthStore.getState().reloadBalance();
     }
 
   } catch (err) {

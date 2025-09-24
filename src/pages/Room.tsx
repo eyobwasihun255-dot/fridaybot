@@ -123,32 +123,47 @@ function checkIfLoser(currentRoom: any, t: (key: string) => string) {
 const [claimed, setClaimed] = useState(false);
 // 👇 New useEffect inside Room.tsx
 React.useEffect(() => {
-  if (!currentRoom || !user || !currentRoom.gameId) return;
+  if (!currentRoom || !user) return;
 
-  const winnerRef = ref(rtdb, `games/${currentRoom.gameId}/winner`);
+  const gameRef = ref(rtdb, `games/${currentRoom.id}`);
 
-  const unsubscribe = onValue(winnerRef, (snapshot) => {
-    const data = snapshot.val();
-    if (!data) return;
+  const unsubscribe = onValue(gameRef, async (snapshot) => {
+    const gameData = snapshot.val();
+    if (!gameData || !gameData.winner || !gameData.winners) return;
 
-    const { winnerId, winningPattern } = data;
+    const { winnerId, winningPattern } = gameData.winner;
 
-    // If the winner is NOT this user, show winner popup with pattern
-    if (winnerId !== user.telegramId && winningPattern) {
-      // Construct a dummy card with the winning pattern highlighted
-      const dummyCard = {
-        id: 'winner-pattern-card',
-        serialNumber: 'Winner',
-        numbers: Array.from({ length: 25 }, (_, i) => (winningPattern.includes(i) ? i + 1 : 0)),
-      };
+    // Only proceed if the current user is NOT the winner
+    if (winnerId !== user.telegramId) {
+      // Find the winner object to get cardId
+      const winnerObj = gameData.winners.find((w: any) => w.userId === winnerId);
+      if (!winnerObj) return;
 
-      useGameStore.getState().setWinnerCard(dummyCard);
-      useGameStore.getState().setShowWinnerPopup(true);
+      try {
+        // Fetch the actual card by cardId
+        const cardSnap = await get(ref(rtdb, `cards/${winnerObj.cardId}`));
+        const cardData = cardSnap.val();
+        if (!cardData) return;
+
+        // Highlight winning numbers
+        const highlightedNumbers = cardData.numbers.map(
+          (num: number, idx: number) =>
+            winningPattern.includes(idx) ? num : 0
+        );
+
+        const highlightedCard = { ...cardData, numbers: highlightedNumbers };
+
+        useGameStore.getState().setWinnerCard(highlightedCard);
+        useGameStore.getState().setShowWinnerPopup(true);
+      } catch (err) {
+        console.error("Failed to fetch winner card:", err);
+      }
     }
   });
 
   return () => unsubscribe();
-}, [currentRoom?.gameId, user?.telegramId]);
+}, [currentRoom?.id, user?.telegramId]);
+
 
 React.useEffect(() => {
   if (!displayedCard || !currentRoom) return;

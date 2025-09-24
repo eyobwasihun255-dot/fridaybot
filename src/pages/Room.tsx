@@ -215,27 +215,24 @@ React.useEffect(() => {
   const calledSet = new Set(displayedCalledNumbers);
 
   const bingoPatterns = generatePatterns();
-  
+
   // Find a pattern that is fully covered by called numbers
   const winningPattern = bingoPatterns.find((pattern) =>
     pattern.every((idx) => flatNumbers[idx] === 0 || calledSet.has(flatNumbers[idx]))
   );
 
   if (winningPattern) {
-    // Mark numbers in the winning pattern visually
-    const markedNums = winningPattern
-      .map((idx) => flatNumbers[idx])
-      .filter((n) => n !== 0); // skip free space if you want
+    // Mark numbers in the winning pattern visually, including center (0)
+    const markedNums = winningPattern.map((idx) => flatNumbers[idx]);
 
     setMarkedNumbers((prev) => Array.from(new Set([...prev, ...markedNums])));
 
-    // Give a tiny delay so the user sees the numbers marked before claiming
+    // Tiny delay so the user sees the numbers marked before claiming
     setTimeout(() => {
       handleBingoClick();
     }, 500); // 0.5s delay
   }
 }, [displayedCalledNumbers, displayedCard, autoCard, currentRoom?.gameStatus, hasAttemptedBingo]);
-
 
 function findCoveredPatternByMarks() {
   if (!displayedCard) return null;

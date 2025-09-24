@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, Coins, Clock, Trophy } from 'lucide-react';
 import { useLanguageStore } from '../store/languageStore';
 import { useGameStore } from '../store/gameStore';
 import { useAuthStore } from '../store/authStore';
-import BingoGrid from '../components/BingoGrid';
 import { rtdb } from '../firebase/config';
 import { ref, runTransaction,get,set, update , onValue } from 'firebase/database';
 

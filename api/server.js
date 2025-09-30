@@ -3,6 +3,7 @@ import cors from 'cors';
 import { rtdb } from '../bot/firebaseConfig.js';
 import { ref, get, onValue } from 'firebase/database';
 import createSocketServer from './socket-server.js';
+import GameManager from './game-manager.js';
 import botHandler from './bot.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -236,6 +237,34 @@ setInterval(resetRoomIfGameEnded, 5000);
 
 // Create Socket.IO server
 const server = createSocketServer(app);
+const gameManager = new GameManager();
+// Reuse same io instance from socket-server
+// Hack: socket-server internally creates and owns io; expose by setting on connection
+// We can set it via a small timeout after server starts by attaching to globalThis.io if set there.
+
+// Auto-countdown monitor: if room is waiting, has >=2 players, and no active countdown, start one
+const autoCountdownCheck = async () => {
+  try {
+    const roomsSnap = await get(ref(rtdb, 'rooms'));
+    const rooms = roomsSnap.val() || {};
+    for (const [roomId, room] of Object.entries(rooms)) {
+      const players = Object.values(room.players || {}).filter((p) => !!p.cardId && (!!room.isDemoRoom || !!p.betAmount));
+      const hasEnough = players.length >= 2;
+      const countdownActive = !!room.countdownEndAt && room.countdownEndAt > Date.now();
+      const isWaiting = room.gameStatus === 'waiting';
+      if (isWaiting && hasEnough && !countdownActive) {
+        await gameManager.startCountdown(roomId, 30000, 'auto');
+      }
+      // cancel countdown if players drop below 2
+      if (room.gameStatus === 'countdown' && !hasEnough) {
+        await gameManager.cancelCountdown(roomId);
+      }
+    }
+  } catch (e) {
+    console.error('autoCountdownCheck error:', e);
+  }
+};
+setInterval(autoCountdownCheck, 5000);
 
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);

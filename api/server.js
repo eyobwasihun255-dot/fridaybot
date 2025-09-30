@@ -4,6 +4,8 @@ import { rtdb } from '../bot/firebaseConfig.js';
 import { ref, get, onValue } from 'firebase/database';
 import createSocketServer from './socket-server.js';
 import botHandler from './bot.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -19,6 +21,19 @@ app.get('/health', (req, res) => {
 
 // Telegram webhook endpoint
 app.all('/api/bot', (req, res) => botHandler(req, res));
+
+// Serve frontend (Vite build in /dist)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const distPath = path.resolve(__dirname, '../dist');
+
+app.use(express.static(distPath));
+
+// Fallback to index.html for client-side routing (exclude /api/*)
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) return next();
+  res.sendFile(path.join(distPath, 'index.html'));
+});
 
 // Auto-start games when countdown ends
 const startGameIfCountdownEnded = async () => {

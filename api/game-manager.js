@@ -336,7 +336,23 @@ class GameManager {
         return { success: false, message: "Invalid bingo pattern" };
       }
 
-      // Valid bingo - end game immediately
+      // Valid bingo - write winner and notify immediately
+      const gameRef = ref(rtdb, `games/${room.gameId}`);
+      await update(gameRef, {
+        winner: { winnerId: userId, winningPattern: pattern },
+      });
+
+      if (this.io) {
+        this.io.to(roomId).emit('winnerConfirmed', {
+          roomId,
+          gameId: room.gameId,
+          userId,
+          cardId,
+          patternIndices: pattern,
+        });
+      }
+
+      // End game right after confirmation
       await this.endGame(roomId, room.gameId, "bingo");
       
       return { success: true, message: "Bingo confirmed!" };

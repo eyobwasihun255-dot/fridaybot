@@ -123,6 +123,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       const { currentRoom } = get();
       if (currentRoom && data.roomId === currentRoom.id) {
         get().startNumberStream(data.roomId, data.gameId);
+        // Reload balance so header reflects bet deduction
+        const { reloadBalance } = useAuthStore.getState() as any;
+        if (reloadBalance) reloadBalance();
       }
     });
 
@@ -150,6 +153,37 @@ export const useGameStore = create<GameState>((set, get) => ({
         } else {
           get().setShowLoserPopup(true);
         }
+      }
+      // Reload balance after potential payout
+      const { reloadBalance } = useAuthStore.getState() as any;
+      if (reloadBalance) reloadBalance();
+    });
+
+    // Winner confirmed immediately after server validates bingo
+    newSocket.on('winnerConfirmed', async (data) => {
+      try {
+        const { roomId, userId, cardId, patternIndices } = data as any;
+        const { user } = useAuthStore.getState();
+
+        if (user?.telegramId === userId) {
+          // Winner
+          get().setShowWinnerPopup(true);
+          return;
+        }
+
+        // Loser: fetch winner card and show highlighted pattern
+        const cardRef = ref(rtdb, `rooms/${roomId}/bingoCards/${cardId}`);
+        const snap = await fbget(cardRef);
+        const card = snap.val();
+        if (!card) return;
+        const flat = card.numbers.flat();
+        const highlightedFlat = flat.map((n: number, idx: number) => (patternIndices.includes(idx) ? n : 0));
+        const highlighted: number[][] = [];
+        for (let r = 0; r < 5; r++) highlighted.push(highlightedFlat.slice(r * 5, r * 5 + 5));
+        get().setWinnerCard({ ...card, numbers: highlighted });
+        get().setShowLoserPopup(true);
+      } catch (e) {
+        console.error('Failed to show loser winner card:', e);
       }
     });
 

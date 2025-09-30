@@ -11,11 +11,11 @@ services:
       - key: PORT
         value: 10000
       - key: CLIENT_URL
-        value: https://your-frontend-url.com
+        value: https://fridaybot-37nt.onrender.com/
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: ADMIN_IDS
         sync: false
       - key: WEBAPP_URL
-        value: https://your-frontend-url.com
+        value: https://fridaybot-37nt.onrender.com/
     healthCheckPath: /health

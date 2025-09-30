@@ -34,6 +34,127 @@ app.post('/api/end-game', (req, res) => endGameHandler(req, res));
 app.post('/api/check-bingo', (req, res) => checkBingoHandler(req, res));
 app.post('/api/reset-room', (req, res) => resetRoomHandler(req, res));
 
+// Revenue summary
+app.get('/api/revenue', async (req, res) => {
+  try {
+    const revenueRef = ref(rtdb, 'revenue');
+    const snapshot = await get(revenueRef);
+
+    if (!snapshot.exists()) {
+      return res.json({ totalByDate: {}, undrawnedTotal: 0, undrawnedDetails: [] });
+    }
+
+    const data = snapshot.val();
+    const totalByDate = {};
+    let undrawnedTotal = 0;
+    const undrawnedDetails = [];
+
+    const formatDate = (ts) => new Date(ts).toISOString().split('T')[0];
+
+    Object.values(data).forEach((entry) => {
+      if (!entry?.datetime || !entry?.amount) return;
+      const dateKey = formatDate(entry.datetime);
+      totalByDate[dateKey] = (totalByDate[dateKey] || 0) + entry.amount;
+      if (!entry.drawned) {
+        undrawnedTotal += entry.amount;
+        undrawnedDetails.push(entry);
+      }
+    });
+
+    res.json({ totalByDate, undrawnedTotal, undrawnedDetails });
+  } catch (err) {
+    console.error('Error fetching revenue:', err);
+    res.status(500).json({ error: 'Failed to fetch revenue' });
+  }
+});
+
+// Transaction summary
+app.get('/api/transaction', async (req, res) => {
+  try {
+    const formatDate = (ts) => new Date(ts).toISOString().split('T')[0];
+
+    // Users total balance
+    const usersSnap = await get(ref(rtdb, 'users'));
+    let totalBalance = 0;
+    if (usersSnap.exists()) {
+      const users = usersSnap.val();
+      Object.values(users).forEach((u) => {
+        totalBalance += u?.balance || 0;
+      });
+    }
+
+    // Deposits
+    const depositsSnap = await get(ref(rtdb, 'deposits'));
+    const depositsByDate = {};
+    let totalDeposits = 0;
+    if (depositsSnap.exists()) {
+      const deposits = depositsSnap.val();
+      Object.values(deposits).forEach((dep) => {
+        if (!dep?.amount || !dep?.date) return;
+        const dateKey = formatDate(dep.date);
+        depositsByDate[dateKey] = (depositsByDate[dateKey] || 0) + dep.amount;
+        totalDeposits += dep.amount;
+      });
+    }
+
+    // Withdrawals
+    const withdrawalsSnap = await get(ref(rtdb, 'withdrawals'));
+    const withdrawalsByDate = {};
+    let totalWithdrawals = 0;
+    if (withdrawalsSnap.exists()) {
+      const withdrawals = withdrawalsSnap.val();
+      Object.values(withdrawals).forEach((wd) => {
+        if (!wd?.amount || !wd?.date) return;
+        const dateKey = formatDate(wd.date);
+        withdrawalsByDate[dateKey] = (withdrawalsByDate[dateKey] || 0) + wd.amount;
+        totalWithdrawals += wd.amount;
+      });
+    }
+
+    // Revenue
+    const revenueSnap = await get(ref(rtdb, 'revenue'));
+    const revenueByDate = {};
+    const drawnedByDate = {};
+    const undrawnedByDate = {};
+    let totalRevenue = 0;
+    let totalDrawned = 0;
+    let totalUndrawned = 0;
+    if (revenueSnap.exists()) {
+      const revenues = revenueSnap.val();
+      Object.values(revenues).forEach((rev) => {
+        if (!rev?.amount || !rev?.datetime) return;
+        const dateKey = formatDate(rev.datetime);
+        revenueByDate[dateKey] = (revenueByDate[dateKey] || 0) + rev.amount;
+        totalRevenue += rev.amount;
+        if (rev.drawned) {
+          drawnedByDate[dateKey] = (drawnedByDate[dateKey] || 0) + rev.amount;
+          totalDrawned += rev.amount;
+        } else {
+          undrawnedByDate[dateKey] = (undrawnedByDate[dateKey] || 0) + rev.amount;
+          totalUndrawned += rev.amount;
+        }
+      });
+    }
+
+    res.json({
+      balances: { totalBalance },
+      deposits: { totalDeposits, depositsByDate },
+      withdrawals: { totalWithdrawals, withdrawalsByDate },
+      revenue: {
+        totalRevenue,
+        revenueByDate,
+        totalDrawned,
+        drawnedByDate,
+        totalUndrawned,
+        undrawnedByDate,
+      },
+    });
+  } catch (err) {
+    console.error('Error fetching transaction data:', err);
+    res.status(500).json({ error: 'Failed to fetch transaction data' });
+  }
+});
+
 // Serve frontend (Vite build in /dist)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

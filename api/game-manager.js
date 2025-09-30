@@ -6,11 +6,72 @@ class GameManager {
   constructor() {
     this.activeGames = new Map(); // roomId -> game data
     this.numberDrawIntervals = new Map(); // roomId -> interval ID
+    this.countdownTimers = new Map(); // roomId -> timeout ID
     this.io = null; // Will be set when Socket.IO is initialized
   }
 
   setSocketIO(io) {
     this.io = io;
+  }
+
+  // Start countdown if conditions allow
+  async startCountdown(roomId, durationMs = 30000, startedBy = null) {
+    try {
+      const roomRef = ref(rtdb, `rooms/${roomId}`);
+      const snap = await get(roomRef);
+      const room = snap.val();
+      if (!room) return { success: false, message: 'Room not found' };
+
+      const players = Object.values(room.players || {}).filter((p) => !!p.cardId && (!!room.isDemoRoom || !!p.betAmount));
+      if (players.length < 2) return { success: false, message: 'Not enough players' };
+      if (room.gameStatus !== 'waiting') return { success: false, message: 'Room not in waiting state' };
+
+      const countdownEndAt = Date.now() + durationMs;
+      await update(roomRef, {
+        gameStatus: 'countdown',
+        countdownEndAt,
+        countdownStartedBy: startedBy,
+      });
+
+      // schedule auto start
+      if (this.countdownTimers.has(roomId)) {
+        clearTimeout(this.countdownTimers.get(roomId));
+      }
+      const tid = setTimeout(() => {
+        this.startGame(roomId).catch((e) => console.error('Auto startGame error:', e));
+        this.countdownTimers.delete(roomId);
+      }, durationMs + 250);
+      this.countdownTimers.set(roomId, tid);
+
+      if (this.io) {
+        this.io.to(roomId).emit('countdownStarted', { roomId, countdownEndAt });
+      }
+      return { success: true, countdownEndAt };
+    } catch (err) {
+      console.error('Error starting countdown:', err);
+      return { success: false, message: 'Server error' };
+    }
+  }
+
+  // Cancel countdown and revert to waiting
+  async cancelCountdown(roomId) {
+    try {
+      if (this.countdownTimers.has(roomId)) {
+        clearTimeout(this.countdownTimers.get(roomId));
+        this.countdownTimers.delete(roomId);
+      }
+      const roomRef = ref(rtdb, `rooms/${roomId}`);
+      await update(roomRef, {
+        gameStatus: 'waiting',
+        countdownEndAt: null,
+        countdownStartedBy: null,
+      });
+      if (this.io) this.io.to(roomId).emit('countdownCancelled', { roomId });
+      return { success: true };
+    } catch (err) {
+      console.error('Error cancelling countdown:', err);
+      return { success: false };
+    }
   }
 
   // Start a new game

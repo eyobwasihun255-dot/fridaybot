@@ -69,7 +69,7 @@ const Room: React.FC = () => {
     showLoserPopup, setShowLoserPopup,
     connectToServer, checkBingo
   } = useGameStore();
-  const { user,  } = useAuthStore();
+  const { user, updateBalance } = useAuthStore();
  const userCard = bingoCards.find(
   (card) =>
     card.roomId === currentRoom?.id && // ✅ make sure it's the same room

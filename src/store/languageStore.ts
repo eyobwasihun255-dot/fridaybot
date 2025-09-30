@@ -19,7 +19,6 @@ const translations = {
 'bingo_not_allowed': 'ቢንጎ የማይፈቀድ ነው።',
 'not_a_winner': 'አሸናፊ አይደሉም።',
 'cancel_failed': 'አልተሳካም።',
-'game_in_progress': 'ጨዋታ አሁን በሂደት ላይ ነው',
 
     'friday_bingo': 'Friday Bingo',
     'balance': 'ሂሳብ',
@@ -139,7 +138,6 @@ const translations = {
     'you_lost': 'Sorry! You lost!',
     // Room
     'room_details': 'Room',
-    'bet': 'Bet',
     'payout': 'Payout',
     'max_players': 'Max Players',
     'game_area': 'Game Area',
@@ -169,13 +167,11 @@ const translations = {
     'success': 'Success!',
     'confirm': 'Confirm',
     'cancel': 'Cancel',
-    'pattern': 'Winning Patterns',
     'insufficient_balance': 'Insufficient balance!',
     'bet_placed': 'Bet placed! Waiting for other players...',
     'error_player_card': 'Error: player/card not found',
     'already_attempted_bingo': 'You already attempted Bingo!',
     'bingo_not_allowed': 'No Bingo allowed now.',
-    'not_a_winner': 'Not a winner this time.',
     'cancel_failed': 'Cancel failed.',
     'game_in_progress': 'Game is currently in progress',
   }

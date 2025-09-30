@@ -6,6 +6,11 @@ import createSocketServer from './socket-server.js';
 import botHandler from './bot.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import verifyUserHandler from './verifyUser.js';
+import startGameHandler from './start-game.js';
+import endGameHandler from './end-game.js';
+import checkBingoHandler from './check-bingo.js';
+import resetRoomHandler from './reset-room.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -21,6 +26,13 @@ app.get('/health', (req, res) => {
 
 // Telegram webhook endpoint
 app.all('/api/bot', (req, res) => botHandler(req, res));
+
+// API routes
+app.get('/api/verifyUser', (req, res) => verifyUserHandler(req, res));
+app.post('/api/start-game', (req, res) => startGameHandler(req, res));
+app.post('/api/end-game', (req, res) => endGameHandler(req, res));
+app.post('/api/check-bingo', (req, res) => checkBingoHandler(req, res));
+app.post('/api/reset-room', (req, res) => resetRoomHandler(req, res));
 
 // Serve frontend (Vite build in /dist)
 const __filename = fileURLToPath(import.meta.url);

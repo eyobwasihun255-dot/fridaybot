@@ -3,7 +3,7 @@ services:
     name: friday-bingo-server
     env: node
     plan: starter
-    buildCommand: npm install && npm run build
+    buildCommand: npm install && npm run build && npm install socket.io-client
     startCommand: npm run server
     envVars:
       - key: NODE_ENV

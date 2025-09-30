@@ -3,6 +3,7 @@ import cors from 'cors';
 import { rtdb } from '../bot/firebaseConfig.js';
 import { ref, get, onValue } from 'firebase/database';
 import createSocketServer from './socket-server.js';
+import botHandler from './bot.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -15,6 +16,9 @@ app.use(express.json());
 app.get('/health', (req, res) => {
   res.json({ status: 'Server running', timestamp: new Date().toISOString() });
 });
+
+// Telegram webhook endpoint
+app.all('/api/bot', (req, res) => botHandler(req, res));
 
 // Auto-start games when countdown ends
 const startGameIfCountdownEnded = async () => {

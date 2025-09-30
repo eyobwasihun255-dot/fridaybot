@@ -71,7 +71,7 @@ interface GameState {
 }
 
 // Server configuration
-const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
+const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'https://fridaybot-1.onrender.com/';
 
 export const useGameStore = create<GameState>((set, get) => ({
   rooms: [],

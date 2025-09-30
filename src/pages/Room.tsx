@@ -61,6 +61,10 @@ const Room: React.FC = () => {
   const { roomId } = useParams();
   const navigate = useNavigate();
   const { t ,language} = useLanguageStore();
+  const getList = (key: string): string[] => {
+    const value: any = (t as unknown as (k: string) => any)(key);
+    return Array.isArray(value) ? value as string[] : [];
+  };
    
  const {
     winnerCard, showWinnerPopup, closeWinnerPopup,
@@ -959,7 +963,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
   <div className="w-full bg-yellow-400/80 text-black rounded-lg p-3 mb-2 shadow text-sm">
     <h3 className="font-bold mb-1">📜 {language === "am" ? "የቢንጎ ደንቦች" : "Bingo Rules & Info"}</h3>
     <ul className="list-disc list-inside space-y-1">
-      {t("bingo_rules_countdown").map((rule: string, i: number) => (
+      {getList("bingo_rules_countdown").map((rule: string, i: number) => (
         <li key={i}>{rule}</li>
       ))}
     </ul>
@@ -969,7 +973,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
   <div className="w-full bg-yellow-400/80 text-black rounded-lg p-3 mb-2 shadow text-sm">
     <h3 className="font-bold mb-1">📜 {language === "am" ? "የቢንጎ ደንቦች" : "Bingo Rules & Info"}</h3>
     <ul className="list-disc list-inside space-y-1">
-      {t("bingo_rules_countdown").map((rule: string, i: number) => (
+      {getList("bingo_rules_countdown").map((rule: string, i: number) => (
         <li key={i}>{rule}</li>
       ))}
     </ul>
@@ -980,7 +984,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
   <div className="w-full bg-yellow-400/80 text-black rounded-lg p-3 mb-2 shadow text-sm">
     <h3 className="font-bold mb-1">📜 {language === "am" ? "የቢንጎ ደንቦች" : "Bingo Rules & Info"}</h3>
     <ul className="list-disc list-inside space-y-1">
-      {t("bingo_rules_ended").map((rule: string, i: number) => (
+      {getList("bingo_rules_ended").map((rule: string, i: number) => (
         <li key={i}>{rule}</li>
       ))}
     </ul>

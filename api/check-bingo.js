@@ -3,7 +3,7 @@ import GameManager from './game-manager.js';
 // Initialize game manager
 const gameManager = new GameManager();
 
-export default async function handler(req, res) {
+export default async function checkbingohandler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

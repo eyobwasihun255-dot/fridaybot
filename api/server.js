@@ -11,7 +11,7 @@ import verifyUserHandler from './verifyUser.js';
 import startGameHandler from './start-game.js';
 import endGameHandler from './end-game.js';
 import resetRoomHandler from './reset-room.js';
-
+import checkbingohandler from './check-bingo.js'
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -32,7 +32,7 @@ app.get('/api/verifyUser', (req, res) => verifyUserHandler(req, res));
 app.post('/api/start-game', (req, res) => startGameHandler(req, res));
 app.post('/api/end-game', (req, res) => endGameHandler(req, res));
 app.post('/api/reset-room', (req, res) => resetRoomHandler(req, res));
-
+app.get('/api/check-bingo', (req, res) => checkbingohandler(req, res));
 // Revenue summary
 app.get('/api/revenue', async (req, res) => {
   try {

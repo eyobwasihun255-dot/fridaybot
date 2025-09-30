@@ -17,7 +17,9 @@ const translations = {
 'error_player_card': 'ስህተት: ተጫዋች/ካርድ አልተገኘም',
 'already_attempted_bingo': 'ቢንጎ አስቀድሞ ሞክረዋል!',
 'bingo_not_allowed': 'ቢንጎ የማይፈቀድ ነው።',
+'not_a_winner': 'አሸናፊ አይደሉም።',
 'cancel_failed': 'አልተሳካም።',
+'game_in_progress': 'ጨዋታ አሁን በሂደት ላይ ነው',
 
     'friday_bingo': 'Friday Bingo',
     'balance': 'ሂሳብ',

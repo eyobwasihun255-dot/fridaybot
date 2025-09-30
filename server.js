@@ -570,7 +570,7 @@ app.post('/api/start-game', async (req, res) => {
   }
 });
 
-app.get('/api/check-bingo', async (req, res) => {
+app.post('/api/check-bingo', async (req, res) => {
   try {
     const { roomId, cardId, userId, pattern } = req.body;
     

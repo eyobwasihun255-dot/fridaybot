@@ -221,64 +221,74 @@ class GameManager {
   }
 
   // End game
-  // End game
   async endGame(roomId, gameId, reason = "manual") {
     try {
       this.stopNumberDrawing(roomId);
-  
+
       const gameRef = ref(rtdb, `games/${gameId}`);
       const gameSnap = await get(gameRef);
       const gameData = gameSnap.val();
-  
+
       if (!gameData) return;
-  
+
       // Update game status
       await update(gameRef, {
         status: "ended",
         endedAt: Date.now(),
         endReason: reason
       });
-  
-      // Update room status (temporarily "ended")
+
+      // Update room status
       const roomRef = ref(rtdb, `rooms/${roomId}`);
       await update(roomRef, {
         gameStatus: "ended",
-        nextGameCountdownEndAt: Date.now() + (30 * 1000) // 30s till next game
+        nextGameCountdownEndAt: Date.now() + (30 * 1000) // 30 seconds until next game
       });
-  
-      // Process results
-      if (gameData.winners && gameData.winners.length > 0) {
-        await this.processWinners(roomId, gameData);
+
+      // If numbers finished and no winner confirmed, add revenue and skip payouts
+      const hasConfirmedWinner = !!gameData.winner;
+      if (reason === 'allNumbersDrawn' && !hasConfirmedWinner) {
+        try {
+          const revenueRef = ref(rtdb, `revenue/${gameId}`);
+          await set(revenueRef, {
+            gameId,
+            roomId,
+            datetime: Date.now(),
+            amount: gameData.totalPayout || 0,
+            drawned: false,
+          });
+
+          // Mark room payout fields for record consistency
+          await update(roomRef, {
+            winner: null,
+            payout: gameData.totalPayout || 0,
+            payed: true,
+          });
+        } catch (e) {
+          console.error('Error recording revenue on no-winner case:', e);
+        }
       } else {
-        await this.processRevenue(roomId, gameData);  // 👈 handle no winners
+        // Process winners and payouts when there is a winner list
+        if (gameData.winners && gameData.winners.length > 0) {
+          await this.processWinners(roomId, gameData);
+        }
       }
-  
+
       // Notify clients
       if (this.io) {
-        this.io.to(roomId).emit("gameEnded", {
+        this.io.to(roomId).emit('gameEnded', {
           roomId,
           gameId,
           reason,
           winners: gameData.winners || []
         });
       }
-  
+
       console.log(`🔚 Game ended in room ${roomId}: ${reason}`);
-  
-      // ⏳ Reset room back to waiting after 10 seconds
-      setTimeout(async () => {
-        try {
-          await this.resetRoom(roomId);
-        } catch (err) {
-          console.error(`Error resetting room ${roomId}:`, err);
-        }
-      }, 10000);
-  
     } catch (error) {
       console.error("Error ending game:", error);
     }
   }
-  
 
   // Process winners and payouts
   async processWinners(roomId, gameData) {
@@ -320,43 +330,6 @@ class GameManager {
       console.error("Error processing winners:", error);
     }
   }
-  // If no winners -> add payout to revenue
-  async processRevenue(roomId, gameData) {
-    try {
-      const { totalPayout } = gameData;
-
-      if (totalPayout > 0) {
-        const revenueRef = ref(rtdb, "system/revenue");
-        await runTransaction(revenueRef, (current) => {
-          return (current || 0) + totalPayout;
-        });
-
-        // Record history
-        const revRef = ref(rtdb, `revenueHistory/${uuidv4()}`);
-        await set(revRef, {
-          id: uuidv4(),
-          gameId: gameData.id,
-          roomId,
-          amount: totalPayout,
-          reason: "noWinners",
-          date: Date.now()
-        });
-
-        // Mark game as payed
-        const roomRef = ref(rtdb, `rooms/${roomId}`);
-        await update(roomRef, {
-          payout: totalPayout,
-          payed: true,
-          winner: null
-        });
-
-        console.log(`💰 No winners in room ${roomId}. Revenue +${totalPayout}`);
-      }
-    } catch (error) {
-      console.error("Error processing revenue:", error);
-    }
-  }
-
 
   // Check bingo claim
   async checkBingo(roomId, cardId, userId, pattern) {
@@ -389,6 +362,9 @@ class GameManager {
 
       // Valid bingo - write winner and notify immediately
       const gameRef = ref(rtdb, `games/${room.gameId}`);
+      const gameSnap = await get(gameRef);
+      const gameData = gameSnap.val() || {};
+
       await update(gameRef, {
         winner: { winnerId: userId, winningPattern: pattern },
       });
@@ -402,6 +378,34 @@ class GameManager {
           patternIndices: pattern,
         });
       }
+
+      // Pay winner immediately
+      const payoutAmount = Math.floor(gameData.totalPayout || 0);
+      if (payoutAmount > 0) {
+        const balanceRef = ref(rtdb, `users/${userId}/balance`);
+        await runTransaction(balanceRef, (current) => (current || 0) + payoutAmount);
+
+        // Log winning history
+        const winRef = ref(rtdb, `winningHistory/${uuidv4()}`);
+        await set(winRef, {
+          playerId: userId,
+          gameId: room.gameId,
+          roomId,
+          payout: payoutAmount,
+          cardId,
+          date: Date.now(),
+        });
+
+        // Mark room payout metadata
+        await update(roomRef, {
+          winner: userId,
+          payout: payoutAmount,
+          payed: true,
+        });
+      }
+
+      // Prevent double payout by clearing auto winners list
+      await update(gameRef, { winners: [], winnersChecked: true });
 
       // End game right after confirmation
       await this.endGame(roomId, room.gameId, "bingo");

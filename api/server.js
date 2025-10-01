@@ -213,16 +213,8 @@ const resetRoomIfGameEnded = async () => {
           room.nextGameCountdownEndAt <= Date.now()) {
         
         console.log(`♻️ Auto-resetting room ${roomId}`);
-        
-        // Import and call reset-room handler
-        const { default: resetRoomHandler } = await import('./reset-room.js');
-        const mockReq = { body: { roomId } };
-        const mockRes = {
-          status: (code) => ({ json: (data) => console.log(`Room reset result:`, data) }),
-          json: (data) => console.log(`Room reset result:`, data)
-        };
-        
-        await resetRoomHandler(mockReq, mockRes);
+        // Call game manager directly to avoid HTTP method issues
+        await gameManager.resetRoom(roomId);
       }
     }
   } catch (error) {

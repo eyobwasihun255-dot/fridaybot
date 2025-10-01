@@ -32,7 +32,7 @@ app.get('/api/verifyUser', (req, res) => verifyUserHandler(req, res));
 app.post('/api/start-game', (req, res) => startGameHandler(req, res));
 app.post('/api/end-game', (req, res) => endGameHandler(req, res));
 app.post('/api/reset-room', (req, res) => resetRoomHandler(req, res));
-app.post('/api/check-bingo', (req, res) => checkbingohandler(req, res));
+app.get('/api/check-bingo', (req, res) => checkbingohandler(req, res));
 // Revenue summary
 app.get('/api/revenue', async (req, res) => {
   try {

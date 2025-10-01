@@ -69,7 +69,7 @@ const Room: React.FC = () => {
   };
    
  const {
-    winnerCard, showWinnerPopup, closeWinnerPopup,setWinnerCard
+    winnerCard, showWinnerPopup, closeWinnerPopup,setWinnerCard,
     currentRoom, bingoCards, joinRoom, selectCard,
     placeBet, selectedCard,
     showLoserPopup, setShowLoserPopup,

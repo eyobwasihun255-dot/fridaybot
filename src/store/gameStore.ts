@@ -139,6 +139,50 @@ export const useGameStore = create<GameState>((set, get) => ({
           [roomId]: drawnNumbers,
         },
       }));
+
+      // Auto-bet auto-bingo: if current user has auto-bet card, auto-claim when pattern matches
+      try {
+        const { currentRoom, bingoCards } = get();
+        if (!currentRoom) return;
+        const { user } = useAuthStore.getState();
+        if (!user) return;
+        const userCard = bingoCards.find(
+          (c) => c.roomId === roomId && c.claimed && c.claimedBy === user.telegramId
+        ) as any;
+        if (!userCard) return;
+        // Check auto flag on card by peeking RTDB
+        const cardRef = ref(rtdb, `rooms/${roomId}/bingoCards/${userCard.id}`);
+        fbget(cardRef).then((snap) => {
+          const cardVal: any = snap.val();
+          const auto = !!cardVal?.auto && (!cardVal?.autoUntil || cardVal.autoUntil > Date.now());
+          if (!auto) return;
+          // Evaluate patterns
+          const flat = (cardVal?.numbers || userCard.numbers).flat().map((n: number) => n || 0);
+          const calledSet = new Set(drawnNumbers);
+          const patterns = [
+            // rows
+            ...[0,1,2,3,4].map(r => [0,1,2,3,4].map(c => r*5 + c)),
+            // cols
+            ...[0,1,2,3,4].map(c => [0,1,2,3,4].map(r => r*5 + c)),
+            // diags
+            [0,6,12,18,24],
+            [4,8,12,16,20],
+            // four corners, small X
+            [0,4,20,24],
+            [12,6,8,16,18],
+          ];
+          for (const pat of patterns) {
+            const allCalled = pat.every(idx => flat[idx] === 0 || calledSet.has(flat[idx]));
+            if (allCalled) {
+              // Fire bingo once per draw tick; debounce by hasAttemptedBingo flag in RTDB
+              get().checkBingo(pat);
+              break;
+            }
+          }
+        });
+      } catch (e) {
+        console.warn('auto-bet auto-bingo check failed:', e);
+      }
     });
 
     newSocket.on('gameEnded', (data) => {

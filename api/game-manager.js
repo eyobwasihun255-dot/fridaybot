@@ -661,16 +661,38 @@ class GameManager {
         nextGameCountdownEndAt: null
       });
 
-      // Reset player attemptedBingo flags
+      // Reset cards and players while preserving auto-bet
       const roomSnap = await get(roomRef);
-      const room = roomSnap.val();
-      if (room?.players) {
-        const updates = {};
-        Object.keys(room.players).forEach(pid => {
-          updates[`players/${pid}/attemptedBingo`] = false;
-        });
-        await update(roomRef, updates);
-      }
+      const room = roomSnap.val() || {};
+      const updates = {} as any;
+
+      const bingoCards = room.bingoCards || {};
+      const players = room.players || {};
+
+      // Build a map cardId->isAuto
+      const cardIdIsAuto: Record<string, boolean> = {};
+      Object.entries(bingoCards).forEach(([cardId, card]: any) => {
+        const isAuto = !!card?.auto && (!card?.autoUntil || card.autoUntil > Date.now());
+        cardIdIsAuto[cardId] = isAuto;
+        if (isAuto) {
+          // preserve claimed state for auto-bet cards
+          updates[`bingoCards/${cardId}/claimed`] = true;
+          updates[`bingoCards/${cardId}/claimedBy`] = card.claimedBy || null;
+        } else {
+          // reset normal cards
+          updates[`bingoCards/${cardId}/claimed`] = false;
+          updates[`bingoCards/${cardId}/claimedBy`] = null;
+        }
+      });
+
+      // Remove players who are not auto-bet; preserve auto-bet players
+      Object.entries(players).forEach(([pid, p]: any) => {
+        const isAutoPlayer = p?.cardId && cardIdIsAuto[p.cardId];
+        updates[`players/${pid}`] = isAutoPlayer ? { ...p, attemptedBingo: false } : null;
+      });
+
+      // Ensure attemptedBingo flags cleared for remaining players
+      await update(roomRef, updates);
 
       // Notify clients
       if (this.io) {

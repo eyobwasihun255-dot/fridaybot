@@ -220,7 +220,7 @@ class GameManager {
             if (!card) continue;
             const flat = card.numbers.flat();
             // find first winning pattern
-            let winningPattern = null as any;
+            let winningPattern = null;
             for (const pat of patterns) {
               const ok = pat.every((idx) => flat[idx] === 0 || calledSet.has(flat[idx]));
               if (ok) { winningPattern = pat; break; }

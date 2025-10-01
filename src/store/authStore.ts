@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { rtdb } from '../firebase/config';
-import { ref, get as dbGet } from 'firebase/database';
+import { ref, get as dbGet, onValue, off } from 'firebase/database';
 
 export interface User {
   telegramId: string;
@@ -20,6 +20,8 @@ interface AuthState {
   loading: boolean;
   initializeUser: (user: User) => void;
   reloadBalance: () => Promise<void>;
+  startBalanceListener: () => void;
+  stopBalanceListener: () => void;
   logout: () => void;
 }
 
@@ -29,6 +31,7 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       user: null,
       loading: false,
+      _balanceListenerRef: null ,
 
       initializeUser: (user) =>
         set({
@@ -54,7 +57,31 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      logout: () => set({ user: null, loading: false }),
+      // 🔁 Live balance subscription
+      startBalanceListener: () => {
+        const user = get().user;
+        if (!user) return;
+        const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
+        // store ref to stop later
+        (get() as any)._balanceListenerRef = balanceRef;
+        onValue(balanceRef, (snap) => {
+          const bal = snap.val() ?? 0;
+          set({ user: { ...(get().user as User), balance: bal } });
+        });
+      },
+
+      stopBalanceListener: () => {
+        const refObj = (get() as any)._balanceListenerRef;
+        if (refObj) {
+          off(refObj);
+          (get() as any)._balanceListenerRef = null;
+        }
+      },
+
+      logout: () => {
+        (get() as any).stopBalanceListener();
+        set({ user: null, loading: false });
+      },
     }),
     {
       name: 'auth-storage', // The key for localStorage

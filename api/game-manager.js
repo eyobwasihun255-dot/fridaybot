@@ -201,6 +201,40 @@ class GameManager {
           });
         }
 
+        // Auto-bingo for auto players
+        try {
+          const roomSnap = await get(ref(rtdb, `rooms/${roomId}`));
+          const room = roomSnap.val() || {};
+          const players = room.players || {};
+          const bingoCards = room.bingoCards || {};
+          const calledSet = new Set(newDrawnNumbers);
+          const size = 5;
+          const patterns = this.generateValidPatterns();
+          
+          for (const [playerId, p] of Object.entries(players)) {
+            if (!p?.auto) continue;
+            const autoUntil = p.autoUntil || 0;
+            if (autoUntil <= Date.now()) continue;
+            const cardId = p.cardId;
+            const card = bingoCards[cardId];
+            if (!card) continue;
+            const flat = card.numbers.flat();
+            // find first winning pattern
+            let winningPattern = null as any;
+            for (const pat of patterns) {
+              const ok = pat.every((idx) => flat[idx] === 0 || calledSet.has(flat[idx]));
+              if (ok) { winningPattern = pat; break; }
+            }
+            if (winningPattern) {
+              // Trigger server bingo
+              await this.checkBingo(roomId, cardId, playerId, winningPattern);
+              break; // stop loop after first auto-winner
+            }
+          }
+        } catch (e) {
+          console.error('Auto-bingo error:', e);
+        }
+
         console.log(`🎲 Room ${roomId}: Drew number ${currentNumber}`);
       } catch (error) {
         console.error("Error in number drawing:", error);
@@ -651,6 +685,28 @@ class GameManager {
   async resetRoom(roomId) {
     try {
       const roomRef = ref(rtdb, `rooms/${roomId}`);
+      // Reset card claims except those with auto=true and autoUntil in future
+      const snap = await get(roomRef);
+      const room = snap.val() || {};
+
+      // Reset claimed flags per card
+      const bingoCards = room.bingoCards || {};
+      const players = room.players || {};
+      for (const [cardId, card] of Object.entries(bingoCards)) {
+        const claimedBy = card.claimedBy;
+        let keepClaimed = false;
+        if (claimedBy && players[claimedBy]?.auto === true) {
+          const autoUntil = players[claimedBy]?.autoUntil || 0;
+          if (autoUntil > Date.now()) keepClaimed = true;
+        }
+        if (!keepClaimed) {
+          await update(ref(rtdb, `rooms/${roomId}/bingoCards/${cardId}`), {
+            claimed: false,
+            claimedBy: null,
+          });
+        }
+      }
+
       await update(roomRef, {
         gameStatus: "waiting",
         gameId: null,
@@ -661,38 +717,16 @@ class GameManager {
         nextGameCountdownEndAt: null
       });
 
-      // Reset cards and players while preserving auto-bet
+      // Reset player attemptedBingo flags
       const roomSnap = await get(roomRef);
-      const room = roomSnap.val() || {};
-      const updates = {};
-
-      const bingoCards = room.bingoCards || {};
-      const players = room.players || {};
-
-      // Build a map cardId->isAuto
-      const cardIdIsAuto = {};
-      Object.entries(bingoCards).forEach(([cardId, card]) => {
-        const isAuto = !!card?.auto && (!card?.autoUntil || card.autoUntil > Date.now());
-        cardIdIsAuto[cardId] = isAuto;
-        if (isAuto) {
-          // preserve claimed state for auto-bet cards
-          updates[`bingoCards/${cardId}/claimed`] = true;
-          updates[`bingoCards/${cardId}/claimedBy`] = card.claimedBy || null;
-        } else {
-          // reset normal cards
-          updates[`bingoCards/${cardId}/claimed`] = false;
-          updates[`bingoCards/${cardId}/claimedBy`] = null;
-        }
-      });
-
-      // Remove players who are not auto-bet; preserve auto-bet players
-      Object.entries(players).forEach(([pid, p]) => {
-        const isAutoPlayer = p?.cardId && cardIdIsAuto[p.cardId];
-        updates[`players/${pid}`] = isAutoPlayer ? { ...p, attemptedBingo: false } : null;
-      });
-
-      // Ensure attemptedBingo flags cleared for remaining players
-      await update(roomRef, updates);
+      const room = roomSnap.val();
+      if (room?.players) {
+        const updates = {};
+        Object.keys(room.players).forEach(pid => {
+          updates[`players/${pid}/attemptedBingo`] = false;
+        });
+        await update(roomRef, updates);
+      }
 
       // Notify clients
       if (this.io) {

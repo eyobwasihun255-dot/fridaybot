@@ -275,7 +275,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
       console.log('🎯 Checking bingo with server...');
 
-      const response = await fetch(`${SERVER_URL}/api/check-bingo`, {
+      const response = await fetch(`/api/check-bingo`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -309,7 +309,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     try {
       console.log('🔚 Requesting server to end game...');
       
-      const response = await fetch(`${SERVER_URL}/api/end-game`, {
+      const response = await fetch(`/api/end-game`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

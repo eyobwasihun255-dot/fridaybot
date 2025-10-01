@@ -671,7 +671,7 @@ class GameManager {
 
       // Build a map cardId->isAuto
       const cardIdIsAuto = {};
-      Object.entries(bingoCards).forEach(([cardId, card]: any) => {
+      Object.entries(bingoCards).forEach(([cardId, card]) => {
         const isAuto = !!card?.auto && (!card?.autoUntil || card.autoUntil > Date.now());
         cardIdIsAuto[cardId] = isAuto;
         if (isAuto) {
@@ -686,7 +686,7 @@ class GameManager {
       });
 
       // Remove players who are not auto-bet; preserve auto-bet players
-      Object.entries(players).forEach(([pid, p]: any) => {
+      Object.entries(players).forEach(([pid, p]) => {
         const isAutoPlayer = p?.cardId && cardIdIsAuto[p.cardId];
         updates[`players/${pid}`] = isAutoPlayer ? { ...p, attemptedBingo: false } : null;
       });

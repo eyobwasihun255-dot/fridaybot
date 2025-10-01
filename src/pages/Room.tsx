@@ -69,7 +69,7 @@ const Room: React.FC = () => {
   };
    
  const {
-    winnerCard, showWinnerPopup, closeWinnerPopup,
+    winnerCard, showWinnerPopup, closeWinnerPopup,setWinnerCard
     currentRoom, bingoCards, joinRoom, selectCard,
     placeBet, selectedCard,
     showLoserPopup, setShowLoserPopup,
@@ -103,28 +103,14 @@ const playerData = currentRoom?.players?.[user?.telegramId];
 
 // True if backend says this player already bet
 const alreadyBetted = !!playerData?.betAmount && playerData.betAmount > 0;
-
 // ✅ Always at top of component
 const storeIsBetActive = useGameStore((s) => s.isBetActive);
 
 // Flatten current card once for quick lookups
 const flatCard = React.useMemo(() => cardNumbers.flat(), [cardNumbers]);
-const [loserPopup, setLoserPopup] = useState<{ visible: boolean; message: string }>({
-  visible: false,
-  message: ''
-});
 
-function checkIfLoser(currentRoom: any, t: (key: string) => string) {
-  const { user } = useAuthStore.getState();
-  if (!currentRoom || !user) return;
 
-  const winners = currentRoom.winners || [];
-  const isWinner = winners.some((w: any) => w.telegramId === user.telegramId);
 
-  if (!isWinner && currentRoom.payed) {
-    setLoserPopup({ visible: true, message: t('you_lost') });
-  }
-}
 const [claimed, setClaimed] = useState(false);
 // 👇 New useEffect inside Room.tsx
 // Connect socket once
@@ -212,16 +198,10 @@ function patternExistsInCalled(patternNumbers: number[]) {
   return patternNumbers.every((n) => n === 0 || calledSet.has(n));
 }
 
-// Find if player is in winners list
-const isInWinnerList = currentRoom?.winners?.some(
-  (w: any) => w.cardId === displayedCard?.id && !w.checked
-) ?? false;
+
 
 // Reuse your existing covered pattern logic
 const coveredPattern = findCoveredPatternByMarks();
-const patternValidAgainstCalled = coveredPattern
-  ? patternExistsInCalled(coveredPattern.patternNumbers)
-  : false;
 
 
   
@@ -238,7 +218,6 @@ React.useEffect(() => {
 const alreadyAttempted = playerData?.attemptedBingo ?? false;
 React.useEffect(() => {
   setHasAttemptedBingo(alreadyAttempted);
-  checkIfLoser(currentRoom, t);
 }, [alreadyAttempted]);
 
 
@@ -301,53 +280,6 @@ React.useEffect(() => {
   
 }, [currentRoom]);
 // At the top inside Room.tsx
-const [loserWinnerCard, setLoserWinnerCard] = useState<any | null>(null);
-const [showLoserWinnerPopup, setShowLoserWinnerPopup] = useState(false);
-
-React.useEffect(() => {
-  if (!currentRoom || !user) return;
-
-  const gameRef = ref(rtdb, `games/${currentRoom.id}`);
-  
-  const unsubscribe = onValue(gameRef, async (snapshot) => {
-    const gameData = snapshot.val();
-    if (!gameData) return;
-
-    const { winner, winners } = gameData;
-    if (!winner || !winners) return;
-
-    const isPaid = currentRoom.payed ?? false;
-
-    // Only proceed if user is NOT the winner and game is paid
-    if (isPaid && winner.winnerId !== user.telegramId) {
-      try {
-        // Find the winner object to get cardId
-        const winnerObj = winners.find((w: any) => w.userId === winner.winnerId);
-        if (!winnerObj) return;
-
-        // Fetch winner card data
-        const cardSnap = await get(ref(rtdb, `rooms/${currentRoom.id}/bingoCards/${winnerObj.cardId}`));
-        const cardData = cardSnap.val();
-        if (!cardData) return;
-
-        // Highlight winning numbers
-        const highlightedNumbers = cardData.numbers.map(
-          (num: number, idx: number) => winner.winningPattern.includes(idx) ? num : 0
-        );
-
-        setLoserWinnerCard({ ...cardData, numbers: highlightedNumbers });
-        setShowLoserWinnerPopup(true);
-      } catch (err) {
-        console.error("Failed to fetch winner card for loser popup:", err);
-      }
-    }
-  });
-
-  return () => unsubscribe();
-}, [currentRoom?.id, user?.telegramId]);
-
-// Countdown is handled by server; client just displays remaining time
-// Countdown tick
 
 // Inside Room.tsx, after your other useEffects
 React.useEffect(() => {
@@ -424,8 +356,8 @@ React.useEffect(() => {
         patternIndices.includes(idx) ? num : 0
       );
 
-      setLoserWinnerCard({ ...cardData, numbers: highlightedNumbers });
-      setShowLoserWinnerPopup(true);
+      setWinnerCard({ ...cardData, numbers: highlightedNumbers });
+      setShowLoserPopup(true);
     }
   });
 
@@ -451,11 +383,12 @@ React.useEffect(() => {
   // 👇 Auto trigger bingo claim
   (async () => {
     try {
-      setHasAttemptedBingo(true);
+     
       const result = await checkBingo(covered.patternIndices);
       if (result.success) {
         setGameMessage("🏆 Auto Bingo triggered!");
       }
+      setHasAttemptedBingo(true);
     } catch (err) {
       console.error("Auto bingo error:", err);
     }
@@ -649,7 +582,7 @@ return (
       </div>
 
       <button
-        onClick={() => setShowLoserWinnerPopup(false)}
+        onClick={() => setShowLoserPopup(false)}
         className="mt-2 px-5 py-2 bg-red-600 text-white rounded-lg shadow hover:bg-red-700"
       >
         {t('close')}

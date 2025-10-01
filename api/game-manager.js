@@ -298,6 +298,7 @@ class GameManager {
             payout: gameData.totalPayout || 0,
             payed: true,
           });
+          await this.resetRoom(roomId);
         } catch (e) {
           console.error('Error recording revenue on no-winner case:', e);
         }

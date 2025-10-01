@@ -342,7 +342,11 @@ React.useEffect(() => {
 };
 React.useEffect(() => {
   const { socket } = useGameStore.getState();
-  if (!socket) return;
+  if (!socket) {
+    console.log("❌ No socket connection available");
+    return;
+  }
+  console.log("✅ Socket connection available, setting up winnerConfirmed listener");
 
   socket.on("winnerConfirmed", async ({ roomId, gameId, userId, cardId, patternIndices }) => {
     if (!currentRoom || currentRoom.id !== roomId) return;
@@ -366,34 +370,7 @@ React.useEffect(() => {
   };
 }, [currentRoom?.id, user?.telegramId]);
 
-// Auto Bingo trigger
-React.useEffect(() => {
-  if (!autoCard?.auto || !displayedCard || !currentRoom || !user) return;
-  if (!autoCard.autoUntil || autoCard.autoUntil < Date.now()) return;
-
-  // only if within 24h
-  if (autoCard.autoUntil - Date.now() > 24 * 60 * 60 * 1000) return;
-
-  if (currentRoom.gameStatus !== "playing") return;
-  if (hasAttemptedBingo) return;
-
-  const covered = findCoveredPatternByMarks();
-  if (!covered || !patternExistsInCalled(covered.patternNumbers)) return;
-
-  // 👇 Auto trigger bingo claim
-  (async () => {
-    try {
-     
-      const result = await checkBingo(covered.patternIndices);
-      if (result.success) {
-        setGameMessage("🏆 Auto Bingo triggered!");
-      }
-      setHasAttemptedBingo(true);
-    } catch (err) {
-      console.error("Auto bingo error:", err);
-    }
-  })();
-}, [displayedCalledNumbers, autoCard, currentRoom?.gameStatus]);
+// Auto Bingo is now handled server-side
 
 const getPartitionColor = (num: number) => {
   if (num >= 1 && num <= 15) return "from-blue-400 to-blue-600";

@@ -205,19 +205,16 @@ class GameManager {
         try {
           const roomSnap = await get(ref(rtdb, `rooms/${roomId}`));
           const room = roomSnap.val() || {};
-          const players = room.players || {};
           const bingoCards = room.bingoCards || {};
           const calledSet = new Set(newDrawnNumbers);
-          const size = 5;
           const patterns = this.generateValidPatterns();
           
-          for (const [playerId, p] of Object.entries(players)) {
-            if (!p?.auto) continue;
-            const autoUntil = p.autoUntil || 0;
+          for (const [cardId, card] of Object.entries(bingoCards)) {
+            if (!card?.auto) continue;
+            const autoUntil = card.autoUntil || 0;
             if (autoUntil <= Date.now()) continue;
-            const cardId = p.cardId;
-            const card = bingoCards[cardId];
-            if (!card) continue;
+            if (!card.claimed || !card.claimedBy) continue;
+            
             const flat = card.numbers.flat();
             // find first winning pattern
             let winningPattern = null;
@@ -227,7 +224,7 @@ class GameManager {
             }
             if (winningPattern) {
               // Trigger server bingo
-              await this.checkBingo(roomId, cardId, playerId, winningPattern);
+              await this.checkBingo(roomId, cardId, card.claimedBy, winningPattern);
               break; // stop loop after first auto-winner
             }
           }
@@ -405,13 +402,15 @@ class GameManager {
       });
 
       if (this.io) {
-        this.io.to(roomId).emit('winnerConfirmed', {
+        const eventData = {
           roomId,
           gameId: room.gameId,
           userId,
           cardId,
           patternIndices: pattern,
-        });
+        };
+        console.log('🎉 Emitting winnerConfirmed event:', eventData);
+        this.io.to(roomId).emit('winnerConfirmed', eventData);
       }
 
       // Pay winner immediately

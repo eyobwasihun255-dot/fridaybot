@@ -670,7 +670,7 @@ class GameManager {
       const players = room.players || {};
 
       // Build a map cardId->isAuto
-      const cardIdIsAuto: Record<string, boolean> = {};
+      const cardIdIsAuto = {};
       Object.entries(bingoCards).forEach(([cardId, card]: any) => {
         const isAuto = !!card?.auto && (!card?.autoUntil || card.autoUntil > Date.now());
         cardIdIsAuto[cardId] = isAuto;

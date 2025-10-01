@@ -4,7 +4,7 @@ import { useLanguageStore } from '../store/languageStore';
 import { useGameStore } from '../store/gameStore';
 import { useAuthStore } from '../store/authStore';
 import { rtdb } from '../firebase/config';
-import { ref, runTransaction, update, get , onValue } from 'firebase/database';
+import { ref, update, get , onValue } from 'firebase/database';
 
 const CountdownOverlay = ({
   countdownEndAt,
@@ -575,7 +575,6 @@ const handleBingoClick = async () => {
   try {
     const result = await checkBingo(covered.patternIndices);
     if (result.success) {
-      setGameMessage('🏆 BINGO! You won!');
     } else {
       setGameMessage(result.message || t('not_a_winner'));
     }
@@ -637,7 +636,7 @@ return (
     {/* Main content row */}
     <div className="flex flex-row gap-2 w-full max-w-full h-full">
       {/* Loser sees winner's card pattern */}
-{showLoserWinnerPopup && loserWinnerCard && (
+{showLoserPopup && winnerCard && (
   <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
     <div className="bg-white rounded-2xl shadow-2xl p-6 w-96 max-w-full text-center">
       <h2 className="text-2xl font-bold mb-3 text-red-600">{t('winner_pattern')}</h2>
@@ -645,7 +644,7 @@ return (
       
       {/* Display winner card pattern */}
       <div className="grid grid-cols-5 gap-1 mb-4">
-        {loserWinnerCard.numbers.flat().map((num: number, idx: number) => (
+        {winnerCard.numbers.flat().map((num: number, idx: number) => (
           <div
             key={idx}
             className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm

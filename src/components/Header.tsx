@@ -2,17 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { Zap, Coins, RefreshCw } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
-import { useGameStore } from '../store/gameStore'; // ✅ import game store
+import { useGameStore } from '../store/gameStore'; 
 import LanguageToggle from './LanguageToggle';
 
 const Header: React.FC = () => {
   const { user, reloadBalance } = useAuthStore();
   const { t } = useLanguageStore();
-  const { currentRoom } = useGameStore(); // ✅ access currentRoom
+  const { currentRoom } = useGameStore(); 
   const [loading, setLoading] = useState(false);
-
-  // 🔄 Auto reload when game starts
- 
 
   const handleReloadClick = async () => {
     if (!user) return;
@@ -20,6 +17,18 @@ const Header: React.FC = () => {
     await reloadBalance();
     setLoading(false);
   };
+
+  // 🔄 Auto reload balance every 5s when game is playing
+  useEffect(() => {
+    if (!user) return;
+    if (currentRoom?.gameStatus !== "playing") return;
+
+    const interval = setInterval(async () => {
+      await reloadBalance();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [user, currentRoom?.gameStatus, reloadBalance]);
 
   return (
     <header className="fixed top-0 left-0 right-0 bg-gradient-to-r from-purple-600 to-blue-600 backdrop-blur-md bg-opacity-90 z-50 border-b border-white/20">

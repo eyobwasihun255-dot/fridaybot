@@ -150,8 +150,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         const { user } = useAuthStore.getState();
         if (user?.telegramId === data.winner) {
           get().setShowWinnerPopup(true);
+          console.log('🔚 showing winner popup', data);
         } else {
           get().setShowLoserPopup(true);
+          console.log('🔚 showing loser popup', data);
         }
       }
       // Keep live balance listener; it will reflect payout automatically

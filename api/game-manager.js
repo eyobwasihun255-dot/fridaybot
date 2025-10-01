@@ -664,7 +664,7 @@ class GameManager {
       // Reset cards and players while preserving auto-bet
       const roomSnap = await get(roomRef);
       const room = roomSnap.val() || {};
-      const updates = {} as any;
+      const updates = {};
 
       const bingoCards = room.bingoCards || {};
       const players = room.players || {};

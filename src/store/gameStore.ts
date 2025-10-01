@@ -292,6 +292,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       
       if (result.success) {
         console.log('🏆 Bingo confirmed by server!');
+        get().setWinnerCard(userCard);  
         get().setShowWinnerPopup(true);
       } else {
         console.log('❌ Bingo rejected by server:', result.message);

@@ -276,7 +276,7 @@ class GameManager {
       const roomRef = ref(rtdb, `rooms/${roomId}`);
       await update(roomRef, {
         gameStatus: "ended",
-        nextGameCountdownEndAt: Date.now() + (30 * 1000) // 30 seconds until next game
+        nextGameCountdownEndAt: Date.now() + (10 * 1000) // 30 seconds until next game
       });
 
       // If numbers finished and no winner confirmed, add revenue and skip payouts
@@ -691,16 +691,21 @@ class GameManager {
       const bingoCards = room.bingoCards || {};
       const players = room.players || {};
   
+      // Track players that should be kept
+      const keepPlayers = new Set();
+  
+      // First pass: check each card
       for (const [cardId, card] of Object.entries(bingoCards)) {
         const claimedBy = card.claimedBy;
         let keepClaimed = false;
   
-        if (claimedBy && players[claimedBy]?.auto === true) {
-          const autoUntil = players[claimedBy]?.autoUntil || 0;
+        if (claimedBy && card?.auto === true) {
+          const autoUntil = card?.autoUntil || 0;
   
-          // Check if autoUntil is still valid and less than 24h from now
+          // ✅ valid auto if still active and less than 24h away
           if (autoUntil > Date.now() && autoUntil - Date.now() <= 24 * 60 * 60 * 1000) {
-            keepClaimed = true; // ✅ keep this card
+            keepClaimed = true;
+            keepPlayers.add(claimedBy);
           }
         }
   
@@ -709,14 +714,18 @@ class GameManager {
           await update(ref(rtdb, `rooms/${roomId}/bingoCards/${cardId}`), {
             claimed: false,
             claimedBy: null,
+            auto: false,
+            autoUntil: null,
           });
+        }
+      }
   
-          // If the player is not auto → remove them from the room
-          if (claimedBy && (!players[claimedBy] || players[claimedBy]?.auto !== true)) {
-            await update(roomRef, {
-              [`players/${claimedBy}`]: null
-            });
-          }
+      // Second pass: remove players not in keepPlayers
+      for (const [playerId] of Object.entries(players)) {
+        if (!keepPlayers.has(playerId)) {
+          await update(roomRef, {
+            [`players/${playerId}`]: null
+          });
         }
       }
   
@@ -731,12 +740,12 @@ class GameManager {
         nextGameCountdownEndAt: null
       });
   
-      // Reset players attemptedBingo flags
-      if (room?.players) {
-        const updates = {};
-        Object.keys(room.players).forEach(pid => {
-          updates[`players/${pid}/attemptedBingo`] = false;
-        });
+      // Reset attemptedBingo for remaining players
+      const updates = {};
+      keepPlayers.forEach(pid => {
+        updates[`players/${pid}/attemptedBingo`] = false;
+      });
+      if (Object.keys(updates).length > 0) {
         await update(roomRef, updates);
       }
   
@@ -750,6 +759,7 @@ class GameManager {
       console.error("Error resetting room:", error);
     }
   }
+  
   
 }
 

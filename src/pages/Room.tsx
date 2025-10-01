@@ -223,11 +223,8 @@ const patternValidAgainstCalled = coveredPattern
   ? patternExistsInCalled(coveredPattern.patternNumbers)
   : false;
 
-// Only allow Bingo if:
-// - Room is not in "playing", OR
-// - (Room is playing AND they have a valid pattern & it's in called numbers)
-// AND they are not in the winners list
 
+  
 
 // Combine with local state for smoother UX
 const isBetActive = hasBet || alreadyBetted || storeIsBetActive;
@@ -412,36 +409,31 @@ React.useEffect(() => {
   }
 };
 React.useEffect(() => {
-  if (!currentRoom) return;
-  const socket = useGameStore.getState().socket; // assuming socket is stored in gameStore
+  const { socket } = useGameStore.getState();
   if (!socket) return;
 
-  socket.on("winnerConfirmed", ({ userId, cardId, patternIndices }) => {
-    if (userId === user?.telegramId) {
-      // I am the winner
-      setGameMessage("🏆 BINGO! You won!");
-      // trigger winner popup
-    } else {
-      // I am a loser → fetch winner’s card & show popup
-      (async () => {
-        const cardSnap = await get(ref(rtdb, `rooms/${currentRoom.id}/bingoCards/${cardId}`));
-        const cardData = cardSnap.val();
-        if (!cardData) return;
+  socket.on("winnerConfirmed", async ({ roomId, gameId, userId, cardId, patternIndices }) => {
+    if (!currentRoom || currentRoom.id !== roomId) return;
 
-        const highlightedNumbers = cardData.numbers.flat().map((num, idx) =>
-          patternIndices.includes(idx) ? num : 0
-        );
+    if (userId !== user?.telegramId) {
+      const cardSnap = await get(ref(rtdb, `rooms/${roomId}/bingoCards/${cardId}`));
+      const cardData = cardSnap.val();
+      if (!cardData) return;
 
-        setLoserWinnerCard({ ...cardData, numbers: highlightedNumbers });
-        setShowLoserWinnerPopup(true);
-      })();
+      const highlightedNumbers = cardData.numbers.flat().map((num, idx) =>
+        patternIndices.includes(idx) ? num : 0
+      );
+
+      setLoserWinnerCard({ ...cardData, numbers: highlightedNumbers });
+      setShowLoserWinnerPopup(true);
     }
   });
 
   return () => {
-    socket.off("winnerConfirmed");
+    socket?.off("winnerConfirmed");
   };
 }, [currentRoom?.id, user?.telegramId]);
+
 // Auto Bingo trigger
 React.useEffect(() => {
   if (!autoCard?.auto || !displayedCard || !currentRoom || !user) return;
@@ -671,22 +663,7 @@ return (
     {popupMessage}
   </div>
 )}
-{loserPopup.visible && (
-  <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-    <div className="bg-white rounded-2xl shadow-lg p-6 max-w-sm w-full text-center">
-      <h2 className="text-xl font-bold text-red-600 mb-4">
-        {t("game_result")}
-      </h2>
-      <p className="text-gray-800 mb-6">{loserPopup.message}</p>
-      <button
-        onClick={() => setLoserPopup({ visible: false, message: "" })}
-        className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold"
-      >
-        {t("close")}
-      </button>
-    </div>
-  </div>
-)}
+
 
 
         

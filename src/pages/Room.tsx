@@ -411,6 +411,65 @@ React.useEffect(() => {
    
   }
 };
+React.useEffect(() => {
+  if (!currentRoom) return;
+  const socket = useGameStore.getState().socket; // assuming socket is stored in gameStore
+  if (!socket) return;
+
+  socket.on("winnerConfirmed", ({ userId, cardId, patternIndices }) => {
+    if (userId === user?.telegramId) {
+      // I am the winner
+      setGameMessage("🏆 BINGO! You won!");
+      // trigger winner popup
+    } else {
+      // I am a loser → fetch winner’s card & show popup
+      (async () => {
+        const cardSnap = await get(ref(rtdb, `rooms/${currentRoom.id}/bingoCards/${cardId}`));
+        const cardData = cardSnap.val();
+        if (!cardData) return;
+
+        const highlightedNumbers = cardData.numbers.flat().map((num, idx) =>
+          patternIndices.includes(idx) ? num : 0
+        );
+
+        setLoserWinnerCard({ ...cardData, numbers: highlightedNumbers });
+        setShowLoserWinnerPopup(true);
+      })();
+    }
+  });
+
+  return () => {
+    socket.off("winnerConfirmed");
+  };
+}, [currentRoom?.id, user?.telegramId]);
+// Auto Bingo trigger
+React.useEffect(() => {
+  if (!autoCard?.auto || !displayedCard || !currentRoom || !user) return;
+  if (!autoCard.autoUntil || autoCard.autoUntil < Date.now()) return;
+
+  // only if within 24h
+  if (autoCard.autoUntil - Date.now() > 24 * 60 * 60 * 1000) return;
+
+  if (currentRoom.gameStatus !== "playing") return;
+  if (hasAttemptedBingo) return;
+
+  const covered = findCoveredPatternByMarks();
+  if (!covered || !patternExistsInCalled(covered.patternNumbers)) return;
+
+  // 👇 Auto trigger bingo claim
+  (async () => {
+    try {
+      setHasAttemptedBingo(true);
+      const result = await checkBingo(covered.patternIndices);
+      if (result.success) {
+        setGameMessage("🏆 Auto Bingo triggered!");
+      }
+    } catch (err) {
+      console.error("Auto bingo error:", err);
+    }
+  })();
+}, [displayedCalledNumbers, autoCard, currentRoom?.gameStatus]);
+
 const getPartitionColor = (num: number) => {
   if (num >= 1 && num <= 15) return "from-blue-400 to-blue-600";
   if (num >= 16 && num <= 30) return "from-green-400 to-green-600";

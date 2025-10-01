@@ -685,28 +685,42 @@ class GameManager {
   async resetRoom(roomId) {
     try {
       const roomRef = ref(rtdb, `rooms/${roomId}`);
-      // Reset card claims except those with auto=true and autoUntil in future
       const snap = await get(roomRef);
       const room = snap.val() || {};
-
-      // Reset claimed flags per card
+  
       const bingoCards = room.bingoCards || {};
       const players = room.players || {};
+  
       for (const [cardId, card] of Object.entries(bingoCards)) {
         const claimedBy = card.claimedBy;
         let keepClaimed = false;
+  
         if (claimedBy && players[claimedBy]?.auto === true) {
           const autoUntil = players[claimedBy]?.autoUntil || 0;
-          if (autoUntil > Date.now()) keepClaimed = true;
+  
+          // Check if autoUntil is still valid and less than 24h from now
+          if (autoUntil > Date.now() && autoUntil - Date.now() <= 24 * 60 * 60 * 1000) {
+            keepClaimed = true; // ✅ keep this card
+          }
         }
+  
         if (!keepClaimed) {
+          // Reset the card
           await update(ref(rtdb, `rooms/${roomId}/bingoCards/${cardId}`), {
             claimed: false,
             claimedBy: null,
           });
+  
+          // If the player is not auto → remove them from the room
+          if (claimedBy && (!players[claimedBy] || players[claimedBy]?.auto !== true)) {
+            await update(roomRef, {
+              [`players/${claimedBy}`]: null
+            });
+          }
         }
       }
-
+  
+      // Reset room state
       await update(roomRef, {
         gameStatus: "waiting",
         gameId: null,
@@ -716,6 +730,8 @@ class GameManager {
         payed: false,
         nextGameCountdownEndAt: null
       });
+  
+      // Reset players attemptedBingo flags
       if (room?.players) {
         const updates = {};
         Object.keys(room.players).forEach(pid => {
@@ -723,17 +739,18 @@ class GameManager {
         });
         await update(roomRef, updates);
       }
-
+  
       // Notify clients
       if (this.io) {
-        this.io.to(roomId).emit('roomReset', { roomId });
+        this.io.to(roomId).emit("roomReset", { roomId });
       }
-
+  
       console.log(`♻️ Room ${roomId} reset for next game`);
     } catch (error) {
       console.error("Error resetting room:", error);
     }
   }
+  
 }
 
 export default GameManager;

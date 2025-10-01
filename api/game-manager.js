@@ -716,10 +716,6 @@ class GameManager {
         payed: false,
         nextGameCountdownEndAt: null
       });
-
-      // Reset player attemptedBingo flags
-      const roomSnap = await get(roomRef);
-      const room = roomSnap.val();
       if (room?.players) {
         const updates = {};
         Object.keys(room.players).forEach(pid => {

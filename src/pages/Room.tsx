@@ -73,7 +73,8 @@ const Room: React.FC = () => {
     currentRoom, bingoCards, joinRoom, selectCard,
     placeBet, selectedCard,
     showLoserPopup, setShowLoserPopup,
-    connectToServer, checkBingo
+    connectToServer, checkBingo,
+    setShowWinnerPopup
   } = useGameStore();
   const { user, updateBalance } = useAuthStore();
  const userCard = bingoCards.find(
@@ -350,20 +351,29 @@ React.useEffect(() => {
 
   socket.on("winnerConfirmed", async ({ roomId, gameId, userId, cardId, patternIndices }) => {
     if (!currentRoom || currentRoom.id !== roomId) return;
-
-    if (userId !== user?.telegramId) {
+  
+    if (userId === user?.telegramId) {
+      // 🎉 I am the winner
+      const myCard = bingoCards.find((c) => c.id === cardId);
+      if (myCard) {
+        setWinnerCard(myCard);
+        setShowWinnerPopup(true);
+      }
+    } else {
+      // ❌ I lost → show winner’s card
       const cardSnap = await get(ref(rtdb, `rooms/${roomId}/bingoCards/${cardId}`));
       const cardData = cardSnap.val();
       if (!cardData) return;
-
+  
       const highlightedNumbers = cardData.numbers.flat().map((num, idx) =>
         patternIndices.includes(idx) ? num : 0
       );
-
+  
       setWinnerCard({ ...cardData, numbers: highlightedNumbers });
       setShowLoserPopup(true);
     }
   });
+  
 
   return () => {
     socket?.off("winnerConfirmed");
@@ -430,17 +440,6 @@ const handleCancelBet = async () => {
     );
   };
 // Check if a card has bingo
-function checkCardBingo(cardNumbers: number[][], calledNumbers: number[]) {
-  const flatCard = cardNumbers.flat();
-  const calledSet = new Set(calledNumbers);
-
-  return generatePatterns().some((pattern) =>
-    pattern.every((index) => {
-      const num = flatCard[index];
-      return num === 0 || calledSet.has(num); // 0 = Free space
-    })
-  );
-}
 
   if (!currentRoom) {
     return (

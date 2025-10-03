@@ -272,7 +272,7 @@ const autoCountdownCheck = async () => {
       }
       
       // Cancel countdown if players drop below 2, but only if it was started by auto
-      if (room.gameStatus === 'countdown' && !hasEnough && room.countdownStartedBy === 'auto') {
+      if (room.gameStatus === 'countdown' && !hasEnough ) {
         console.log(`❌ Cancelling auto-countdown for room ${roomId} - not enough players`);
         await gameManager.cancelCountdown(roomId);
       }

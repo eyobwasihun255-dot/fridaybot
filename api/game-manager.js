@@ -23,58 +23,37 @@ class GameManager {
   }
 
   // Start countdown if conditions allow
-  async startCountdown(roomId, durationMs = 30000, startedBy = null, roomData = null) {
+  async startCountdown(roomId, durationMs = 30000, startedBy = null) {
     try {
       const roomRef = ref(rtdb, `rooms/${roomId}`);
       const snap = await get(roomRef);
-        room = snap.val();
+      const room = snap.val();
       if (!room) return { success: false, message: 'Room not found' };
-        console.log(`🎮 startCountdown fetched room data for room ${roomId}`);
-      }
-    catch (e) {
-      console.error(`❌ Failed to fetch room data for room ${roomId}:`, e);
-      return { success: false, message: 'Failed to fetch room data' };
-    }
 
       // Check if countdown is already active
-    const countdownActive = !!room.countdownEndAt && room.countdownEndAt > Date.now();
+      const countdownActive = !!room.countdownEndAt && room.countdownEndAt > Date.now();
       if (countdownActive) {
         console.log(`⏰ Countdown already active for room ${roomId}`);
         return { success: false, message: 'Countdown already active' };
       }
 
-      // Count players from room.players (those who have placed bets)
-      const playersWithBets = Object.values(room.players || {}).filter((p) => {
+      const players = Object.values(room.players || {}).filter((p) => {
         if (!p.cardId) return false;
         if (room.isDemoRoom) return true;
-        return !!p.betAmount;
-      });
-      
-      // Count auto-bet players from bingoCards (those who claimed cards with auto-bet but haven't bet yet)
-      const autoBetPlayers = Object.values(room.bingoCards || {}).filter((card) => {
-        if (!card?.claimed || !card?.auto || !card?.claimedBy) return false;
-        if (room.isDemoRoom) return true;
         
-        // Don't double-count players who are already in room.players
-        const alreadyInRoom = room.players?.[card.claimedBy];
-        return !alreadyInRoom;
+        // For non-demo rooms, count players who have either:
+        // 1. Placed a bet (have betAmount)
+        // 2. Set auto-bet (have a claimed card with auto: true)
+        if (p.betAmount) return true;
+        
+        // Check if their card has auto-bet enabled
+        const card = room.bingoCards?.[p.cardId];
+        return !!(card?.auto && card?.claimed && card?.claimedBy === p.telegramId);
       });
+      console.log(`🎮 startCountdown for room ${roomId}: players=${players.length}, gameStatus=${room.gameStatus}, countdownActive=${countdownActive}`);
       
-      const totalPlayers = playersWithBets.length + autoBetPlayers.length;
-      console.log(`🎮 startCountdown for room ${roomId}: totalPlayers=${totalPlayers} (${playersWithBets.length} with bets, ${autoBetPlayers.length} auto-bet), gameStatus=${room.gameStatus}, countdownActive=${countdownActive}`);
-      console.log(`🎮 Players with bets:`, playersWithBets.map(p => ({
-        telegramId: p.telegramId,
-        cardId: p.cardId,
-        betAmount: p.betAmount
-      })));
-      console.log(`🎮 Auto-bet players:`, autoBetPlayers.map(card => ({
-        claimedBy: card.claimedBy,
-        auto: card.auto,
-        autoUntil: card.autoUntil
-      })));
-      
-      if (totalPlayers < 2) {
-        console.log(`❌ Not enough players for room ${roomId}: ${totalPlayers} players`);
+      if (players.length < 2) {
+        console.log(`❌ Not enough players for room ${roomId}: ${players.length} players`);
         return { success: false, message: 'Not enough players' };
       }
       if (room.gameStatus !== 'waiting') {
@@ -84,24 +63,23 @@ class GameManager {
 
       const countdownEndAt = Date.now() + durationMs;
       
-      // Use update instead of transaction to avoid maxretry errors
-      // Double-check conditions before updating
-      const currentCountdownActive = !!room.countdownEndAt && room.countdownEndAt > Date.now();
-      if (currentCountdownActive || room.gameStatus !== 'waiting') {
-        console.log(`⏰ Room ${roomId} conditions changed - not starting countdown`);
-        return { success: false, message: 'Room conditions changed' };
-      }
-      
-      try {
-        await update(roomRef, {
+      // Use transaction to prevent race conditions
+      await runTransaction(roomRef, (currentRoom) => {
+        if (!currentRoom) return null;
+        
+        // Double-check conditions inside transaction
+        const currentCountdownActive = !!currentRoom.countdownEndAt && currentRoom.countdownEndAt > Date.now();
+        if (currentCountdownActive || currentRoom.gameStatus !== 'waiting') {
+          return currentRoom; // Don't update if conditions changed
+        }
+        
+        return {
+          ...currentRoom,
           gameStatus: 'countdown',
           countdownEndAt,
           countdownStartedBy: startedBy,
-        });
-      } catch (updateError) {
-        console.error(`❌ Failed to update room ${roomId} for countdown:`, updateError);
-        return { success: false, message: 'Failed to update room status' };
-      }
+        };
+      });
 
       // schedule auto start
       if (this.countdownTimers.has(roomId)) {

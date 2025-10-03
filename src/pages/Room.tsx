@@ -774,7 +774,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
             key={`${col}-${num}`}
             className={`flex items-center justify-center p-[3px] rounded font-bold text-[11px] transition
               ${isLastCalled
-                ? "bg-theme-light text-white scale-105"
+                ? "bg-theme-primary text-white scale-105"
                 : isPreviouslyCalled
                 ? "bg-called text-white"
                 : "bg-theme-light/30"}

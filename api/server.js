@@ -237,43 +237,26 @@ const autoCountdownCheck = async () => {
     const roomsSnap = await get(ref(rtdb, 'rooms'));
     const rooms = roomsSnap.val() || {};
     for (const [roomId, room] of Object.entries(rooms)) {
-      // Count players from room.players (those who have placed bets)
-      const playersWithBets = Object.values(room.players || {}).filter((p) => {
+      const players = Object.values(room.players || {}).filter((p) => {
         if (!p.cardId) return false;
         if (room.isDemoRoom) return true;
-        return !!p.betAmount;
-      });
-      
-      // Count auto-bet players from bingoCards (those who claimed cards with auto-bet but haven't bet yet)
-      const autoBetPlayers = Object.values(room.bingoCards || {}).filter((card) => {
-        if (!card?.claimed || !card?.auto || !card?.claimedBy) return false;
-        if (room.isDemoRoom) return true;
         
-        // Don't double-count players who are already in room.players
-        const alreadyInRoom = room.players?.[card.claimedBy];
-        return !alreadyInRoom;
+        // For non-demo rooms, count players who have either:
+        // 1. Placed a bet (have betAmount)
+        // 2. Set auto-bet (have a claimed card with auto: true)
+        if (p.betAmount) return true;
+        
+        // Check if their card has auto-bet enabled
+        const card = room.bingoCards?.[p.cardId];
+        return !!(card?.auto && card?.claimed && card?.claimedBy === p.telegramId);
       });
-      
-      const totalPlayers = playersWithBets.length + autoBetPlayers.length;
-      const hasEnough = totalPlayers >= 2;
+      const hasEnough = players.length >= 2;
       const countdownActive = !!room.countdownEndAt && room.countdownEndAt > Date.now();
       const isWaiting = room.gameStatus === 'waiting';
       
-      // Enhanced debug logging for rooms with players
-      if (totalPlayers > 0) {
-        console.log(`🔍 Room ${roomId}: status=${room.gameStatus}, totalPlayers=${totalPlayers} (${playersWithBets.length} with bets, ${autoBetPlayers.length} auto-bet), countdownActive=${countdownActive}, countdownStartedBy=${room.countdownStartedBy}`);
-        console.log(`🔍 Room ${roomId} players with bets:`, playersWithBets.map(p => ({
-          telegramId: p.telegramId,
-          cardId: p.cardId,
-          betAmount: p.betAmount,
-          username: p.username
-        })));
-        console.log(`🔍 Room ${roomId} auto-bet players:`, autoBetPlayers.map(card => ({
-          cardId: Object.keys(room.bingoCards || {}).find(id => room.bingoCards[id] === card),
-          claimedBy: card.claimedBy,
-          auto: card.auto,
-          autoUntil: card.autoUntil
-        })));
+      // Debug logging for rooms with players
+      if (players.length > 0) {
+        console.log(`🔍 Room ${roomId}: status=${room.gameStatus}, players=${players.length}, countdownActive=${countdownActive}, countdownStartedBy=${room.countdownStartedBy}`);
       }
       
       // Only start auto-countdown if:
@@ -281,33 +264,10 @@ const autoCountdownCheck = async () => {
       // 2. Has enough players
       // 3. No active countdown
       if (isWaiting && hasEnough && !countdownActive) {
-        console.log(`🔄 Auto-starting countdown for room ${roomId} with ${totalPlayers} players`);
-        
-        // Add retry logic for temporary failures
-        let retries = 0;
-        const maxRetries = 2;
-        let result;
-        
-        while (retries <= maxRetries) {
-          try {
-            result = await gameManager.startCountdown(roomId, 30000, 'auto', room);
-            break; // Success, exit retry loop
-          } catch (error) {
-            retries++;
-            console.log(`❌ Auto-countdown attempt ${retries} failed for room ${roomId}:`, error.message);
-            
-            if (retries > maxRetries) {
-              console.log(`❌ Max retries exceeded for room ${roomId}, giving up`);
-              break;
-            }
-            
-            // Wait a bit before retrying
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
-        }
-        
-        if (!result?.success) {
-          console.log(`❌ Failed to start auto-countdown for room ${roomId}: ${result?.message || 'Unknown error'}`);
+        console.log(`🔄 Auto-starting countdown for room ${roomId} with ${players.length} players`);
+        const result = await gameManager.startCountdown(roomId, 30000, 'auto');
+        if (!result.success) {
+          console.log(`❌ Failed to start auto-countdown for room ${roomId}: ${result.message}`);
         }
       }
       

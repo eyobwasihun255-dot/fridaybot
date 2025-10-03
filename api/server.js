@@ -240,15 +240,7 @@ const autoCountdownCheck = async () => {
       const players = Object.values(room.players || {}).filter((p) => {
         if (!p.cardId) return false;
         if (room.isDemoRoom) return true;
-        
-        // For non-demo rooms, count players who have either:
-        // 1. Placed a bet (have betAmount)
-        // 2. Set auto-bet (have a claimed card with auto: true)
-        if (p.betAmount) return true;
-        
-        // Check if their card has auto-bet enabled
-        const card = room.bingoCards?.[p.cardId];
-        return !!(card?.auto && card?.claimed && card?.claimedBy === p.telegramId);
+     
       });
       const hasEnough = players.length >= 2;
       const countdownActive = !!room.countdownEndAt && room.countdownEndAt > Date.now();

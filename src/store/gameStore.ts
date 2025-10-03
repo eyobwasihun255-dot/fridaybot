@@ -257,11 +257,19 @@ export const useGameStore = create<GameState>((set, get) => ({
       const { currentRoom, selectedCard, socket } = get();
       const { user } = useAuthStore.getState();
 
-      if (!currentRoom || !selectedCard || !user) {
+      console.log('🎯 checkBingo called with:', { 
+        hasCurrentRoom: !!currentRoom, 
+        hasSelectedCard: !!selectedCard, 
+        hasUser: !!user,
+        roomId: currentRoom?.id,
+        gameStatus: currentRoom?.gameStatus
+      });
+
+      if (!currentRoom || !user) {
         return { success: false, message: 'Missing required data' };
       }
 
-      // Find user's card
+      // Find user's card (either selected or claimed)
       const userCard = get().bingoCards.find(
         (card) =>
           card.roomId === currentRoom.id &&
@@ -269,7 +277,18 @@ export const useGameStore = create<GameState>((set, get) => ({
           card.claimedBy === user.telegramId
       );
 
-      if (!userCard) {
+      console.log('🎯 Card search result:', { 
+        hasUserCard: !!userCard, 
+        userCardId: userCard?.id,
+        totalBingoCards: get().bingoCards.length,
+        userTelegramId: user.telegramId
+      });
+
+      // If no claimed card found, use selected card
+      const cardToUse = userCard || selectedCard;
+      
+      if (!cardToUse) {
+        console.log('❌ No valid card found for bingo check');
         return { success: false, message: 'No valid card found' };
       }
 
@@ -282,7 +301,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         },
         body: JSON.stringify({
           roomId: currentRoom.id,
-          cardId: userCard.id,
+          cardId: cardToUse.id,
           userId: user.telegramId,
           pattern: pattern,
         }),
@@ -292,7 +311,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       
       if (result.success) {
         console.log('🏆 Bingo confirmed by server!');
-        get().setWinnerCard(userCard);  
+        get().setWinnerCard(cardToUse);  
         get().setShowWinnerPopup(true);
       } else {
         console.log('❌ Bingo rejected by server:', result.message);
@@ -370,6 +389,21 @@ export const useGameStore = create<GameState>((set, get) => ({
       
       // Always fetch cards
       get().fetchBingoCards();
+
+      // If game is in progress, start number stream to sync drawn numbers
+      if (updatedRoom.gameStatus === "playing" && updatedRoom.gameId) {
+        get().startNumberStream(roomId, updatedRoom.gameId);
+      }
+
+      // Sync called numbers from room data if available (for players rejoining)
+      if (updatedRoom.calledNumbers && updatedRoom.calledNumbers.length > 0) {
+        set((state) => ({
+          displayedCalledNumbers: {
+            ...state.displayedCalledNumbers,
+            [roomId]: updatedRoom.calledNumbers,
+          },
+        }));
+      }
 
       // Count active players
       const activePlayers = updatedRoom.players

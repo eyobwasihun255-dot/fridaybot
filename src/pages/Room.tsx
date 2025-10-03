@@ -103,7 +103,7 @@ useEffect(() => {
   if (showWinnerPopup) {
     const timer = setTimeout(() => {
       setShowWinnerPopup(false);
-    }, 5000);
+    }, 10000);
     return () => clearTimeout(timer);
   }
 }, [showWinnerPopup, setShowWinnerPopup]);
@@ -112,7 +112,7 @@ useEffect(() => {
   if (showLoserPopup) {
     const timer = setTimeout(() => {
       setShowLoserPopup(false);
-    }, 5000);
+    }, 10000);
     return () => clearTimeout(timer);
   }
 }, [showLoserPopup, setShowLoserPopup]);
@@ -584,32 +584,37 @@ return (
         </div>
         
         {/* Card numbers */}
-        {Array.isArray(winnerCard.numbers) && winnerCard.numbers.length > 0 ? (
-          winnerCard.numbers.map((row: number[], rowIdx: number) => (
-            <div key={rowIdx} className="grid grid-cols-5 gap-1 mb-1">
-              {Array.isArray(row) && row.map((num: number, colIdx: number) => {
-                const flatIdx = rowIdx * 5 + colIdx;
-                const isWinningNumber = num !== 0; // 0 represents non-winning numbers in the pattern
-                
-                return (
-                  <div
-                    key={`${rowIdx}-${colIdx}`}
-                    className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm border
-                      ${isWinningNumber 
-                        ? 'bg-green-500 text-white border-green-600' 
-                        : 'bg-gray-200 text-black border-gray-300'
-                      }
-                    `}
-                  >
-                    {num === 0 ? "★" : num}
-                  </div>
-                );
-              })}
-            </div>
-          ))
-        ) : (
-          <div className="text-gray-500 text-sm">Card data not available</div>
-        )}
+        {winnerCard.numbers.map((row: number[], rowIdx: number) => (
+  <div key={rowIdx} className="grid grid-cols-5 gap-1 mb-1">
+    {row.map((num: number, colIdx: number) => {
+      // Flat index for the pattern reference
+      const flatIdx = rowIdx * 5 + colIdx;
+
+      // If 0 was used in your pattern array, interpret it as "this cell is NOT part of the winning pattern"
+      const isInWinningPattern = num !== 0;
+
+      // Show the actual card number (don’t replace with ★ unless you want free space in the middle)
+      const displayNum = num === 0 && rowIdx === 2 && colIdx === 2 
+        ? "★" // free space in middle
+        : num;
+
+      return (
+        <div
+          key={`${rowIdx}-${colIdx}`}
+          className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm border
+            ${isInWinningPattern 
+              ? 'bg-green-500 text-white border-green-600' 
+              : 'bg-white text-black border-gray-300'
+            }
+          `}
+        >
+          {displayNum}
+        </div>
+      );
+    })}
+  </div>
+))}
+
       </div>
 
       <button
@@ -796,19 +801,36 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
       <div className="w-3/5 bg-white/10 p-2 rounded border border-white/20 text-xs">
         {/* Current Call */}
         <div className="relative flex flex-col items-center justify-center bg-white/10 p-2 rounded border border-white/20 min-h-[100px]">
+          
+          {/* Numbers display container */}
+          <div className="flex items-center gap-2">
+            {/* Previous two numbers */}
+            {displayedCalledNumbers.length >= 3 && (
+              <div className="flex flex-col gap-1">
+                {/* Second previous number */}
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shadow bg-gradient-to-br ${getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 3]!)}`}>
+                  {getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 3]!)}
+                </div>
+                {/* First previous number */}
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shadow bg-gradient-to-br ${getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 2]!)}`}>
+                  {getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 2]!)}
+                </div>
+              </div>
+            )}
 
-
- <div
-  className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold shadow bg-gradient-to-br ${
-    displayedCalledNumbers.length > 0
-      ? getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 1]!)
-      : "from-gray-400 to-gray-600"
-  }`}
->
-  {displayedCalledNumbers.length > 0
-    ? `${getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 1]!)}${displayedCalledNumbers[displayedCalledNumbers.length - 1]}`
-    : "-"}
-</div>
+            {/* Current number - main circle */}
+            <div
+              className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold shadow bg-gradient-to-br ${
+                displayedCalledNumbers.length > 0
+                  ? getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 1]!)
+                  : "from-gray-400 to-gray-600"
+              }`}
+            >
+              {displayedCalledNumbers.length > 0
+                ? `${getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 1]!)}${displayedCalledNumbers[displayedCalledNumbers.length - 1]}`
+                : "-"}
+            </div>
+          </div>
 
 
 

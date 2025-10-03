@@ -23,12 +23,22 @@ class GameManager {
   }
 
   // Start countdown if conditions allow
-  async startCountdown(roomId, durationMs = 30000, startedBy = null) {
+  async startCountdown(roomId, durationMs = 30000, startedBy = null, roomData = null) {
     try {
       const roomRef = ref(rtdb, `rooms/${roomId}`);
+      let room;
+      
+      if (roomData) {
+        // Use provided room data to avoid race conditions
+        room = roomData;
+        console.log(`🎮 startCountdown using provided room data for room ${roomId}`);
+      } else {
+        // Fetch room data if not provided (for manual calls)
       const snap = await get(roomRef);
-      const room = snap.val();
+        room = snap.val();
       if (!room) return { success: false, message: 'Room not found' };
+        console.log(`🎮 startCountdown fetched room data for room ${roomId}`);
+      }
 
       // Check if countdown is already active
       const countdownActive = !!room.countdownEndAt && room.countdownEndAt > Date.now();
@@ -90,9 +100,9 @@ class GameManager {
         
         return {
           ...currentRoom,
-          gameStatus: 'countdown',
-          countdownEndAt,
-          countdownStartedBy: startedBy,
+        gameStatus: 'countdown',
+        countdownEndAt,
+        countdownStartedBy: startedBy,
         };
       });
 

@@ -282,7 +282,7 @@ const autoCountdownCheck = async () => {
       // 3. No active countdown
       if (isWaiting && hasEnough && !countdownActive) {
         console.log(`🔄 Auto-starting countdown for room ${roomId} with ${totalPlayers} players`);
-        const result = await gameManager.startCountdown(roomId, 30000, 'auto');
+        const result = await gameManager.startCountdown(roomId, 30000, 'auto', room);
         if (!result.success) {
           console.log(`❌ Failed to start auto-countdown for room ${roomId}: ${result.message}`);
         }

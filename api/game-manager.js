@@ -34,7 +34,7 @@ if (!snap.exists()) {
 }
 
 const room = snap.val();
-console.log(`🎮 room ${room[0]}`);
+console.log(`🎮 room ${room}`);
       if (!room) return { success: false, message: 'Room not found' };
 
       // Check if countdown is already active
@@ -59,7 +59,7 @@ console.log(`🎮 room ${room[0]}`);
       const countdownEndAt = Date.now() + durationMs;
       
       // Use transaction to prevent race conditions
-      await runTransaction(roomRef, (currentRoom) => {
+      await update(roomRef, (currentRoom) => {
         if (!currentRoom) return null;
         
         // Double-check conditions inside transaction

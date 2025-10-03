@@ -39,17 +39,13 @@ async startCountdown(roomId, durationMs = 30000, startedBy = null) {
     }
 
     // ✅ Fetch rooms and calculate players for this room
-    const roomsSnap = await get(ref(rtdb, 'rooms'));
-    const rooms = roomsSnap.val() || {};
-    const currentRoom = rooms[roomId];
-
-    const players = Object.values(currentRoom?.players || {}).filter((p) => {
+   
+    const players = Object.values(room.players || {}).filter((p) => {
       if (!p.cardId) return false;
-      if (currentRoom.isDemoRoom) return true;
-      // Just require card to be claimed
-      return !!currentRoom.bingoCards?.[p.cardId]?.claimed;
+      if (room.isDemoRoom) return true;
+      return !!room.bingoCards?.[p.cardId]?.claimed;
     });
-
+    
     console.log(`🎮 startCountdown for room ${roomId}: players=${players.length}, gameStatus=${room.gameStatus}, countdownActive=${countdownActive}`);
 
     if (players.length < 2) {

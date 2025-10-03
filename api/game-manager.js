@@ -26,14 +26,6 @@ class GameManager {
   async startCountdown(roomId, durationMs = 30000, startedBy = null, roomData = null) {
     try {
       const roomRef = ref(rtdb, `rooms/${roomId}`);
-      let room;
-      
-      if (roomData) {
-        // Use provided room data to avoid race conditions
-        room = roomData;
-        console.log(`🎮 startCountdown using provided room data for room ${roomId}`);
-      } else {
-        // Fetch room data if not provided (for manual calls)
       const snap = await get(roomRef);
         room = snap.val();
       if (!room) return { success: false, message: 'Room not found' };
@@ -88,23 +80,24 @@ class GameManager {
 
       const countdownEndAt = Date.now() + durationMs;
       
-      // Use transaction to prevent race conditions
-      await runTransaction(roomRef, (currentRoom) => {
-        if (!currentRoom) return null;
-        
-        // Double-check conditions inside transaction
-        const currentCountdownActive = !!currentRoom.countdownEndAt && currentRoom.countdownEndAt > Date.now();
-        if (currentCountdownActive || currentRoom.gameStatus !== 'waiting') {
-          return currentRoom; // Don't update if conditions changed
-        }
-        
-        return {
-          ...currentRoom,
-        gameStatus: 'countdown',
-        countdownEndAt,
-        countdownStartedBy: startedBy,
-        };
-      });
+      // Use update instead of transaction to avoid maxretry errors
+      // Double-check conditions before updating
+      const currentCountdownActive = !!room.countdownEndAt && room.countdownEndAt > Date.now();
+      if (currentCountdownActive || room.gameStatus !== 'waiting') {
+        console.log(`⏰ Room ${roomId} conditions changed - not starting countdown`);
+        return { success: false, message: 'Room conditions changed' };
+      }
+      
+      try {
+        await update(roomRef, {
+          gameStatus: 'countdown',
+          countdownEndAt,
+          countdownStartedBy: startedBy,
+        });
+      } catch (updateError) {
+        console.error(`❌ Failed to update room ${roomId} for countdown:`, updateError);
+        return { success: false, message: 'Failed to update room status' };
+      }
 
       // schedule auto start
       if (this.countdownTimers.has(roomId)) {

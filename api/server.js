@@ -282,9 +282,32 @@ const autoCountdownCheck = async () => {
       // 3. No active countdown
       if (isWaiting && hasEnough && !countdownActive) {
         console.log(`🔄 Auto-starting countdown for room ${roomId} with ${totalPlayers} players`);
-        const result = await gameManager.startCountdown(roomId, 30000, 'auto', room);
-        if (!result.success) {
-          console.log(`❌ Failed to start auto-countdown for room ${roomId}: ${result.message}`);
+        
+        // Add retry logic for temporary failures
+        let retries = 0;
+        const maxRetries = 2;
+        let result;
+        
+        while (retries <= maxRetries) {
+          try {
+            result = await gameManager.startCountdown(roomId, 30000, 'auto', room);
+            break; // Success, exit retry loop
+          } catch (error) {
+            retries++;
+            console.log(`❌ Auto-countdown attempt ${retries} failed for room ${roomId}:`, error.message);
+            
+            if (retries > maxRetries) {
+              console.log(`❌ Max retries exceeded for room ${roomId}, giving up`);
+              break;
+            }
+            
+            // Wait a bit before retrying
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
+        
+        if (!result?.success) {
+          console.log(`❌ Failed to start auto-countdown for room ${roomId}: ${result?.message || 'Unknown error'}`);
         }
       }
       

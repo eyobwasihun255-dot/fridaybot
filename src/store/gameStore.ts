@@ -130,17 +130,18 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     });
 
-    newSocket.on('numberDrawn', (data: any) => {
-      const { number, drawnNumbers, roomId } = data;
-      console.log(`🎲 Number drawn: ${number}`);
-      
+    newSocket.on("numberDrawn", ({ roomId, number }) => {
       set((state) => ({
         displayedCalledNumbers: {
           ...state.displayedCalledNumbers,
-          [roomId]: drawnNumbers,
+          [roomId]: [
+            ...(state.displayedCalledNumbers[roomId] || []),
+            number,
+          ],
         },
       }));
     });
+    
 
     // Countdown started in a room - update currentRoom if we're in that room
     newSocket.on('countdownStarted', (data: any) => {
@@ -260,30 +261,42 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startNumberStream: (roomId, gameId) => {
     const { currentRoom, socket } = get();
+    if (currentRoom?.id !== roomId) return; // 🚫 ensure only this room
     if (currentRoom?.gameStatus !== "playing") return;
-
+    if (!socket) return;
+  
     console.log(`🎲 Starting number stream for room: ${roomId}, game: ${gameId}`);
-
-    // Join room for socket events
-    if (socket) {
-      socket.emit('joinRoom', roomId);
-    }
-
-    // Listen to Firebase for real-time game updates
+  
+    // ✅ Join only this room for socket events
+    socket.emit("joinRoom", roomId);
+  
+    // ✅ Reset numbers when starting new stream
+    set((state) => ({
+      displayedCalledNumbers: {
+        ...state.displayedCalledNumbers,
+        [roomId]: [],
+      },
+    }));
+  
+    // ✅ Listen to Firebase for this game's updates
     const gameRef = ref(rtdb, `games/${gameId}`);
+  
+    // Remove any previous listeners before attaching new one
+    off(gameRef);
+  
     onValue(gameRef, (snapshot) => {
       const data = snapshot.val();
       if (!data) return;
-
+  
       const { currentDrawnNumbers, gameStatus } = data;
-
+  
       // Stop if game ended
       if (gameStatus === "ended") {
-        get().stopNumberDraw();
+        get().stopNumberDraw?.();
         return;
       }
-
-      // Update displayed numbers
+  
+      // ✅ Update numbers for ONLY this room
       if (currentDrawnNumbers) {
         set((state) => ({
           displayedCalledNumbers: {
@@ -293,8 +306,23 @@ export const useGameStore = create<GameState>((set, get) => ({
         }));
       }
     });
+  
+    // ✅ Socket event for numbers (scoped by roomId)
+    socket.off("numberDrawn"); // clear old listener
+    socket.on("numberDrawn", ({ roomId: incomingRoomId, number }) => {
+      if (incomingRoomId !== roomId) return; // 🚫 ignore other rooms
+      set((state) => ({
+        displayedCalledNumbers: {
+          ...state.displayedCalledNumbers,
+          [roomId]: [
+            ...(state.displayedCalledNumbers[roomId] || []),
+            number,
+          ],
+        },
+      }));
+    });
   },
-
+  
   // Server-side bingo check
   checkBingo: async (pattern: number[]) => {
     try {

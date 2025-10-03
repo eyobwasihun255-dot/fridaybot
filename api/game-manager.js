@@ -312,7 +312,7 @@ class GameManager {
       const roomRef = ref(rtdb, `rooms/${roomId}`);
       await update(roomRef, {
         gameStatus: "ended",
-        nextGameCountdownEndAt: Date.now() + (10 * 1000) // 10 seconds until next game
+        // 10 seconds until next game
       });
 
       // If numbers finished and no winner confirmed, add revenue and skip payouts

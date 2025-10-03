@@ -367,18 +367,19 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   joinRoom: (roomId: string) => {
-    const { socket } = get();
-    
-    // Connect to server if not already connected
-    if (!socket?.connected) {
-      get().connectToServer();
-    }
+    const { socket, currentRoom } = get();
 
-    // Join room via socket
-    if (socket) {
-      socket.emit('joinRoom', roomId);
-    }
+  if (!socket?.connected) {
+    get().connectToServer();
+  }
 
+  if (socket) {
+    // Leave old room before joining new
+    if (currentRoom?.id && currentRoom.id !== roomId) {
+      socket.emit("leaveRoom", currentRoom.id);
+    }
+    socket.emit("joinRoom", roomId);
+  }
     const roomRef = ref(rtdb, "rooms/" + roomId);
 
     onValue(roomRef, (snapshot) => {

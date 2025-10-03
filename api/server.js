@@ -255,7 +255,7 @@ const autoCountdownCheck = async () => {
       // 1. Room is waiting
       // 2. Has enough players
       // 3. No active countdown
-      if (isWaiting && hasEnough && !countdownActive) {
+      if (isWaiting && hasEnough ) {
         console.log(`🔄 Auto-starting countdown for room ${roomId} with ${players.length} players`);
         const result = await gameManager.startCountdown(roomId, 30000, 'auto');
         if (!result.success) {
@@ -273,7 +273,7 @@ const autoCountdownCheck = async () => {
     console.error('autoCountdownCheck error:', e);
   }
 };
-setInterval(autoCountdownCheck, 5000);
+setInterval(autoCountdownCheck, 2000);
 
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);

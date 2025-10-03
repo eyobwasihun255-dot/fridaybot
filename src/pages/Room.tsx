@@ -387,8 +387,14 @@ React.useEffect(() => {
       const highlightedNumbers = cardData.numbers.flat().map((num: any, idx: any) =>
         patternIndices.includes(idx) ? num : 0
       );
+      
+      // Convert flat array back to 2D array for proper rendering
+      const numbers2D = [];
+      for (let i = 0; i < 5; i++) {
+        numbers2D.push(highlightedNumbers.slice(i * 5, (i + 1) * 5));
+      }
   
-      setWinnerCard({ ...cardData, numbers: highlightedNumbers });
+      setWinnerCard({ ...cardData, numbers: numbers2D });
       setShowLoserPopup(true);
     }
   });
@@ -578,28 +584,32 @@ return (
         </div>
         
         {/* Card numbers */}
-        {winnerCard.numbers.map((row: number[], rowIdx: number) => (
-          <div key={rowIdx} className="grid grid-cols-5 gap-1 mb-1">
-            {row.map((num: number, colIdx: number) => {
-              const flatIdx = rowIdx * 5 + colIdx;
-              const isWinningNumber = num !== 0; // 0 represents non-winning numbers in the pattern
-              
-              return (
-                <div
-                  key={`${rowIdx}-${colIdx}`}
-                  className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm border
-                    ${isWinningNumber 
-                      ? 'bg-green-500 text-white border-green-600' 
-                      : 'bg-gray-200 text-black border-gray-300'
-                    }
-                  `}
-                >
-                  {num === 0 ? "★" : num}
-                </div>
-              );
-            })}
-          </div>
-        ))}
+        {Array.isArray(winnerCard.numbers) && winnerCard.numbers.length > 0 ? (
+          winnerCard.numbers.map((row: number[], rowIdx: number) => (
+            <div key={rowIdx} className="grid grid-cols-5 gap-1 mb-1">
+              {Array.isArray(row) && row.map((num: number, colIdx: number) => {
+                const flatIdx = rowIdx * 5 + colIdx;
+                const isWinningNumber = num !== 0; // 0 represents non-winning numbers in the pattern
+                
+                return (
+                  <div
+                    key={`${rowIdx}-${colIdx}`}
+                    className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm border
+                      ${isWinningNumber 
+                        ? 'bg-green-500 text-white border-green-600' 
+                        : 'bg-gray-200 text-black border-gray-300'
+                      }
+                    `}
+                  >
+                    {num === 0 ? "★" : num}
+                  </div>
+                );
+              })}
+            </div>
+          ))
+        ) : (
+          <div className="text-gray-500 text-sm">Card data not available</div>
+        )}
       </div>
 
       <button

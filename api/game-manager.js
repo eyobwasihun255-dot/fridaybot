@@ -31,6 +31,10 @@ class GameManager {
       if (!room) return { success: false, message: 'Room not found' };
         console.log(`🎮 startCountdown fetched room data for room ${roomId}`);
       }
+    catch (e) {
+      console.error(`❌ Failed to fetch room data for room ${roomId}:`, e);
+      return { success: false, message: 'Failed to fetch room data' };
+    }
 
       // Check if countdown is already active
       const countdownActive = !!room.countdownEndAt && room.countdownEndAt > Date.now();

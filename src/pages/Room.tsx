@@ -802,7 +802,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
       <div className="w-3/5 bg-theme-light/20 p-2 rounded border border-theme-accent/30 text-xs">
         {/* Current Call */}
         <div className="relative flex flex-col items-center justify-center bg-theme-light/10 p-2 rounded border border-theme-accent/20 min-h-[100px]">
-           <span className="text-sm font-bold">👇</span>
+           
           {/* Numbers display container */}
           <div className="flex items-center gap-2">
             

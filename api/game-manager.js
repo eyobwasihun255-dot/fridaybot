@@ -34,7 +34,7 @@ if (!snap.exists()) {
 }
 
 const room = snap.val();
-
+console.log(`🎮 room ${room}`);
       if (!room) return { success: false, message: 'Room not found' };
 
       // Check if countdown is already active

@@ -237,19 +237,38 @@ const autoCountdownCheck = async () => {
     const roomsSnap = await get(ref(rtdb, 'rooms'));
     const rooms = roomsSnap.val() || {};
     for (const [roomId, room] of Object.entries(rooms)) {
-      const players = Object.values(room.players || {}).filter((p) => !!p.cardId && (!!room.isDemoRoom || !!p.betAmount));
+      const players = Object.values(room.players || {}).filter((p) => {
+        if (!p.cardId) return false;
+        if (room.isDemoRoom) return true;
+        
+        // For non-demo rooms, count players who have either:
+        // 1. Placed a bet (have betAmount)
+        // 2. Set auto-bet (have a claimed card with auto: true)
+        if (p.betAmount) return true;
+        
+        // Check if their card has auto-bet enabled
+        const card = room.bingoCards?.[p.cardId];
+        return !!(card?.auto && card?.claimed && card?.claimedBy === p.telegramId);
+      });
       const hasEnough = players.length >= 2;
       const countdownActive = !!room.countdownEndAt && room.countdownEndAt > Date.now();
       const isWaiting = room.gameStatus === 'waiting';
+      
+      // Debug logging for rooms with players
+      if (players.length > 0) {
+        console.log(`🔍 Room ${roomId}: status=${room.gameStatus}, players=${players.length}, countdownActive=${countdownActive}, countdownStartedBy=${room.countdownStartedBy}`);
+      }
       
       // Only start auto-countdown if:
       // 1. Room is waiting
       // 2. Has enough players
       // 3. No active countdown
-      // 4. Countdown wasn't started manually (avoid conflicts)
-      if (isWaiting && hasEnough && !countdownActive && !room.countdownStartedBy) {
+      if (isWaiting && hasEnough && !countdownActive) {
         console.log(`🔄 Auto-starting countdown for room ${roomId} with ${players.length} players`);
-        await gameManager.startCountdown(roomId, 30000, 'auto');
+        const result = await gameManager.startCountdown(roomId, 30000, 'auto');
+        if (!result.success) {
+          console.log(`❌ Failed to start auto-countdown for room ${roomId}: ${result.message}`);
+        }
       }
       
       // Cancel countdown if players drop below 2, but only if it was started by auto

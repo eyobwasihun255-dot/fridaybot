@@ -411,8 +411,17 @@ export const useGameStore = create<GameState>((set, get) => ({
       // Count active players
       const activePlayers = updatedRoom.players
         ? Object.values(updatedRoom.players).filter((p: any) => {
-            if (updatedRoom.isDemoRoom) return p.cardId;
-            return p.betAmount !== undefined && p.cardId;
+            if (!p.cardId) return false;
+            if (updatedRoom.isDemoRoom) return true;
+            
+            // For non-demo rooms, count players who have either:
+            // 1. Placed a bet (have betAmount)
+            // 2. Set auto-bet (have a claimed card with auto: true)
+            if (p.betAmount) return true;
+            
+            // Check if their card has auto-bet enabled
+            const card = updatedRoom.bingoCards?.[p.cardId];
+            return !!(card?.auto && card?.claimed && card?.claimedBy === p.telegramId);
           })
         : [];
 

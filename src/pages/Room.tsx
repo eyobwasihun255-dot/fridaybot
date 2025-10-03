@@ -562,7 +562,7 @@ return (
 {showLoserPopup && winnerCard && (
   <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
     <div className="bg-white rounded-2xl shadow-2xl p-6 w-96 max-w-full text-center">
-      <h2 className="text-2xl font-bold mb-3 text-red-600">{t('winner_pattern')}</h2>
+      <h2 className="text-2xl font-bold mb-3 text-theme-primary">{t('winner_pattern')}</h2>
       <p className="mb-2 text-lg">{t('you_lost')}</p>
       
       {/* Show winner's card number */}
@@ -640,7 +640,7 @@ return (
 
   {showWinnerPopup && winnerCard && (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-      <div className="relative bg-gradient-to-br from-red-500 via-yellow-400 to-blue-500 rounded-3xl shadow-2xl p-8 w-96 max-w-full text-center overflow-hidden animate-scale-in">
+      <div className="relative bg-gradient-to-br from-theme-primary via-theme-secondary to-theme-accent rounded-3xl shadow-2xl p-8 w-96 max-w-full text-center overflow-hidden animate-scale-in">
 
         {/* Confetti */}
         {[...Array(25)].map((_, i) => (
@@ -742,13 +742,13 @@ return (
 
 
       {/* Left side (Called numbers) */}
-    <div className="relative w-2/5 h-full flex flex-col bg-white/10 p-2 rounded border border-white/20 text-xs">
+    <div className="relative w-2/5 h-full flex flex-col bg-theme-light/20 p-2 rounded border border-theme-accent/30 text-xs">
   {/* Bingo Header */}
   <div className="grid grid-cols-5 gap-1 mb-1">
     {["B", "I", "N", "G", "O"].map((letter) => (
       <div
         key={letter}
-        className="w-6 h-6 flex items-center justify-center font-bold text-[10px] bg-purple-600 rounded "
+        className="w-6 h-6 flex items-center justify-center font-bold text-[10px] bg-theme-primary rounded "
       >
         {letter}
       </div>
@@ -774,10 +774,10 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
             key={`${col}-${num}`}
             className={`flex items-center justify-center p-[3px] rounded font-bold text-[11px] transition
               ${isLastCalled
-                ? "bg-green-500 text-white scale-105"
+                ? "bg-theme-primary text-white scale-105"
                 : isPreviouslyCalled
-                ? "bg-red-500 text-white"
-                : "bg-white/20"}
+                ? "bg-theme-secondary text-white"
+                : "bg-theme-light/30"}
             `}
           >
             {num}
@@ -799,25 +799,13 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
 </div>
 
       {/* Right side (Your Card) */}
-      <div className="w-3/5 bg-white/10 p-2 rounded border border-white/20 text-xs">
+      <div className="w-3/5 bg-theme-light/20 p-2 rounded border border-theme-accent/30 text-xs">
         {/* Current Call */}
-        <div className="relative flex flex-col items-center justify-center bg-white/10 p-2 rounded border border-white/20 min-h-[100px]">
+        <div className="relative flex flex-col items-center justify-center bg-theme-light/10 p-2 rounded border border-theme-accent/20 min-h-[100px]">
           
           {/* Numbers display container */}
           <div className="flex items-center gap-2">
-            {/* Previous two numbers */}
-            {displayedCalledNumbers.length >= 3 && (
-              <div className="flex flex-row gap-1">
-                {/* Second previous number */}
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shadow bg-gradient-to-br ${getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 3]!)}`}>
-                  {getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 3]!)}{displayedCalledNumbers[displayedCalledNumbers.length - 3]}
-                </div>
-                {/* First previous number */}
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shadow bg-gradient-to-br ${getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 2]!)}`}>
-                  {getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 2]!)}{displayedCalledNumbers[displayedCalledNumbers.length - 2]}
-                </div>
-              </div>
-            )}
+            
 
             {/* Current number - main circle */}
             <div
@@ -831,6 +819,19 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
                 ? `${getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 1]!)}${displayedCalledNumbers[displayedCalledNumbers.length - 1]}`
                 : "-"}
             </div>
+            {/* Previous two numbers */}
+            {displayedCalledNumbers.length >= 3 && (
+              <div className="flex flex-row gap-1">
+                {/* Second previous number */}
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shadow bg-gradient-to-br ${getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 3]!)}`}>
+                  {getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 3]!)}{displayedCalledNumbers[displayedCalledNumbers.length - 3]}
+                </div>
+                {/* First previous number */}
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shadow bg-gradient-to-br ${getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 2]!)}`}>
+                  {getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 2]!)}{displayedCalledNumbers[displayedCalledNumbers.length - 2]}
+                </div>
+              </div>
+            )}
           </div>
 
 
@@ -853,7 +854,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
          <select
   value={selectedCard?.id ?? ''}
   onChange={(e) => handleCardSelect(e.target.value)}
-  className="bg-white/20 text-white rounded px-1 py-0.5 text-[10px]"
+  className="bg-theme-light/20 text-white rounded px-1 py-0.5 text-[10px]"
   disabled={isBetActive} // ✅ disable dropdown once bet is active
 >
   <option value="" disabled>Select Card</option>
@@ -873,11 +874,11 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
         <div className="grid grid-cols-5 gap-1 mb-1">
          {["B", "I", "N", "G", "O"].map((letter, idx) => {
   const colors = [
-    "bg-gradient-to-br from-red-500 to-pink-500 w-8 h-8 flex items-center justify-center rounded font-bold text-[11px]",   // B
-    "bg-gradient-to-br from-orange-500 to-yellow-500 w-8 h-8 flex items-center justify-center rounded font-bold text-[11px]", // I
-    "bg-gradient-to-br from-green-500 to-lime-500 w-8 h-8 flex items-center justify-center rounded font-bold text-[11px]", // N
-    "bg-gradient-to-br from-blue-500 to-cyan-500 w-8 h-8 flex items-center justify-center rounded font-bold text-[11px]",  // G
-    "bg-gradient-to-br from-purple-500 to-pink-500 w-8 h-8 flex items-center justify-center rounded font-bold text-[11px]" // O
+    "bg-gradient-to-br from-theme-primary to-theme-secondary w-8 h-8 flex items-center justify-center rounded font-bold text-[11px]",   // B
+    "bg-gradient-to-br from-theme-secondary to-theme-accent w-8 h-8 flex items-center justify-center rounded font-bold text-[11px]", // I
+    "bg-gradient-to-br from-theme-accent to-theme-light w-8 h-8 flex items-center justify-center rounded font-bold text-[11px]", // N
+    "bg-gradient-to-br from-theme-light to-theme-primary w-8 h-8 flex items-center justify-center rounded font-bold text-[11px]",  // G
+    "bg-gradient-to-br from-theme-primary to-theme-accent w-8 h-8 flex items-center justify-center rounded font-bold text-[11px]" // O
   ];
 
   return (
@@ -902,7 +903,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
                 key={`${num}-${idx}`}
                 onClick={() => handleNumberClick(num)}
                 className={`w-8 h-8 flex items-center justify-center rounded font-bold text-[11px] cursor-pointer transition
-                  ${isMarked ? "bg-green-500 text-white scale-105" : "bg-white/20 hover:bg-white/30"}
+                  ${isMarked ? "bg-theme-primary text-white scale-105" : "bg-theme-light/20 hover:bg-theme-light/30"}
                 `}
               >
                 {num === 0 ? "★" : num}
@@ -921,8 +922,8 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
         onClick={isBetActive ? handleCancelBet : handlePlaceBet}
         className={`w-full px-4 py-2 rounded-lg shadow font-semibold ${
           isBetActive
-            ? "bg-red-600 hover:bg-red-700 text-white"
-            : "bg-blue-600 hover:bg-blue-700 text-white"
+            ? "bg-theme-secondary hover:bg-theme-primary text-white"
+            : "bg-theme-primary hover:bg-theme-secondary text-white"
         }`}
       >
         {isBetActive
@@ -959,8 +960,8 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
     }}
     className={`w-full px-4 py-2 rounded-lg shadow font-semibold ${
       autoCard.auto
-        ? "bg-yellow-600 hover:bg-yellow-700 text-white"
-        : "bg-green-600 hover:bg-green-700 text-white"
+        ? "bg-theme-accent hover:bg-theme-secondary text-white"
+        : "bg-theme-secondary hover:bg-theme-primary text-white"
     }`}
   >
     {autoCard.auto
@@ -1031,7 +1032,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
   {/* Row with Bingo Laws */}
   <button
     onClick={() => setShowPatterns(true)}
-    className="w-full bg-gradient-to-r from-blue-600 to-purple-600 py-2 rounded-lg font-bold text-sm shadow hover:opacity-90 transition"
+    className="w-full bg-gradient-to-r from-theme-primary to-theme-secondary py-2 rounded-lg font-bold text-sm shadow hover:opacity-90 transition"
   >
     {t('pattern')}
   </button>
@@ -1039,7 +1040,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
 
 
     {/* Footer: Betted Players */}
-    <div className="w-full mt-6 bg-white/10 rounded border border-white/20 p-3">
+    <div className="w-full mt-6 bg-theme-light/10 rounded border border-theme-accent/30 p-3">
       <h3 className="font-bold text-sm mb-2">{t("players_in_room")}</h3>
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
   {currentRoom?.players && Object.keys(currentRoom.players || {}).length > 0 ? (
@@ -1049,11 +1050,11 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
         : `user_${player.telegramId?.slice(0, 3) ?? '???'}***`;
 
       // ✅ Determine background color
-      let bgColor = "bg-white/20"; // default
+      let bgColor = "bg-theme-light/20"; // default
       if (currentRoom.winners?.some((w: any) => w.telegramId === player.telegramId)) {
-        bgColor = "bg-green-400"; // winner
+        bgColor = "bg-theme-primary"; // winner
       } else if (player.attemptedBingo) {
-        bgColor = "bg-red-400"; // attempted bingo
+        bgColor = "bg-theme-secondary"; // attempted bingo
       }
 
       return (

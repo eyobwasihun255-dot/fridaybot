@@ -19,7 +19,7 @@ function App() {
       {loading ? (
         <LoadingSpinner />
       ) : (
-        <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-800">
+        <div className="min-h-screen bg-gradient-to-br from-theme-primary via-theme-secondary to-theme-accent">
           <Header />
           <main className="pt-20">
             <Routes>

@@ -37,9 +37,29 @@ class GameManager {
         return { success: false, message: 'Countdown already active' };
       }
 
-      const players = Object.values(room.players || {}).filter((p) => !!p.cardId && (!!room.isDemoRoom || !!p.betAmount));
-      if (players.length < 2) return { success: false, message: 'Not enough players' };
-      if (room.gameStatus !== 'waiting') return { success: false, message: 'Room not in waiting state' };
+      const players = Object.values(room.players || {}).filter((p) => {
+        if (!p.cardId) return false;
+        if (room.isDemoRoom) return true;
+        
+        // For non-demo rooms, count players who have either:
+        // 1. Placed a bet (have betAmount)
+        // 2. Set auto-bet (have a claimed card with auto: true)
+        if (p.betAmount) return true;
+        
+        // Check if their card has auto-bet enabled
+        const card = room.bingoCards?.[p.cardId];
+        return !!(card?.auto && card?.claimed && card?.claimedBy === p.telegramId);
+      });
+      console.log(`🎮 startCountdown for room ${roomId}: players=${players.length}, gameStatus=${room.gameStatus}, countdownActive=${countdownActive}`);
+      
+      if (players.length < 2) {
+        console.log(`❌ Not enough players for room ${roomId}: ${players.length} players`);
+        return { success: false, message: 'Not enough players' };
+      }
+      if (room.gameStatus !== 'waiting') {
+        console.log(`❌ Room ${roomId} not in waiting state: ${room.gameStatus}`);
+        return { success: false, message: 'Room not in waiting state' };
+      }
 
       const countdownEndAt = Date.now() + durationMs;
       

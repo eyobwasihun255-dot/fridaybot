@@ -3,6 +3,12 @@ export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
+      colors: {
+        'theme-primary': '#4E56C0',
+        'theme-secondary': '#9B5DE0', 
+        'theme-accent': '#D78FEE',
+        'theme-light': '#FDCFFA',
+      },
       keyframes: {
         wiggle: {
           '0%, 100%': { transform: 'rotate(-10deg)' },

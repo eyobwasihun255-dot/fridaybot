@@ -26,11 +26,11 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'playing':
-        return 'text-green-300';
+        return 'text-theme-light';
       case 'waiting':
-        return 'text-yellow-300';
+        return 'text-theme-accent';
       case 'countdown':
-        return 'text-blue-300';
+        return 'text-theme-light';
       default:
         return 'text-gray-300';
     }
@@ -113,7 +113,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
           <div className="flex items-center justify-between">
             <span className="text-white/80">{t('players')}:</span>
             <div className="flex items-center space-x-1">
-              <Users className="w-4 h-4 text-blue-300" />
+              <Users className="w-4 h-4 text-theme-accent" />
               <span className="text-white">
                 {playerCount}/{room.maxPlayers}
               </span>
@@ -132,8 +132,8 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
             <div className="flex items-center justify-between">
               <span className="text-white/80">{t('payout')}:</span>
               <div className="flex items-center space-x-1">
-                <Coins className="w-4 h-4 text-yellow-300" />
-                <span className="text-yellow-300 font-bold">
+                <Coins className="w-4 h-4 text-theme-light" />
+                <span className="text-theme-light font-bold">
                   {payout} {t('etb')}
                 </span>
               </div>
@@ -143,7 +143,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
 
         <button
           onClick={handleJoinRoom}
-          className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white font-bold py-3 px-4 rounded-lg transition-all duration-200 flex items-center justify-center space-x-2 shadow-md hover:shadow-xl"
+          className="w-full bg-gradient-to-r from-theme-primary to-theme-secondary hover:from-theme-secondary hover:to-theme-accent text-white font-bold py-3 px-4 rounded-lg transition-all duration-200 flex items-center justify-center space-x-2 shadow-md hover:shadow-xl"
         >
           <Play className="w-4 h-4" />
           <span>{t('join_room')}</span>

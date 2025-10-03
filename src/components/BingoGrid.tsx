@@ -48,14 +48,14 @@ const BingoGrid: React.FC<BingoGridProps> = ({
                 className={`
                   aspect-square p-4 border border-gray-200 flex items-center justify-center font-bold text-lg transition-all duration-200
                   ${isFreeSpace
-                    ? 'bg-yellow-100 text-yellow-800 cursor-default'
+                    ? 'bg-theme-light text-theme-primary cursor-default'
                     : isCalled && isMarked
-                    ? 'bg-green-500 text-white shadow-inner'
+                    ? 'bg-theme-primary text-white shadow-inner'
                     : isCalled
-                    ? 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                    ? 'bg-theme-accent text-theme-primary hover:bg-theme-secondary'
                     : isMarked
-                    ? 'bg-gray-300 text-gray-700'
-                    : 'bg-white text-gray-800 hover:bg-gray-50'
+                    ? 'bg-theme-secondary text-white'
+                    : 'bg-white text-gray-800 hover:bg-theme-light/50'
                   }
                 `}
               >

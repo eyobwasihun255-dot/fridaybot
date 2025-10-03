@@ -13,15 +13,18 @@ const CountdownOverlay = ({
   countdownEndAt: number;
   label: string;
 }) => {
-  const [remaining, setRemaining] = React.useState(
-    Math.max(0, Math.floor((countdownEndAt - Date.now()) / 1000))
-  );
+  // Calculate remaining time, but ensure it doesn't exceed 30 seconds
+  const calculateRemaining = () => {
+    const remainingMs = countdownEndAt - Date.now();
+    const remainingSeconds = Math.ceil(remainingMs / 1000);
+    return Math.max(0, Math.min(30, remainingSeconds)); // Cap at 30 seconds
+  };
+
+  const [remaining, setRemaining] = React.useState(calculateRemaining);
 
   React.useEffect(() => {
     const interval = setInterval(() => {
-      setRemaining(
-        Math.max(0, Math.floor((countdownEndAt - Date.now()) / 1000))
-      );
+      setRemaining(calculateRemaining());
     }, 1000);
     return () => clearInterval(interval);
   }, [countdownEndAt]);
@@ -806,7 +809,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
             {displayedCalledNumbers.length >= 3 && (
               <div className="flex flex-row gap-1">
                 {/* Second previous number */}
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shadow bg-gradient-to-br ${getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 3]!)}`}>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shadow bg-gradient-to-br ${getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 3]!)}`}>
                   {getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 3]!)}{displayedCalledNumbers[displayedCalledNumbers.length - 3]}
                 </div>
                 {/* First previous number */}

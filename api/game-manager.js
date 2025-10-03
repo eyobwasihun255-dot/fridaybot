@@ -30,15 +30,35 @@ class GameManager {
       const room = snap.val();
       if (!room) return { success: false, message: 'Room not found' };
 
+      // Check if countdown is already active
+      const countdownActive = !!room.countdownEndAt && room.countdownEndAt > Date.now();
+      if (countdownActive) {
+        console.log(`⏰ Countdown already active for room ${roomId}`);
+        return { success: false, message: 'Countdown already active' };
+      }
+
       const players = Object.values(room.players || {}).filter((p) => !!p.cardId && (!!room.isDemoRoom || !!p.betAmount));
       if (players.length < 2) return { success: false, message: 'Not enough players' };
       if (room.gameStatus !== 'waiting') return { success: false, message: 'Room not in waiting state' };
 
       const countdownEndAt = Date.now() + durationMs;
-      await update(roomRef, {
-        gameStatus: 'countdown',
-        countdownEndAt,
-        countdownStartedBy: startedBy,
+      
+      // Use transaction to prevent race conditions
+      await runTransaction(roomRef, (currentRoom) => {
+        if (!currentRoom) return null;
+        
+        // Double-check conditions inside transaction
+        const currentCountdownActive = !!currentRoom.countdownEndAt && currentRoom.countdownEndAt > Date.now();
+        if (currentCountdownActive || currentRoom.gameStatus !== 'waiting') {
+          return currentRoom; // Don't update if conditions changed
+        }
+        
+        return {
+          ...currentRoom,
+          gameStatus: 'countdown',
+          countdownEndAt,
+          countdownStartedBy: startedBy,
+        };
       });
 
       // schedule auto start
@@ -48,12 +68,14 @@ class GameManager {
       const tid = setTimeout(() => {
         this.startGame(roomId).catch((e) => console.error('Auto startGame error:', e));
         this.countdownTimers.delete(roomId);
-      }, durationMs + 250);
+      }, durationMs);
       this.countdownTimers.set(roomId, tid);
 
       if (this.io) {
         this.io.to(roomId).emit('countdownStarted', { roomId, countdownEndAt });
       }
+      
+      console.log(`⏰ Started countdown for room ${roomId} by ${startedBy || 'unknown'}`);
       return { success: true, countdownEndAt };
     } catch (err) {
       console.error('Error starting countdown:', err);

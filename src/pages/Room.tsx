@@ -776,8 +776,8 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
               ${isLastCalled
                 ? "bg-theme-green text-white scale-105"
                 : isPreviouslyCalled
-                ? "bg-called text-white"
-                : "bg-theme-red"}
+                ? "bg-theme-red text-white"
+                : "bg-theme-primary"}
             `}
           >
             {num}

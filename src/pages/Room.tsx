@@ -774,10 +774,10 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
             key={`${col}-${num}`}
             className={`flex items-center justify-center p-[3px] rounded font-bold text-[11px] transition
               ${isLastCalled
-                ? "bg-theme-primary text-white scale-105"
+                ? "bg-theme-green text-white scale-105"
                 : isPreviouslyCalled
                 ? "bg-called text-white"
-                : "bg-theme-light/30"}
+                : "bg-theme-red"}
             `}
           >
             {num}
@@ -809,16 +809,17 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
 
             {/* Current number - main circle */}
             <div
-              className={`w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold shadow bg-gradient-to-br ${
-                displayedCalledNumbers.length > 0
-                  ? getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 1]!)
-                  : "from-gray-400 to-gray-600"
-              }`}
-            >
-              {displayedCalledNumbers.length > 0
-                ? `${getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 1]!)}${displayedCalledNumbers[displayedCalledNumbers.length - 1]}`
-                : "-"}
-            </div>
+  className={`w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold shadow bg-gradient-to-br border-4 border-yellow-300 ${
+    displayedCalledNumbers.length > 0
+      ? getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 1]!)
+      : "from-gray-400 to-gray-600"
+  }`}
+>
+  {displayedCalledNumbers.length > 0
+    ? `${getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 1]!)}${displayedCalledNumbers[displayedCalledNumbers.length - 1]}`
+    : "-"}
+</div>
+
             {/* Previous two numbers */}
             {displayedCalledNumbers.length >= 3 && (
               <div className="flex flex-row gap-1">
@@ -923,8 +924,8 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
         onClick={isBetActive ? handleCancelBet : handlePlaceBet}
         className={`w-full px-4 py-2 rounded-lg shadow font-semibold ${
           isBetActive
-            ? "bg-theme-secondary hover:bg-theme-primary text-white"
-            : "bg-theme-primary hover:bg-theme-secondary text-white"
+            ? "bg-theme-secondary hover:bg-theme-red text-white"
+            : "bg-theme-primary hover:bg-theme-green text-white"
         }`}
       >
         {isBetActive
@@ -961,8 +962,8 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
     }}
     className={`w-full px-4 py-2 rounded-lg shadow font-semibold ${
       autoCard.auto
-        ? "bg-theme-accent hover:bg-theme-secondary text-white"
-        : "bg-theme-secondary hover:bg-theme-primary text-white"
+        ? "bg-theme-red hover:bg-theme-secondary text-white"
+        : "bg-theme-green hover:bg-theme-primary text-white"
     }`}
   >
     {autoCard.auto

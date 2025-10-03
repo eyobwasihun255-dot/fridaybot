@@ -26,8 +26,15 @@ class GameManager {
   async startCountdown(roomId, durationMs = 30000, startedBy = null) {
     try {
       const roomRef = ref(rtdb, `rooms/${roomId}`);
-      const snap = await get(roomRef);
-      const room = snap.val();
+const snap = await get(roomRef);
+
+if (!snap.exists()) {
+  console.error(`❌ Room ${roomId} not found in RTDB`);
+  return { success: false, message: 'Room not found' };
+}
+
+const room = snap.val();
+
       if (!room) return { success: false, message: 'Room not found' };
 
       // Check if countdown is already active

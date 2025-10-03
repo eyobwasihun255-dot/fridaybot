@@ -7,6 +7,7 @@ class GameManager {
     this.activeGames = new Map(); // roomId -> game data
     this.numberDrawIntervals = new Map(); // roomId -> interval ID
     this.countdownTimers = new Map(); // roomId -> timeout ID
+    this.resetRoomTimers = new Map(); // roomId -> timeout ID for scheduled reset
     this.io = null; // Will be set when Socket.IO is initialized
   }
 
@@ -293,7 +294,14 @@ class GameManager {
   // End game
   async endGame(roomId, gameId, reason = "manual") {
     try {
+      // Stop drawing numbers for this room
       this.stopNumberDrawing(roomId);
+
+      // Clear any countdown timer for this room
+      if (this.countdownTimers.has(roomId)) {
+        clearTimeout(this.countdownTimers.get(roomId));
+        this.countdownTimers.delete(roomId);
+      }
 
       const gameRef = ref(rtdb, `games/${gameId}`);
       const gameSnap = await get(gameRef);
@@ -305,15 +313,40 @@ class GameManager {
       await update(gameRef, {
         status: "ended",
         endedAt: Date.now(),
-        endReason: reason
+        endReason: reason,
       });
 
-      // Update room status
+      // Update room status and set nextGameCountdownEndAt so clients can transition
       const roomRef = ref(rtdb, `rooms/${roomId}`);
+      const nextGameCountdownMs = 10000; // 10s until reset (tunable)
+      const nextGameCountdownEndAt = Date.now() + nextGameCountdownMs;
+
       await update(roomRef, {
         gameStatus: "ended",
-        // 10 seconds until next game
+        nextGameCountdownEndAt,
+        countdownEndAt: null,
+        countdownStartedBy: null,
       });
+
+      // Schedule per-room reset to avoid waiting for global poll
+      try {
+        if (this.resetRoomTimers.has(roomId)) {
+          clearTimeout(this.resetRoomTimers.get(roomId));
+          this.resetRoomTimers.delete(roomId);
+        }
+        const rid = setTimeout(async () => {
+          try {
+            await this.resetRoom(roomId);
+          } catch (e) {
+            console.error('Error in scheduled resetRoom:', e);
+          } finally {
+            this.resetRoomTimers.delete(roomId);
+          }
+        }, nextGameCountdownMs + 200);
+        this.resetRoomTimers.set(roomId, rid);
+      } catch (e) {
+        console.error('Error scheduling resetRoom timer:', e);
+      }
 
       // If numbers finished and no winner confirmed, add revenue and skip payouts
       const hasConfirmedWinner = !!gameData.winner;
@@ -345,13 +378,14 @@ class GameManager {
         }
       }
 
-      // Notify clients
+      // Notify clients and include nextGameCountdownEndAt so clients can transition immediately
       if (this.io) {
         this.io.to(roomId).emit('gameEnded', {
           roomId,
           gameId,
           reason,
-          winners: gameData.winners || []
+          winners: gameData.winners || [],
+          nextGameCountdownEndAt,
         });
       }
 
@@ -762,6 +796,16 @@ class GameManager {
   // Reset room for next game
   async resetRoom(roomId) {
     try {
+      // Clear any scheduled reset timer for this room
+      if (this.resetRoomTimers && this.resetRoomTimers.has(roomId)) {
+        clearTimeout(this.resetRoomTimers.get(roomId));
+        this.resetRoomTimers.delete(roomId);
+      }
+      // Also clear any countdown timer if present
+      if (this.countdownTimers && this.countdownTimers.has(roomId)) {
+        clearTimeout(this.countdownTimers.get(roomId));
+        this.countdownTimers.delete(roomId);
+      }
       const roomRef = ref(rtdb, `rooms/${roomId}`);
       const snap = await get(roomRef);
       const room = snap.val() || {};

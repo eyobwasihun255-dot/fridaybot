@@ -142,10 +142,51 @@ export const useGameStore = create<GameState>((set, get) => ({
       }));
     });
 
+    // Countdown started in a room - update currentRoom if we're in that room
+    newSocket.on('countdownStarted', (data: any) => {
+      try {
+        const { roomId, countdownEndAt } = data || {};
+        const { currentRoom } = get();
+        if (currentRoom && currentRoom.id === roomId) {
+          set({ currentRoom: { ...currentRoom, gameStatus: 'countdown', countdownEndAt } as any });
+        }
+      } catch (e) {
+        console.error('Error handling countdownStarted:', e);
+      }
+    });
+
+    // Countdown cancelled - ensure UI leaves countdown state immediately
+    newSocket.on('countdownCancelled', (data: any) => {
+      try {
+        const { roomId } = data || {};
+        const { currentRoom } = get();
+        if (currentRoom && currentRoom.id === roomId) {
+          set({ currentRoom: { ...currentRoom, gameStatus: 'waiting', countdownEndAt: null, countdownStartedBy: null } as any });
+        }
+      } catch (e) {
+        console.error('Error handling countdownCancelled:', e);
+      }
+    });
+
     newSocket.on('gameEnded', (data: any) => {
       console.log('🔚 Game ended:', data);
       get().stopNumberDraw();
-      
+
+      // If server sends nextGameCountdownEndAt, update currentRoom right away so UI shows ended->countdown or ended->waiting
+      try {
+        const { nextGameCountdownEndAt, roomId } = data || {};
+        const { currentRoom } = get();
+        if (currentRoom && currentRoom.id === roomId) {
+          const updated: any = { ...currentRoom, gameStatus: 'ended' };
+          if (nextGameCountdownEndAt) updated.nextGameCountdownEndAt = nextGameCountdownEndAt;
+          updated.countdownEndAt = null;
+          updated.countdownStartedBy = null;
+          set({ currentRoom: updated });
+        }
+      } catch (e) {
+        console.error('Error applying gameEnded room update:', e);
+      }
+
       if (data.winner) {
         // Handle winner announcement
         const { user } = useAuthStore.getState();
@@ -367,19 +408,18 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   joinRoom: (roomId: string) => {
-    const { socket, currentRoom } = get();
-
-  if (!socket?.connected) {
-    get().connectToServer();
-  }
-
-  if (socket) {
-    // Leave old room before joining new
-    if (currentRoom?.id && currentRoom.id !== roomId) {
-      socket.emit("leaveRoom", currentRoom.id);
+    const { socket } = get();
+    
+    // Connect to server if not already connected
+    if (!socket?.connected) {
+      get().connectToServer();
     }
-    socket.emit("joinRoom", roomId);
-  }
+
+    // Join room via socket
+    if (socket) {
+      socket.emit('joinRoom', roomId);
+    }
+
     const roomRef = ref(rtdb, "rooms/" + roomId);
 
     onValue(roomRef, (snapshot) => {

@@ -240,7 +240,15 @@ const autoCountdownCheck = async () => {
       const players = Object.values(room.players || {}).filter((p) => {
         if (!p.cardId) return false;
         if (room.isDemoRoom) return true;
-     
+        
+        // For non-demo rooms, count players who have either:
+        // 1. Placed a bet (have betAmount)
+        // 2. Set auto-bet (have a claimed card with auto: true)
+        if (p.betAmount) return true;
+        
+        // Check if their card has auto-bet enabled
+        const card = room.bingoCards?.[p.cardId];
+        return !!( card?.claimed && card?.claimedBy === p.telegramId);
       });
       const hasEnough = players.length >= 2;
       const countdownActive = !!room.countdownEndAt && room.countdownEndAt > Date.now();
@@ -255,7 +263,7 @@ const autoCountdownCheck = async () => {
       // 1. Room is waiting
       // 2. Has enough players
       // 3. No active countdown
-      if (isWaiting && hasEnough ) {
+      if (isWaiting && hasEnough && !countdownActive) {
         console.log(`🔄 Auto-starting countdown for room ${roomId} with ${players.length} players`);
         const result = await gameManager.startCountdown(roomId, 30000, 'auto');
         if (!result.success) {
@@ -273,7 +281,7 @@ const autoCountdownCheck = async () => {
     console.error('autoCountdownCheck error:', e);
   }
 };
-setInterval(autoCountdownCheck, 2000);
+setInterval(autoCountdownCheck, 5000);
 
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);

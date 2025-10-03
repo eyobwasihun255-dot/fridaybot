@@ -1,8 +1,6 @@
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import GameManager from './game-manager.js';
-
-const gameManager = new GameManager();
+import { gameManager } from './game-manager.js';
 
 export default function createSocketServer(app) {
   const server = createServer(app);

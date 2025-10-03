@@ -1,7 +1,4 @@
-import GameManager from './game-manager.js';
-
-// Initialize game manager
-const gameManager = new GameManager();
+import { gameManager } from './game-manager.js';
 
 export default async function checkbingohandler(req, res) {
   if (req.method !== 'POST') {

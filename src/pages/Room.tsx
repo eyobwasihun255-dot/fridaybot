@@ -966,7 +966,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
   {currentRoom?.players && Object.keys(currentRoom.players || {}).length > 0 ? (
     Object.values(currentRoom.players || {}).map((player: any) => {
       const maskedUsername = player.username
-        ? `${player.username.slice(0, 3)}***`
+        ? `${player.username.slice(0, 7)}***`
         : `user_${player.telegramId?.slice(0, 3) ?? '???'}***`;
 
       // ✅ Determine background color

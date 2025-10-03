@@ -3,7 +3,7 @@ import cors from 'cors';
 import { rtdb } from '../bot/firebaseConfig.js';
 import { ref, get, onValue } from 'firebase/database';
 import createSocketServer from './socket-server.js';
-import GameManager from './game-manager.js';
+import { gameManager } from './game-manager.js';
 import botHandler from './bot.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -227,7 +227,6 @@ setInterval(resetRoomIfGameEnded, 5000);
 
 // Create Socket.IO server
 const server = createSocketServer(app);
-const gameManager = new GameManager();
 // Reuse same io instance from socket-server
 // Hack: socket-server internally creates and owns io; expose by setting on connection
 // We can set it via a small timeout after server starts by attaching to globalThis.io if set there.

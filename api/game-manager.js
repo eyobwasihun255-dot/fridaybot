@@ -10,6 +10,14 @@ class GameManager {
     this.io = null; // Will be set when Socket.IO is initialized
   }
 
+  // Singleton pattern
+  static getInstance() {
+    if (!GameManager.instance) {
+      GameManager.instance = new GameManager();
+    }
+    return GameManager.instance;
+  }
+
   setSocketIO(io) {
     this.io = io;
   }
@@ -411,6 +419,8 @@ class GameManager {
         };
         console.log('🎉 Emitting winnerConfirmed event:', eventData);
         this.io.to(roomId).emit('winnerConfirmed', eventData);
+      } else {
+        console.error('❌ Cannot emit winnerConfirmed event: Socket.IO instance not set!');
       }
 
       // Pay winner immediately
@@ -763,4 +773,6 @@ class GameManager {
   
 }
 
+// Export both the class and singleton instance
 export default GameManager;
+export const gameManager = GameManager.getInstance();

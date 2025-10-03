@@ -26,70 +26,65 @@ class GameManager {
   async startCountdown(roomId, durationMs = 30000, startedBy = null) {
     try {
       const roomRef = ref(rtdb, `rooms/${roomId}`);
-const snap = await get(roomRef);
-
-if (!snap.exists()) {
-  console.error(`❌ Room ${roomId} not found in RTDB`);
-  return { success: false, message: 'Room not found' };
-}
-
-const room = snap.val();
-console.log(`🎮 room ${room}`);
-      if (!room) return { success: false, message: 'Room not found' };
-
-      // Check if countdown is already active
+      const snap = await get(roomRef);
+  
+      if (!snap.exists()) {
+        console.error(`❌ Room ${roomId} not found in RTDB`);
+        return { success: false, message: 'Room not found' };
+      }
+  
+      const room = snap.val();
+      console.log(`🎮 Room ${roomId} snapshot:`, room);
+  
+      // Check if countdown already active
       const countdownActive = !!room.countdownEndAt && room.countdownEndAt > Date.now();
       if (countdownActive) {
         console.log(`⏰ Countdown already active for room ${roomId}`);
         return { success: false, message: 'Countdown already active' };
       }
-
-      const players = Object.values(room.players || {})
-      console.log(`🎮 startCountdown for room ${roomId}: players=${players.length}, gameStatus=${room.gameStatus}, countdownActive=${countdownActive}`);
-      
+  
+      // Count players
+      const players = Object.values(room.players || {});
+      console.log(
+        `🎮 startCountdown for room ${roomId}: players=${players.length}, gameStatus=${room.gameStatus}, countdownActive=${countdownActive}`
+      );
+  
       if (players.length < 2) {
         console.log(`❌ Not enough players for room ${roomId}: ${players.length} players`);
         return { success: false, message: 'Not enough players' };
       }
+  
       if (room.gameStatus !== 'waiting') {
         console.log(`❌ Room ${roomId} not in waiting state: ${room.gameStatus}`);
         return { success: false, message: 'Room not in waiting state' };
       }
-
+  
       const countdownEndAt = Date.now() + durationMs;
-      
-      // Use transaction to prevent race conditions
-      await update(roomRef, (currentRoom) => {
-        if (!currentRoom) return null;
-        
-        // Double-check conditions inside transaction
-        const currentCountdownActive = !!currentRoom.countdownEndAt && currentRoom.countdownEndAt > Date.now();
-        if (currentCountdownActive || currentRoom.gameStatus !== 'waiting') {
-          return currentRoom; // Don't update if conditions changed
-        }
-        
-        return {
-          ...currentRoom,
-          gameStatus: 'countdown',
-          countdownEndAt,
-          countdownStartedBy: startedBy,
-        };
+  
+      // ✅ Update instead of transaction
+      await update(roomRef, {
+        gameStatus: 'countdown',
+        countdownEndAt,
+        countdownStartedBy: startedBy,
       });
-
-      // schedule auto start
+  
+      // Schedule auto start
       if (this.countdownTimers.has(roomId)) {
         clearTimeout(this.countdownTimers.get(roomId));
       }
       const tid = setTimeout(() => {
-        this.startGame(roomId).catch((e) => console.error('Auto startGame error:', e));
+        this.startGame(roomId).catch((e) =>
+          console.error('Auto startGame error:', e)
+        );
         this.countdownTimers.delete(roomId);
       }, durationMs);
       this.countdownTimers.set(roomId, tid);
-
+  
+      // Notify clients
       if (this.io) {
         this.io.to(roomId).emit('countdownStarted', { roomId, countdownEndAt });
       }
-      
+  
       console.log(`⏰ Started countdown for room ${roomId} by ${startedBy || 'unknown'}`);
       return { success: true, countdownEndAt };
     } catch (err) {
@@ -97,8 +92,7 @@ console.log(`🎮 room ${room}`);
       return { success: false, message: 'Server error' };
     }
   }
-
-  // Cancel countdown and revert to waiting
+  
   async cancelCountdown(roomId) {
     try {
       if (this.countdownTimers.has(roomId)) {

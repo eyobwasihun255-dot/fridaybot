@@ -130,64 +130,22 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     });
 
-    newSocket.on("numberDrawn", ({ roomId, number }) => {
+    newSocket.on('numberDrawn', (data: any) => {
+      const { number, drawnNumbers, roomId } = data;
+      console.log(`🎲 Number drawn: ${number}`);
+      
       set((state) => ({
         displayedCalledNumbers: {
           ...state.displayedCalledNumbers,
-          [roomId]: [
-            ...(state.displayedCalledNumbers[roomId] || []),
-            number,
-          ],
+          [roomId]: drawnNumbers,
         },
       }));
-    });
-    
-
-    // Countdown started in a room - update currentRoom if we're in that room
-    newSocket.on('countdownStarted', (data: any) => {
-      try {
-        const { roomId, countdownEndAt } = data || {};
-        const { currentRoom } = get();
-        if (currentRoom && currentRoom.id === roomId) {
-          set({ currentRoom: { ...currentRoom, gameStatus: 'countdown', countdownEndAt } as any });
-        }
-      } catch (e) {
-        console.error('Error handling countdownStarted:', e);
-      }
-    });
-
-    // Countdown cancelled - ensure UI leaves countdown state immediately
-    newSocket.on('countdownCancelled', (data: any) => {
-      try {
-        const { roomId } = data || {};
-        const { currentRoom } = get();
-        if (currentRoom && currentRoom.id === roomId) {
-          set({ currentRoom: { ...currentRoom, gameStatus: 'waiting', countdownEndAt: null, countdownStartedBy: null } as any });
-        }
-      } catch (e) {
-        console.error('Error handling countdownCancelled:', e);
-      }
     });
 
     newSocket.on('gameEnded', (data: any) => {
       console.log('🔚 Game ended:', data);
       get().stopNumberDraw();
-
-      // If server sends nextGameCountdownEndAt, update currentRoom right away so UI shows ended->countdown or ended->waiting
-      try {
-        const { nextGameCountdownEndAt, roomId } = data || {};
-        const { currentRoom } = get();
-        if (currentRoom && currentRoom.id === roomId) {
-          const updated: any = { ...currentRoom, gameStatus: 'ended' };
-          if (nextGameCountdownEndAt) updated.nextGameCountdownEndAt = nextGameCountdownEndAt;
-          updated.countdownEndAt = null;
-          updated.countdownStartedBy = null;
-          set({ currentRoom: updated });
-        }
-      } catch (e) {
-        console.error('Error applying gameEnded room update:', e);
-      }
-
+      
       if (data.winner) {
         // Handle winner announcement
         const { user } = useAuthStore.getState();
@@ -261,42 +219,30 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startNumberStream: (roomId, gameId) => {
     const { currentRoom, socket } = get();
-    if (currentRoom?.id !== roomId) return; // 🚫 ensure only this room
     if (currentRoom?.gameStatus !== "playing") return;
-    if (!socket) return;
-  
+
     console.log(`🎲 Starting number stream for room: ${roomId}, game: ${gameId}`);
-  
-    // ✅ Join only this room for socket events
-    socket.emit("joinRoom", roomId);
-  
-    // ✅ Reset numbers when starting new stream
-    set((state) => ({
-      displayedCalledNumbers: {
-        ...state.displayedCalledNumbers,
-        [roomId]: [],
-      },
-    }));
-  
-    // ✅ Listen to Firebase for this game's updates
+
+    // Join room for socket events
+    if (socket) {
+      socket.emit('joinRoom', roomId);
+    }
+
+    // Listen to Firebase for real-time game updates
     const gameRef = ref(rtdb, `games/${gameId}`);
-  
-    // Remove any previous listeners before attaching new one
-    off(gameRef);
-  
     onValue(gameRef, (snapshot) => {
       const data = snapshot.val();
       if (!data) return;
-  
+
       const { currentDrawnNumbers, gameStatus } = data;
-  
+
       // Stop if game ended
       if (gameStatus === "ended") {
-        get().stopNumberDraw?.();
+        get().stopNumberDraw();
         return;
       }
-  
-      // ✅ Update numbers for ONLY this room
+
+      // Update displayed numbers
       if (currentDrawnNumbers) {
         set((state) => ({
           displayedCalledNumbers: {
@@ -306,23 +252,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         }));
       }
     });
-  
-    // ✅ Socket event for numbers (scoped by roomId)
-    socket.off("numberDrawn"); // clear old listener
-    socket.on("numberDrawn", ({ roomId: incomingRoomId, number }) => {
-      if (incomingRoomId !== roomId) return; // 🚫 ignore other rooms
-      set((state) => ({
-        displayedCalledNumbers: {
-          ...state.displayedCalledNumbers,
-          [roomId]: [
-            ...(state.displayedCalledNumbers[roomId] || []),
-            number,
-          ],
-        },
-      }));
-    });
   },
-  
+
   // Server-side bingo check
   checkBingo: async (pattern: number[]) => {
     try {
@@ -436,18 +367,19 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   joinRoom: (roomId: string) => {
-    const { socket } = get();
-    
-    // Connect to server if not already connected
-    if (!socket?.connected) {
-      get().connectToServer();
-    }
+    const { socket, currentRoom } = get();
 
-    // Join room via socket
-    if (socket) {
-      socket.emit('joinRoom', roomId);
-    }
+  if (!socket?.connected) {
+    get().connectToServer();
+  }
 
+  if (socket) {
+    // Leave old room before joining new
+    if (currentRoom?.id && currentRoom.id !== roomId) {
+      socket.emit("leaveRoom", currentRoom.id);
+    }
+    socket.emit("joinRoom", roomId);
+  }
     const roomRef = ref(rtdb, "rooms/" + roomId);
 
     onValue(roomRef, (snapshot) => {

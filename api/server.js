@@ -167,13 +167,63 @@ app.get('*', (req, res, next) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
-// NOTE: Per-room countdown timers are handled by `game-manager.startCountdown`
-// and scheduled per-room via timeouts. The global polling loop for auto-start
-// was removed to avoid race conditions and to make rooms independent.
+// Auto-start games when countdown ends
+const startGameIfCountdownEnded = async () => {
+  try {
+    const roomsRef = ref(rtdb, 'rooms');
+    const roomsSnap = await get(roomsRef);
+    const rooms = roomsSnap.val() || {};
 
-// NOTE: Per-room reset timers are scheduled by `game-manager.endGame` and
-// `game-manager.resetRoom` now clears/reset timers. Global auto-reset polling
-// has been removed to make each room operate independently.
+    for (const [roomId, room] of Object.entries(rooms)) {
+      if (room.gameStatus === 'countdown' && 
+          room.countdownEndAt && 
+          room.countdownEndAt <= Date.now()) {
+        
+        console.log(`⏰ Auto-starting game for room ${roomId}`);
+        
+        // Import and call start-game handler
+        const { default: startGameHandler } = await import('./start-game.js');
+        const mockReq = { body: { roomId } };
+        const mockRes = {
+          status: (code) => ({ json: (data) => console.log(`Game start result:`, data) }),
+          json: (data) => console.log(`Game start result:`, data)
+        };
+        
+        await startGameHandler(mockReq, mockRes);
+      }
+    }
+  } catch (error) {
+    console.error('Error in auto-start check:', error);
+  }
+};
+
+// Check for countdowns every 5 seconds
+setInterval(startGameIfCountdownEnded, 5000);
+
+// Auto-reset rooms after game ends
+const resetRoomIfGameEnded = async () => {
+  try {
+    const roomsRef = ref(rtdb, 'rooms');
+    const roomsSnap = await get(roomsRef);
+    const rooms = roomsSnap.val() || {};
+
+    for (const [roomId, room] of Object.entries(rooms)) {
+      if (room.gameStatus === 'ended' && 
+          room.nextGameCountdownEndAt && 
+          room.nextGameCountdownEndAt <= Date.now()) {
+        
+        console.log(`♻️ Auto-resetting room ${roomId}`);
+        // Call game manager directly to avoid HTTP method issues
+        await gameManager.resetRoom(roomId);
+      }
+    }
+  } catch (error) {
+    console.error('Error in auto-reset check:', error);
+  }
+};
+
+// Check for room resets every 5 seconds
+setInterval(resetRoomIfGameEnded, 5000);
 
 // Create Socket.IO server
 const server = createSocketServer(app);

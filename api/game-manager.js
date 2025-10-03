@@ -25,8 +25,9 @@ class GameManager {
   // Start countdown if conditions allow
   async startCountdown(roomId, durationMs = 30000, startedBy = null) {
     try {
-      const roomsS = await get(ref(rtdb, 'rooms'));
-      const room = roomsS.val() || {};
+      const roomRef = ref(rtdb, `rooms/${roomId}`);
+      const snap = await get(roomRef);
+      const room = snap.val();
       if (!room) return { success: false, message: 'Room not found' };
 
       // Check if countdown is already active
@@ -36,11 +37,12 @@ class GameManager {
         return { success: false, message: 'Countdown already active' };
       }
 
-     
-      for (const [roomId, roo] of Object.entries(room)) {
-        const players = Object.values(roo.players || {}).filter((p) => {
+      const roomsSnap = await get(ref(rtdb, 'rooms'));
+      const rooms = roomsSnap.val() || {};
+      for (const [roomId, room] of Object.entries(rooms)) {
+        const players = Object.values(room.players || {}).filter((p) => {
           if (!p.cardId) return false;
-          if (roo.isDemoRoom) return true;
+          if (room.isDemoRoom) return true;
        
         });
       console.log(`🎮 startCountdown for room ${roomId}: players=${players.length}, gameStatus=${room.gameStatus}, countdownActive=${countdownActive}`);
@@ -55,7 +57,7 @@ class GameManager {
       }
 
       const countdownEndAt = Date.now() + durationMs;
-      
+    }
       // Use transaction to prevent race conditions
       await runTransaction(roomRef, (currentRoom) => {
         if (!currentRoom) return null;

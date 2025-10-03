@@ -571,11 +571,14 @@ return (
       <div className="mb-4">
         {/* Column headers */}
         <div className="grid grid-cols-5 gap-1 mb-1">
-          {['B', 'I', 'N', 'G', 'O'].map((letter) => (
-            <div key={letter} className="text-xs font-bold text-gray-600">
-              {letter}
-            </div>
-          ))}
+        {['B', 'I', 'N', 'G', 'O'].map((letter) => (
+    <div
+      key={letter}
+      className="w-8 h-8 flex items-center justify-center rounded font-bold text-sm text-gray-600"
+    >
+      {letter}
+    </div>
+  ))}
         </div>
         
         {/* Card numbers */}
@@ -804,11 +807,11 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
               <div className="flex flex-row gap-1">
                 {/* Second previous number */}
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shadow bg-gradient-to-br ${getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 3]!)}`}>
-                  {getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 3]!)}
+                  {getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 3]!)}{displayedCalledNumbers[displayedCalledNumbers.length - 3]}
                 </div>
                 {/* First previous number */}
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shadow bg-gradient-to-br ${getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 2]!)}`}>
-                  {getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 2]!)}
+                  {getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 2]!)}{displayedCalledNumbers[displayedCalledNumbers.length - 2]}
                 </div>
               </div>
             )}

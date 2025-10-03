@@ -475,9 +475,8 @@ const handleBingoClick = async () => {
 
   try {
     const result = await checkBingo(covered.patternIndices);
-    if (result.success) {
-    } else {
-      setGameMessage(result.message || t('not_a_winner'));
+    if (!result.success) {
+       setGameMessage(result.message || t('not_a_winner'));
     }
   } catch (err) {
     console.error('❌ Error sending bingo claim:', err);

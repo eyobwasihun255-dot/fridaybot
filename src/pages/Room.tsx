@@ -596,7 +596,7 @@ return (
               return (
                 <div
                   key={`${rowIdx}-${colIdx}`}
-                  className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm border
+                  className={`w-8 h-8 flex items-center justify-center rounded font-bold text-xs border
                     ${isInWinningPattern 
                       ? 'bg-green-500 text-white border-green-600' 
                       : 'bg-white text-black border-gray-300'
@@ -803,11 +803,11 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
             {displayedCalledNumbers.length >= 3 && (
               <div className="flex flex-row gap-1">
                 {/* Second previous number */}
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shadow bg-gradient-to-br ${getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 3]!)}`}>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shadow bg-gradient-to-br ${getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 3]!)}`}>
                   {getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 3]!)}
                 </div>
                 {/* First previous number */}
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xs font-bold shadow bg-gradient-to-br ${getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 2]!)}`}>
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold shadow bg-gradient-to-br ${getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 2]!)}`}>
                   {getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 2]!)}
                 </div>
               </div>

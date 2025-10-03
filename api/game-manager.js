@@ -114,7 +114,7 @@ class GameManager {
         startedAt: Date.now(),
         drawIntervalMs: 5000,
         status: "active",
-        totalPayout: Math.floor((room.betAmount || 0) * playerIds.length * 0.9),
+        totalPayout: Math.floor((playerIds.length - 1) * (room.betAmount || 0) * 0.85 + (room.betAmount || 0)),
         betsDeducted: false,
         winners: winners.map(cardId => ({
           id: uuidv4(),
@@ -281,7 +281,7 @@ class GameManager {
       const roomRef = ref(rtdb, `rooms/${roomId}`);
       await update(roomRef, {
         gameStatus: "ended",
-        nextGameCountdownEndAt: Date.now() + (10 * 1000) // 30 seconds until next game
+        nextGameCountdownEndAt: Date.now() + (10 * 1000) // 10 seconds until next game
       });
 
       // If numbers finished and no winner confirmed, add revenue and skip payouts
@@ -336,6 +336,11 @@ class GameManager {
       const { winners, totalPayout } = gameData;
       const payoutPerWinner = Math.floor(totalPayout / winners.length);
 
+      // Get room data for revenue calculation
+      const roomRef = ref(rtdb, `rooms/${roomId}`);
+      const roomSnap = await get(roomRef);
+      const room = roomSnap.val();
+
       for (const winner of winners) {
         if (winner.userId) {
           // Update user balance
@@ -357,8 +362,24 @@ class GameManager {
         }
       }
 
+      // Calculate and record revenue
+      if (room && winners.length > 0) {
+        const playerCount = Object.keys(room.players || {}).length;
+        const roomAmount = room.betAmount || 0;
+        const totalBets = playerCount * roomAmount;
+        const revenueAmount = totalBets - totalPayout;
+        
+        const revenueRef = ref(rtdb, `revenue/${gameData.id}`);
+        await set(revenueRef, {
+          gameId: gameData.id,
+          roomId,
+          datetime: Date.now(),
+          amount: revenueAmount,
+          drawned: false,
+        });
+      }
+
       // Update room with winner info
-      const roomRef = ref(rtdb, `rooms/${roomId}`);
       await update(roomRef, {
         winner: winners[0]?.userId,
         payout: totalPayout,
@@ -423,8 +444,11 @@ class GameManager {
         console.error('❌ Cannot emit winnerConfirmed event: Socket.IO instance not set!');
       }
 
-      // Pay winner immediately
-      const payoutAmount = Math.floor(gameData.totalPayout || 0);
+      // Calculate winner payout according to new formula
+      const playerCount = Object.keys(room.players || {}).length;
+      const roomAmount = room.betAmount || 0;
+      const payoutAmount = Math.floor((playerCount - 1) * roomAmount * 0.85 + roomAmount);
+      
       if (payoutAmount > 0) {
         const balanceRef = ref(rtdb, `users/${userId}/balance`);
         await runTransaction(balanceRef, (current) => (current || 0) + payoutAmount);
@@ -438,6 +462,19 @@ class GameManager {
           payout: payoutAmount,
           cardId,
           date: Date.now(),
+        });
+
+        // Calculate and record revenue
+        const totalBets = playerCount * roomAmount;
+        const revenueAmount = totalBets - payoutAmount;
+        
+        const revenueRef = ref(rtdb, `revenue/${room.gameId}`);
+        await set(revenueRef, {
+          gameId: room.gameId,
+          roomId,
+          datetime: Date.now(),
+          amount: revenueAmount,
+          drawned: false,
         });
 
         // Mark room payout metadata

@@ -38,6 +38,7 @@ const translations = {
     'join_room': 'ክፍል ግባ',
     'cancel_bet':'ውርርድ ሰርዝ',
     'you_lost': 'ይቅርታ! ተሸንፈዋል!',
+    'winner_pattern': 'የአሸናፊው ካርቴላ',
     // Room
     bingo_rules_countdown: [
         "የተጠሩትን ቁጥሮች ካርቴላ ላይ ካሉት ቁጥሮች ጋር ማዛመድይጫኑ",
@@ -136,6 +137,7 @@ const translations = {
     'cancel_bet':'Cancel bet',
     'place_bet':'Place bet',
     'you_lost': 'Sorry! You lost!',
+    'winner_pattern': 'Winner\'s Card',
     // Room
     'room_details': 'Room',
     'payout': 'Payout',

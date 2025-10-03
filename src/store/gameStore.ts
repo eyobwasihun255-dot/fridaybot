@@ -118,7 +118,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       console.log('❌ Disconnected from server');
     });
 
-    newSocket.on('gameStarted', (data) => {
+    newSocket.on('gameStarted', (data: any) => {
       console.log('🎮 Game started:', data);
       const { currentRoom } = get();
       if (currentRoom && data.roomId === currentRoom.id) {
@@ -129,7 +129,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     });
 
-    newSocket.on('numberDrawn', (data) => {
+    newSocket.on('numberDrawn', (data: any) => {
       const { number, drawnNumbers, roomId } = data;
       console.log(`🎲 Number drawn: ${number}`);
       
@@ -141,7 +141,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       }));
     });
 
-    newSocket.on('gameEnded', (data) => {
+    newSocket.on('gameEnded', (data: any) => {
       console.log('🔚 Game ended:', data);
       get().stopNumberDraw();
       
@@ -160,7 +160,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     });
 
     // Winner confirmed immediately after server validates bingo
-    newSocket.on('winnerConfirmed', async (data) => {
+    newSocket.on('winnerConfirmed', async (data: any) => {
       try {
         const { roomId, userId, cardId, patternIndices } = data as any;
         const { user } = useAuthStore.getState();
@@ -479,10 +479,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       const cardRef = ref(rtdb, `rooms/${currentRoom.id}/bingoCards/${targetCardId}`);
       const playerRef = ref(rtdb, `rooms/${currentRoom.id}/players/${user.telegramId}`);
 
-      // Reset card
+      // Reset card and cancel autobet
       await update(cardRef, {
         claimed: false,
         claimedBy: null,
+        auto: false,
+        autoUntil: null,
       });
 
       // Remove player

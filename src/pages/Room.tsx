@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLanguageStore } from '../store/languageStore';
 import { useGameStore } from '../store/gameStore';
@@ -93,10 +93,29 @@ const [remaining, setRemaining] = useState<number | null>(null);
 const [markedNumbers, setMarkedNumbers] = React.useState<number[]>([]);
   const cancelBet = useGameStore((state) => state.cancelBet);
 const displayedCalledNumbers = useGameStore(
-  (s) => s.displayedCalledNumbers[currentRoom?.id ?? ""] || []
+  (s) => s.displayedCalledNumbers[currentRoom?.id || ""] || []
 );
 const [hasAttemptedBingo, setHasAttemptedBingo] = useState(false);
 const [isDisqualified, setIsDisqualified] = useState(false);
+
+// Auto-close popups after 5 seconds
+useEffect(() => {
+  if (showWinnerPopup) {
+    const timer = setTimeout(() => {
+      setShowWinnerPopup(false);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }
+}, [showWinnerPopup, setShowWinnerPopup]);
+
+useEffect(() => {
+  if (showLoserPopup) {
+    const timer = setTimeout(() => {
+      setShowLoserPopup(false);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }
+}, [showLoserPopup, setShowLoserPopup]);
 
 const startNumberStream = useGameStore((s) => s.startNumberStream);
 // Find this player's data inside the room
@@ -349,7 +368,7 @@ React.useEffect(() => {
   }
   console.log("✅ Socket connection available, setting up winnerConfirmed listener");
 
-  socket.on("winnerConfirmed", async ({ roomId, gameId, userId, cardId, patternIndices }) => {
+  socket.on("winnerConfirmed", async ({ roomId, gameId, userId, cardId, patternIndices }: any) => {
     if (!currentRoom || currentRoom.id !== roomId) return;
   
     if (userId === user?.telegramId) {
@@ -365,7 +384,7 @@ React.useEffect(() => {
       const cardData = cardSnap.val();
       if (!cardData) return;
   
-      const highlightedNumbers = cardData.numbers.flat().map((num, idx) =>
+      const highlightedNumbers = cardData.numbers.flat().map((num: any, idx: any) =>
         patternIndices.includes(idx) ? num : 0
       );
   
@@ -540,18 +559,45 @@ return (
   <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
     <div className="bg-white rounded-2xl shadow-2xl p-6 w-96 max-w-full text-center">
       <h2 className="text-2xl font-bold mb-3 text-red-600">{t('winner_pattern')}</h2>
-      <p className="mb-4">{t('you_lost')}</p>
+      <p className="mb-2 text-lg">{t('you_lost')}</p>
       
-      {/* Display winner card pattern */}
-      <div className="grid grid-cols-5 gap-1 mb-4">
-        {winnerCard.numbers.flat().map((num: number, idx: number) => (
-          <div
-            key={idx}
-            className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm
-              ${num !== 0 ? 'bg-green-500 text-white' : 'bg-gray-200 text-black'}
-            `}
-          >
-            {num === 0 ? "★" : num}
+      {/* Show winner's card number */}
+      <p className="mb-4 text-sm text-gray-600">
+        {t('card_number')} {winnerCard.serialNumber}
+      </p>
+      
+      {/* Display winner card in proper 5x5 grid */}
+      <div className="mb-4">
+        {/* Column headers */}
+        <div className="grid grid-cols-5 gap-1 mb-1">
+          {['B', 'I', 'N', 'G', 'O'].map((letter) => (
+            <div key={letter} className="text-xs font-bold text-gray-600">
+              {letter}
+            </div>
+          ))}
+        </div>
+        
+        {/* Card numbers */}
+        {winnerCard.numbers.map((row: number[], rowIdx: number) => (
+          <div key={rowIdx} className="grid grid-cols-5 gap-1 mb-1">
+            {row.map((num: number, colIdx: number) => {
+              const flatIdx = rowIdx * 5 + colIdx;
+              const isWinningNumber = num !== 0; // 0 represents non-winning numbers in the pattern
+              
+              return (
+                <div
+                  key={`${rowIdx}-${colIdx}`}
+                  className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm border
+                    ${isWinningNumber 
+                      ? 'bg-green-500 text-white border-green-600' 
+                      : 'bg-gray-200 text-black border-gray-300'
+                    }
+                  `}
+                >
+                  {num === 0 ? "★" : num}
+                </div>
+              );
+            })}
           </div>
         ))}
       </div>
@@ -699,7 +745,7 @@ return (
     {[...Array(15)].map((_, rowIdx) =>
       ["B", "I", "N", "G", "O"].map((col, colIdx) => {
         const num = rowIdx + 1 + colIdx * 15;
-       const lastCalled = displayedCalledNumbers.at(-1);
+       const lastCalled = displayedCalledNumbers[displayedCalledNumbers.length - 1];
 const previouslyCalledNumbers = lastCalled
   ? displayedCalledNumbers.slice(0, -1)
   : [];
@@ -745,12 +791,12 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
  <div
   className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold shadow bg-gradient-to-br ${
     displayedCalledNumbers.length > 0
-      ? getPartitionColor(displayedCalledNumbers.at(-1)!)
+      ? getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 1]!)
       : "from-gray-400 to-gray-600"
   }`}
 >
   {displayedCalledNumbers.length > 0
-    ? `${getBingoLetter(displayedCalledNumbers.at(-1)!)}${displayedCalledNumbers.at(-1)}`
+    ? `${getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 1]!)}${displayedCalledNumbers[displayedCalledNumbers.length - 1]}`
     : "-"}
 </div>
 
@@ -761,7 +807,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
   {currentRoom?.gameStatus === "ended" && currentRoom.nextGameCountdownEndAt && (
     <CountdownOverlay
       countdownEndAt={currentRoom.nextGameCountdownEndAt}
-      label=""
+      label="Next round starting in"
     />
   )}
 </div>

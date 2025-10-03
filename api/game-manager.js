@@ -37,23 +37,38 @@ class GameManager {
         return { success: false, message: 'Countdown already active' };
       }
 
-      const players = Object.values(room.players || {}).filter((p) => {
+      // Count players from room.players (those who have placed bets)
+      const playersWithBets = Object.values(room.players || {}).filter((p) => {
         if (!p.cardId) return false;
         if (room.isDemoRoom) return true;
-        
-        // For non-demo rooms, count players who have either:
-        // 1. Placed a bet (have betAmount)
-        // 2. Set auto-bet (have a claimed card with auto: true)
-        if (p.betAmount) return true;
-        
-        // Check if their card has auto-bet enabled
-        const card = room.bingoCards?.[p.cardId];
-        return !!(card?.auto && card?.claimed && card?.claimedBy === p.telegramId);
+        return !!p.betAmount;
       });
-      console.log(`🎮 startCountdown for room ${roomId}: players=${players.length}, gameStatus=${room.gameStatus}, countdownActive=${countdownActive}`);
       
-      if (players.length < 2) {
-        console.log(`❌ Not enough players for room ${roomId}: ${players.length} players`);
+      // Count auto-bet players from bingoCards (those who claimed cards with auto-bet but haven't bet yet)
+      const autoBetPlayers = Object.values(room.bingoCards || {}).filter((card) => {
+        if (!card?.claimed || !card?.auto || !card?.claimedBy) return false;
+        if (room.isDemoRoom) return true;
+        
+        // Don't double-count players who are already in room.players
+        const alreadyInRoom = room.players?.[card.claimedBy];
+        return !alreadyInRoom;
+      });
+      
+      const totalPlayers = playersWithBets.length + autoBetPlayers.length;
+      console.log(`🎮 startCountdown for room ${roomId}: totalPlayers=${totalPlayers} (${playersWithBets.length} with bets, ${autoBetPlayers.length} auto-bet), gameStatus=${room.gameStatus}, countdownActive=${countdownActive}`);
+      console.log(`🎮 Players with bets:`, playersWithBets.map(p => ({
+        telegramId: p.telegramId,
+        cardId: p.cardId,
+        betAmount: p.betAmount
+      })));
+      console.log(`🎮 Auto-bet players:`, autoBetPlayers.map(card => ({
+        claimedBy: card.claimedBy,
+        auto: card.auto,
+        autoUntil: card.autoUntil
+      })));
+      
+      if (totalPlayers < 2) {
+        console.log(`❌ Not enough players for room ${roomId}: ${totalPlayers} players`);
         return { success: false, message: 'Not enough players' };
       }
       if (room.gameStatus !== 'waiting') {

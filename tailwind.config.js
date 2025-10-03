@@ -8,6 +8,7 @@ export default {
         'theme-secondary': '#9B5DE0', 
         'theme-accent': '#D78FEE',
         'theme-light': '#FDCFFA',
+        'called' :'#6F00FF'
       },
       keyframes: {
         wiggle: {

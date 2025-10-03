@@ -776,7 +776,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
               ${isLastCalled
                 ? "bg-theme-primary text-white scale-105"
                 : isPreviouslyCalled
-                ? "bg-theme-secondary text-white"
+                ? "bg-called text-white"
                 : "bg-theme-light/30"}
             `}
           >
@@ -823,13 +823,14 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
             {displayedCalledNumbers.length >= 3 && (
               <div className="flex flex-row gap-1">
                 {/* Second previous number */}
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shadow bg-gradient-to-br ${getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 2]!)}`}>
+                  {getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 2]!)}{displayedCalledNumbers[displayedCalledNumbers.length - 2]}
+                </div>
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shadow bg-gradient-to-br ${getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 3]!)}`}>
                   {getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 3]!)}{displayedCalledNumbers[displayedCalledNumbers.length - 3]}
                 </div>
                 {/* First previous number */}
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shadow bg-gradient-to-br ${getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 2]!)}`}>
-                  {getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 2]!)}{displayedCalledNumbers[displayedCalledNumbers.length - 2]}
-                </div>
+               
               </div>
             )}
           </div>

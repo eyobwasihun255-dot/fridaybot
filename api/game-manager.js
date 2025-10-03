@@ -37,11 +37,7 @@ class GameManager {
         return { success: false, message: 'Countdown already active' };
       }
 
-      const players = Object.values(room.players || {}).filter((p) => {
-        if (!p.cardId) return false;
-        if (room.isDemoRoom) return true;
-        
-      });
+      const players = room.players || [];
       console.log(`🎮 startCountdown for room ${roomId}: players=${players.length}, gameStatus=${room.gameStatus}, countdownActive=${countdownActive}`);
       
       if (players.length < 2) {

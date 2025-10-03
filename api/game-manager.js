@@ -37,7 +37,7 @@ class GameManager {
     }
 
       // Check if countdown is already active
-      const countdownActive = !!room.countdownEndAt && room.countdownEndAt > Date.now();
+    const countdownActive = !!room.countdownEndAt && room.countdownEndAt > Date.now();
       if (countdownActive) {
         console.log(`⏰ Countdown already active for room ${roomId}`);
         return { success: false, message: 'Countdown already active' };

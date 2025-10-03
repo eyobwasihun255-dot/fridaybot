@@ -384,17 +384,12 @@ React.useEffect(() => {
       const cardData = cardSnap.val();
       if (!cardData) return;
   
-      const highlightedNumbers = cardData.numbers.flat().map((num: any, idx: any) =>
-        patternIndices.includes(idx) ? num : 0
-      );
-      
-      // Convert flat array back to 2D array for proper rendering
-      const numbers2D = [];
-      for (let i = 0; i < 5; i++) {
-        numbers2D.push(highlightedNumbers.slice(i * 5, (i + 1) * 5));
-      }
-  
-      setWinnerCard({ ...cardData, numbers: numbers2D });
+      // Store the original numbers and winning pattern indices
+      setWinnerCard({ 
+        ...cardData, 
+        numbers: cardData.numbers, // Keep original numbers
+        winningPatternIndices: patternIndices // Store pattern indices separately
+      });
       setShowLoserPopup(true);
     }
   });
@@ -585,35 +580,35 @@ return (
         
         {/* Card numbers */}
         {winnerCard.numbers.map((row: number[], rowIdx: number) => (
-  <div key={rowIdx} className="grid grid-cols-5 gap-1 mb-1">
-    {row.map((num: number, colIdx: number) => {
-      // Flat index for the pattern reference
-      const flatIdx = rowIdx * 5 + colIdx;
+          <div key={rowIdx} className="grid grid-cols-5 gap-1 mb-1">
+            {row.map((num: number, colIdx: number) => {
+              // Flat index for the pattern reference
+              const flatIdx = rowIdx * 5 + colIdx;
+              
+              // Check if this cell is part of the winning pattern
+              const isInWinningPattern = winnerCard.winningPatternIndices?.includes(flatIdx) || false;
+              
+              // Show the actual card number (free space in middle)
+              const displayNum = num === 0 && rowIdx === 2 && colIdx === 2 
+                ? "★" // free space in middle
+                : num;
 
-      // If 0 was used in your pattern array, interpret it as "this cell is NOT part of the winning pattern"
-      const isInWinningPattern = num !== 0;
-
-      // Show the actual card number (don’t replace with ★ unless you want free space in the middle)
-      const displayNum = num === 0 && rowIdx === 2 && colIdx === 2 
-        ? "★" // free space in middle
-        : num;
-
-      return (
-        <div
-          key={`${rowIdx}-${colIdx}`}
-          className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm border
-            ${isInWinningPattern 
-              ? 'bg-green-500 text-white border-green-600' 
-              : 'bg-white text-black border-gray-300'
-            }
-          `}
-        >
-          {displayNum}
-        </div>
-      );
-    })}
-  </div>
-))}
+              return (
+                <div
+                  key={`${rowIdx}-${colIdx}`}
+                  className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm border
+                    ${isInWinningPattern 
+                      ? 'bg-green-500 text-white border-green-600' 
+                      : 'bg-white text-black border-gray-300'
+                    }
+                  `}
+                >
+                  {displayNum}
+                </div>
+              );
+            })}
+          </div>
+        ))}
 
       </div>
 
@@ -806,13 +801,13 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
           <div className="flex items-center gap-2">
             {/* Previous two numbers */}
             {displayedCalledNumbers.length >= 3 && (
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-row gap-1">
                 {/* Second previous number */}
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shadow bg-gradient-to-br ${getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 3]!)}`}>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shadow bg-gradient-to-br ${getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 3]!)}`}>
                   {getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 3]!)}
                 </div>
                 {/* First previous number */}
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shadow bg-gradient-to-br ${getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 2]!)}`}>
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xs font-bold shadow bg-gradient-to-br ${getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 2]!)}`}>
                   {getBingoLetter(displayedCalledNumbers[displayedCalledNumbers.length - 2]!)}
                 </div>
               </div>
@@ -820,7 +815,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
 
             {/* Current number - main circle */}
             <div
-              className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold shadow bg-gradient-to-br ${
+              className={`w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold shadow bg-gradient-to-br ${
                 displayedCalledNumbers.length > 0
                   ? getPartitionColor(displayedCalledNumbers[displayedCalledNumbers.length - 1]!)
                   : "from-gray-400 to-gray-600"

@@ -12,6 +12,7 @@ interface BingoCard {
   claimed: boolean;
   claimedBy?: string;
   roomId?: string;
+  winningPatternIndices?: number[]; // For displaying winning pattern in loser popup
 }
 
 interface Room {
@@ -176,11 +177,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         const snap = await fbget(cardRef);
         const card = snap.val();
         if (!card) return;
-        const flat = card.numbers.flat();
-        const highlightedFlat = flat.map((n: number, idx: number) => (patternIndices.includes(idx) ? n : 0));
-        const highlighted: number[][] = [];
-        for (let r = 0; r < 5; r++) highlighted.push(highlightedFlat.slice(r * 5, r * 5 + 5));
-        get().setWinnerCard({ ...card, numbers: highlighted });
+        
+        // Store the original numbers and winning pattern indices
+        get().setWinnerCard({ 
+          ...card, 
+          numbers: card.numbers, // Keep original numbers
+          winningPatternIndices: patternIndices // Store pattern indices separately
+        });
         get().setShowLoserPopup(true);
       } catch (e) {
         console.error('Failed to show loser winner card:', e);

@@ -231,38 +231,51 @@ const server = createSocketServer(app);
 // Hack: socket-server internally creates and owns io; expose by setting on connection
 // We can set it via a small timeout after server starts by attaching to globalThis.io if set there.
 
-// Auto-countdown monitor: if room is waiting, has >=2 valid players, and no active countdown, start one
+// Auto-countdown monitor: if room is waiting, has >=2 players, and no active countdown, start one
 const autoCountdownCheck = async () => {
   try {
     const roomsSnap = await get(ref(rtdb, 'rooms'));
     const rooms = roomsSnap.val() || {};
     for (const [roomId, room] of Object.entries(rooms)) {
-      // Use the new validation method to count valid players
-      const validPlayers = await gameManager.countValidPlayers(roomId, room);
-      const hasEnough = validPlayers.length >= 2;
+      const players = Object.values(room.players || {}).filter((p) => {
+        if (!p.cardId) return false;
+        if (room.isDemoRoom) return true;
+        
+        // For non-demo rooms, count players who have either:
+        // 1. Placed a bet (have betAmount)
+        // 2. Set auto-bet (have a claimed card with auto: true)
+        if (p.betAmount) return true;
+        
+        // Check if their card has auto-bet enabled
+        const card = room.bingoCards?.[p.cardId];
+        return !!( card?.claimed && card?.claimedBy === p.telegramId);
+      });
+      const hasEnough = players.length >= 2;
       const countdownActive = !!room.countdownEndAt && room.countdownEndAt > Date.now();
       const isWaiting = room.gameStatus === 'waiting';
       
       // Debug logging for rooms with players
-      if (validPlayers.length > 0) {
-        console.log(`🔍 Room ${roomId}: status=${room.gameStatus}, validPlayers=${validPlayers.length}, countdownActive=${countdownActive}, countdownStartedBy=${room.countdownStartedBy}`);
+      if (players.length > 0) {
+        console.log(`🔍 Room ${roomId}: status=${room.gameStatus}, players=${players.length}, countdownActive=${countdownActive}, countdownStartedBy=${room.countdownStartedBy}`);
       }
       
       // Only start auto-countdown if:
       // 1. Room is waiting
-      // 2. Has enough valid players
+      // 2. Has enough players
       // 3. No active countdown
-      if (isWaiting && hasEnough && !countdownActive) {
-        console.log(`🔄 Auto-starting countdown for room ${roomId} with ${validPlayers.length} valid players`);
+      if (isWaiting && hasEnough ) {
+        console.log(`🔄 Auto-starting countdown for room ${roomId} with ${players.length} players`);
         const result = await gameManager.startCountdown(roomId, 30000, 'auto');
         if (!result.success) {
           console.log(`❌ Failed to start auto-countdown for room ${roomId}: ${result.message}`);
         }
       }
       
-      // Cancel countdown if valid players drop below 2, but only if it was started by auto
-      if (room.gameStatus === 'countdown' && !hasEnough && room.countdownStartedBy === 'auto') {
-        console.log(`❌ Cancelling auto-countdown for room ${roomId} - not enough valid players (${validPlayers.length})`);
+        
+      
+      // Cancel countdown if players drop below 2, but only if it was started by auto
+      if (room.gameStatus === 'countdown' && !hasEnough ) {
+        console.log(`❌ Cancelling auto-countdown for room ${roomId} - not enough players`);
         await gameManager.cancelCountdown(roomId);
       }
     }

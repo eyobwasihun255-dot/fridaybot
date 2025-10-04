@@ -317,26 +317,18 @@ React.useEffect(() => {
 
   if (!displayedCard) return;
 
-  // Check if user has sufficient balance for non-demo rooms
-  if (!currentRoom.isDemoRoom && currentRoom.gameStatus !== "playing") {
-    const playerData = currentRoom.players?.[user.telegramId];
-    
-    // If user has a bet but insufficient balance, cancel it
-    if (playerData?.betAmount && playerData.betAmount > 0 && (user.balance || 0) < currentRoom.betAmount) {
-      (async () => {
-        const cardId = displayedCard.id;
-        const success = await cancelBet(cardId);
-        if (success) {
-          setHasBet(false);
-          setGameMessage(t("insufficient_balance"));
-        }
-      })();
-    } else if (playerData?.betAmount && playerData.betAmount > 0) {
-      // If balance is enough and card is claimed, mark bet as active
-      setHasBet(true);
-    }
-  } else if (currentRoom.isDemoRoom) {
-    // For demo rooms, just check if bet is active
+  // If the card is claimed but user balance < room bet amount → cancel bet
+  if (!currentRoom.isDemoRoom && currentRoom.gameStatus !== "playing" && (user.balance || 0) < currentRoom.betAmount) {
+    (async () => {
+      const cardId = displayedCard.id;
+      const success = await cancelBet(cardId);
+      if (success) {
+        setHasBet(false);
+        setGameMessage(t("insufficient_balance"));
+      }
+    })();
+  } else {
+    // If balance is enough and card is claimed, mark bet as active
     const playerData = currentRoom.players?.[user.telegramId];
     if (playerData?.betAmount && playerData.betAmount > 0) {
       setHasBet(true);

@@ -198,7 +198,15 @@ class GameManager {
   // Start number drawing process
   startNumberDrawing(roomId, gameId) {
     const gameRef = ref(rtdb, `games/${gameId}`);
-    
+    const roomRef = ref(rtdb, `rooms/${roomId}`);
+    if (this.numberDrawIntervals.has(roomId)) {
+      const roomSnap =  get(roomRef);
+      const room = roomSnap.val();
+      if (room.gameStatus !== "playing") {
+        this.stopNumberDrawing(roomId);
+        return;
+      }
+    }
     const drawInterval = setInterval(async () => {
       try {
         const gameSnap = await get(gameRef);

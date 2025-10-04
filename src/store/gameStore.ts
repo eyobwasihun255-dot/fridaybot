@@ -107,33 +107,40 @@ export const useGameStore = create<GameState>((set, get) => ({
   connectToServer: () => {
     const { socket } = get();
     if (socket?.connected) return;
-
-    console.log('🔌 Connecting to server:', SERVER_URL);
-    const newSocket = io(SERVER_URL);
-
-    newSocket.on('connect', () => {
-      console.log('✅ Connected to server');
+  
+    console.log("🔌 Connecting to server:", SERVER_URL);
+    const newSocket = io(SERVER_URL, {
+      transports: ["websocket"],
     });
-
-    newSocket.on('disconnect', () => {
-      console.log('❌ Disconnected from server');
+  
+    newSocket.on("connect", () => {
+      console.log("✅ Connected to server");
     });
-
-    newSocket.on('gameStarted', (data: any) => {
-      console.log('🎮 Game started:', data);
+  
+    newSocket.on("disconnect", () => {
+      console.log("❌ Disconnected from server");
+    });
+  
+    // ✅ Game started event (room-specific)
+    newSocket.on("gameStarted", (data: any) => {
       const { currentRoom } = get();
-      if (currentRoom && data.roomId === currentRoom.id) {
-        get().startNumberStream(data.roomId, data.gameId);
-        // Start live balance updates while game is active
-        const { startBalanceListener } = useAuthStore.getState() as any;
-        if (startBalanceListener) startBalanceListener();
-      }
+      if (!currentRoom || data.roomId !== currentRoom.id) return; // ignore other rooms
+  
+      console.log("🎮 Game started:", data);
+      get().startNumberStream(data.roomId, data.gameId);
+  
+      const { startBalanceListener } = useAuthStore.getState() as any;
+      if (startBalanceListener) startBalanceListener();
     });
-
-    newSocket.on('numberDrawn', (data: any) => {
+  
+    // ✅ Number drawn event (room-specific)
+    newSocket.on("numberDrawn", (data: any) => {
       const { number, drawnNumbers, roomId } = data;
-      console.log(`🎲 Number drawn: ${number}`);
-      
+      const { currentRoom } = get();
+      if (!currentRoom || currentRoom.id !== roomId) return; // ignore other rooms
+  
+      console.log(`🎲 [${roomId}] Number drawn: ${number}`);
+  
       set((state) => ({
         displayedCalledNumbers: {
           ...state.displayedCalledNumbers,
@@ -141,67 +148,70 @@ export const useGameStore = create<GameState>((set, get) => ({
         },
       }));
     });
-
-    newSocket.on('gameEnded', (data: any) => {
-      console.log('🔚 Game ended:', data);
+  
+    // ✅ Game ended event (room-specific)
+    newSocket.on("gameEnded", (data: any) => {
+      const { currentRoom } = get();
+      if (!currentRoom || currentRoom.id !== data.roomId) return;
+  
+      console.log("🔚 Game ended:", data);
       get().stopNumberDraw();
-      
+  
       if (data.winner) {
-        // Handle winner announcement
         const { user } = useAuthStore.getState();
         if (user?.telegramId === data.winner) {
           get().setShowWinnerPopup(true);
-          console.log('🔚 showing winner popup', data);
+          console.log("🏆 Showing winner popup");
         } else {
           get().setShowLoserPopup(true);
-          console.log('🔚 showing loser popup', data);
+          console.log("😞 Showing loser popup");
         }
       }
-      // Keep live balance listener; it will reflect payout automatically
     });
-
-    // Winner confirmed immediately after server validates bingo
-    newSocket.on('winnerConfirmed', async (data: any) => {
+  
+    // ✅ Winner confirmed (room-specific)
+    newSocket.on("winnerConfirmed", async (data: any) => {
+      const { roomId, userId, cardId, patternIndices } = data;
+      const { currentRoom } = get();
+      if (!currentRoom || currentRoom.id !== roomId) return;
+  
       try {
-        const { roomId, userId, cardId, patternIndices } = data as any;
         const { user } = useAuthStore.getState();
-
+  
         if (user?.telegramId === userId) {
           // Winner
           get().setShowWinnerPopup(true);
           return;
         }
-
-        // Loser: fetch winner card and show highlighted pattern
+  
+        // Loser: show winner’s card pattern
         const cardRef = ref(rtdb, `rooms/${roomId}/bingoCards/${cardId}`);
         const snap = await fbget(cardRef);
         const card = snap.val();
         if (!card) return;
-        
-        // Store the original numbers and winning pattern indices
-        get().setWinnerCard({ 
-          ...card, 
-          numbers: card.numbers, // Keep original numbers
-          winningPatternIndices: patternIndices // Store pattern indices separately
+  
+        get().setWinnerCard({
+          ...card,
+          numbers: card.numbers,
+          winningPatternIndices: patternIndices,
         });
         get().setShowLoserPopup(true);
       } catch (e) {
-        console.error('Failed to show loser winner card:', e);
+        console.error("Failed to show winner card:", e);
       }
     });
-
-    newSocket.on('roomReset', () => {
-      console.log('♻️ Room reset');
-      // Refresh room data
+  
+    // ✅ Room reset (room-specific)
+    newSocket.on("roomReset", (data: any) => {
       const { currentRoom } = get();
-      if (currentRoom) {
-        get().joinRoom(currentRoom.id);
-      }
+      if (!currentRoom || currentRoom.id !== data.roomId) return;
+  
+      console.log("♻️ Room reset:", data.roomId);
+      get().joinRoom(currentRoom.id);
     });
-
+  
     set({ socket: newSocket });
   },
-
   disconnectFromServer: () => {
     const { socket } = get();
     if (socket) {
@@ -366,91 +376,80 @@ export const useGameStore = create<GameState>((set, get) => ({
     });
   },
 
-  joinRoom: (roomId: string) => {
-    const { socket, currentRoom } = get();
+ 
+joinRoom: (roomId: string) => {
+  const { socket, currentRoom } = get();
 
+  // Ensure socket connection exists
   if (!socket?.connected) {
     get().connectToServer();
   }
 
   if (socket) {
-    // Leave old room before joining new
-    if (currentRoom?.id && currentRoom.id !== roomId) {
-      socket.emit("leaveRoom", currentRoom.id);
-    }
+    // ✅ Leave all previous rooms before joining a new one
+    socket.emit("leaveAllRooms");
     socket.emit("joinRoom", roomId);
+    console.log(`🚀 Joined room ${roomId}`);
   }
-    const roomRef = ref(rtdb, "rooms/" + roomId);
 
-    onValue(roomRef, (snapshot) => {
-      if (!snapshot.exists()) {
-        set({ currentRoom: null });
-        return;
-      }
+  const roomRef = ref(rtdb, "rooms/" + roomId);
 
-      const updatedRoom = { id: roomId, ...snapshot.val() } as Room;
-      set({ currentRoom: updatedRoom });
-      
-      // Always fetch cards
-      get().fetchBingoCards();
+  onValue(roomRef, (snapshot) => {
+    if (!snapshot.exists()) {
+      set({ currentRoom: null });
+      return;
+    }
 
-      // If game is in progress, start number stream to sync drawn numbers
-      if (updatedRoom.gameStatus === "playing" && updatedRoom.gameId) {
-        get().startNumberStream(roomId, updatedRoom.gameId);
-      }
+    const updatedRoom = { id: roomId, ...snapshot.val() } as Room;
+    set({ currentRoom: updatedRoom });
 
-      // Sync called numbers from room data if available (for players rejoining)
-      if (updatedRoom.calledNumbers && updatedRoom.calledNumbers.length > 0) {
-        set((state) => ({
-          displayedCalledNumbers: {
-            ...state.displayedCalledNumbers,
-            [roomId]: updatedRoom.calledNumbers,
-          },
-        }));
-      }
+    // Always fetch cards
+    get().fetchBingoCards();
 
-      // Count active players
-      const activePlayers = updatedRoom.players
-        ? Object.values(updatedRoom.players).filter((p: any) => {
-            if (!p.cardId) return false;
-            if (updatedRoom.isDemoRoom) return true;
-            
-            // For non-demo rooms, count players who have either:
-            // 1. Placed a bet (have betAmount)
-            // 2. Set auto-bet (have a claimed card with auto: true)
-            if (p.betAmount) return true;
-            
-            // Check if their card has auto-bet enabled
-            const card = updatedRoom.bingoCards?.[p.cardId];
-            return !!(card?.auto && card?.claimed && card?.claimedBy === p.telegramId);
-          })
-        : [];
+    // Sync called numbers from room data if available
+    if (updatedRoom.calledNumbers?.length > 0) {
+      set((state) => ({
+        displayedCalledNumbers: {
+          ...state.displayedCalledNumbers,
+          [roomId]: updatedRoom.calledNumbers,
+        },
+      }));
+    }
 
-      const countdownRef = ref(rtdb, `rooms/${roomId}`);
+    // Start stream if game is active
+    if (updatedRoom.gameStatus === "playing" && updatedRoom.gameId) {
+      get().startNumberStream(roomId, updatedRoom.gameId);
+    }
 
-      // Cancel stale countdown if <2 players
-      if (
-        activePlayers.length < 2 &&
-        updatedRoom.gameStatus === "countdown" &&
-        updatedRoom.countdownEndAt > Date.now()
-      ) {
-        (async () => {
-          await update(countdownRef, {
-            gameStatus: "waiting",
-            countdownEndAt: null,
-            countdownStartedBy: null,
-          });
-        })();
-        return;
-      }
+    // Count active players for auto-countdown logic
+    const activePlayers = updatedRoom.players
+      ? Object.values(updatedRoom.players).filter((p: any) => {
+          if (!p.cardId) return false;
+          if (updatedRoom.isDemoRoom) return true;
+          if (p.betAmount) return true;
+          const card = updatedRoom.bingoCards?.[p.cardId];
+          return !!(card?.auto && card?.claimed && card?.claimedBy === p.telegramId);
+        })
+      : [];
 
-      // Server handles countdown logic automatically
-      // Client just listens for state changes
+    const countdownRef = ref(rtdb, `rooms/${roomId}`);
 
-      // Server handles game transitions automatically
-      // Client just listens for state changes
-    });
-  },
+    // Cancel stale countdown if <2 players
+    if (
+      activePlayers.length < 2 &&
+      updatedRoom.gameStatus === "countdown" &&
+      updatedRoom.countdownEndAt > Date.now()
+    ) {
+      (async () => {
+        await update(countdownRef, {
+          gameStatus: "waiting",
+          countdownEndAt: null,
+          countdownStartedBy: null,
+        });
+      })();
+    }
+  });
+},
 
   selectCard: (cardId: string) => {
     const { bingoCards } = get();

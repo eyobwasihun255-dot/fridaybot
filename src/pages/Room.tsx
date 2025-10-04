@@ -141,6 +141,17 @@ React.useEffect(() => {
   connectToServer();
 }, [connectToServer]);
 
+  React.useEffect(() => {
+  const { socket } = useGameStore.getState();
+  const roomIdToLeave = currentRoom?.id;
+
+  return () => {
+    if (socket && roomIdToLeave) {
+      socket.emit("leaveRoom", roomIdToLeave);
+      console.log(`👋 Left room ${roomIdToLeave}`);
+    }
+  };
+}, [currentRoom?.id]);
 
 React.useEffect(() => {
   if (!displayedCard || !currentRoom) return;

@@ -806,12 +806,17 @@ class GameManager {
         clearTimeout(this.countdownTimers.get(roomId));
         this.countdownTimers.delete(roomId);
       }
+  
       const roomRef = ref(rtdb, `rooms/${roomId}`);
       const snap = await get(roomRef);
-      const room = snap.val() || {};
   
-      const bingoCards = room.bingoCards || {};
-      const players = room.players || {};
+      if (!snap.exists()) {
+        console.error(`❌ Room ${roomId} not found`);
+        return;
+      }
+  
+      const room = snap.val() || {};
+      const { bingoCards = {}, players = {}, betAmount = 0 } = room;
   
       // Track players that should be kept
       const keepPlayers = new Set();
@@ -823,16 +828,20 @@ class GameManager {
   
         if (claimedBy && card?.auto === true) {
           const autoUntil = card?.autoUntil || 0;
+          const playerBalance = players[claimedBy]?.balance || 0;
   
-          // ✅ valid auto if still active and less than 24h away
-          if (autoUntil > Date.now() && autoUntil - Date.now() <= 24 * 60 * 60 * 1000) {
+          // ✅ keep only if auto is still active, less than 24h, and player has enough balance
+          const autoActive = autoUntil > Date.now() && autoUntil - Date.now() <= 24 * 60 * 60 * 1000;
+          const hasEnoughBalance = playerBalance >= betAmount;
+  
+          if (autoActive && hasEnoughBalance) {
             keepClaimed = true;
             keepPlayers.add(claimedBy);
           }
         }
   
         if (!keepClaimed) {
-          // Reset the card
+          // Reset the card if not valid auto-bet
           await update(ref(rtdb, `rooms/${roomId}/bingoCards/${cardId}`), {
             claimed: false,
             claimedBy: null,
@@ -876,7 +885,7 @@ class GameManager {
         this.io.to(roomId).emit("roomReset", { roomId });
       }
   
-      console.log(`♻️ Room ${roomId} reset for next game`);
+      console.log(`♻️ Room ${roomId} reset for next game (kept ${keepPlayers.size} players with valid auto-bet & balance)`);
     } catch (error) {
       console.error("Error resetting room:", error);
     }

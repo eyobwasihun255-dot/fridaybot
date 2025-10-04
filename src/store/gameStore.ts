@@ -230,7 +230,10 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     console.log(`🎲 Starting number stream for room: ${roomId}, game: ${gameId}`);
 
-   
+    // Join room for socket events
+    if (socket) {
+      socket.emit('joinRoom', roomId);
+    }
 
     // Listen to Firebase for real-time game updates
     const gameRef = ref(rtdb, `games/${gameId}`);

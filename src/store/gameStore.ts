@@ -52,7 +52,7 @@ interface GameState {
   showWinnerPopup: boolean;
   showLoserPopup: boolean;
   closeWinnerPopup: () => void;
-  stopNumberDraw: () => void;
+  stopNumberDraw: (roomId:string) => void;
   setWinnerCard: (card: BingoCard) => void;
   setShowWinnerPopup: (show: boolean) => void;
   setShowLoserPopup: (show: boolean) => void;
@@ -94,13 +94,20 @@ export const useGameStore = create<GameState>((set, get) => ({
   setShowWinnerPopup: (show: boolean) => set({ showWinnerPopup: show }),
   closeWinnerPopup: () => set({ showWinnerPopup: false }),
 
-  stopNumberDraw: () => {
-    const id = get().drawIntervalId;
-    if (id) {
-      clearInterval(id);
-      set({ drawIntervalId: null });
-    }
-  },
+  stopNumberDraw: (roomId) => {
+  const id = get().drawIntervalId;
+  const { currentRoom, socket } = get();
+
+  if (currentRoom?.id !== roomId) return;
+
+  if (id) {
+    clearInterval(id);
+    set({ drawIntervalId: null });
+  }
+
+  console.log(`🛑 Stopped number draw for room: ${roomId}`);
+},
+
 
   // Connect to server via Socket.IO
   connectToServer: () => {
@@ -144,7 +151,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     newSocket.on('gameEnded', (data: any) => {
       console.log('🔚 Game ended:', data);
-      get().stopNumberDraw();
+      get().stopNumberDraw(data.roomId);
       
       if (data.winner) {
         // Handle winner announcement
@@ -219,14 +226,11 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startNumberStream: (roomId, gameId) => {
     const { currentRoom, socket } = get();
-    if (currentRoom?.gameStatus !== "playing") return;
+    if (currentRoom?.gameStatus !== "playing" && currentRoom?.id !== roomId) return;
 
     console.log(`🎲 Starting number stream for room: ${roomId}, game: ${gameId}`);
 
-    // Join room for socket events
-    if (socket) {
-      socket.emit('joinRoom', roomId);
-    }
+   
 
     // Listen to Firebase for real-time game updates
     const gameRef = ref(rtdb, `games/${gameId}`);
@@ -238,7 +242,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
       // Stop if game ended
       if (gameStatus === "ended") {
-        get().stopNumberDraw();
+        get().stopNumberDraw(roomId);
         return;
       }
 

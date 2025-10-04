@@ -122,32 +122,32 @@ export const useGameStore = create<GameState>((set, get) => ({
     newSocket.on('gameStarted', (data: any) => {
       console.log('🎮 Game started:', data);
       const { currentRoom } = get();
-      // Only process if this is for our current room
       if (currentRoom && data.roomId === currentRoom.id) {
         get().startNumberStream(data.roomId, data.gameId);
         // Start live balance updates while game is active
         const { startBalanceListener } = useAuthStore.getState() as any;
         if (startBalanceListener) startBalanceListener();
-      } else {
-        console.log('🎮 Ignoring gameStarted event for different room:', data.roomId);
+        
+        // Show notification if players were removed
+        if (data.removedPlayerCount > 0) {
+          console.log(`⚠️ ${data.removedPlayerCount} players were removed due to insufficient balance`);
+        }
       }
     });
 
     newSocket.on('numberDrawn', (data: any) => {
-      const { number, drawnNumbers, roomId } = data;
-      console.log(`🎲 Number drawn: ${number} for room: ${roomId}`);
+      const { number, drawnNumbers, roomId, gameId, currentIndex, totalNumbers } = data;
+      console.log(`🎲 Number drawn in room ${roomId}: ${number} (${currentIndex}/${totalNumbers})`);
       
-      // Only update if this is for our current room
+      // Only update if this is for the current room
       const { currentRoom } = get();
-      if (currentRoom && roomId === currentRoom.id) {
+      if (currentRoom && currentRoom.id === roomId) {
         set((state) => ({
           displayedCalledNumbers: {
             ...state.displayedCalledNumbers,
             [roomId]: drawnNumbers,
           },
         }));
-      } else {
-        console.log('🎲 Ignoring numberDrawn event for different room:', roomId);
       }
     });
 
@@ -155,8 +155,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       console.log('🔚 Game ended:', data);
       const { currentRoom } = get();
       
-      // Only process if this is for our current room
-      if (currentRoom && data.roomId === currentRoom.id) {
+      // Only handle if this is for the current room
+      if (currentRoom && currentRoom.id === data.roomId) {
         get().stopNumberDraw();
         
         if (data.winner) {
@@ -171,8 +171,6 @@ export const useGameStore = create<GameState>((set, get) => ({
           }
         }
         // Keep live balance listener; it will reflect payout automatically
-      } else {
-        console.log('🔚 Ignoring gameEnded event for different room:', data.roomId);
       }
     });
 
@@ -182,11 +180,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         const { roomId, userId, cardId, patternIndices } = data as any;
         const { currentRoom } = get();
         
-        // Only process if this is for our current room
-        if (!currentRoom || roomId !== currentRoom.id) {
-          console.log('🎉 Ignoring winnerConfirmed event for different room:', roomId);
-          return;
-        }
+        // Only handle if this is for the current room
+        if (!currentRoom || currentRoom.id !== roomId) return;
         
         const { user } = useAuthStore.getState();
 
@@ -218,12 +213,23 @@ export const useGameStore = create<GameState>((set, get) => ({
       console.log('♻️ Room reset:', data);
       const { currentRoom } = get();
       
-      // Only process if this is for our current room
-      if (currentRoom && data.roomId === currentRoom.id) {
+      // Only handle if this is for the current room
+      if (currentRoom && (!data.roomId || data.roomId === currentRoom.id)) {
         // Refresh room data
         get().joinRoom(currentRoom.id);
-      } else {
-        console.log('♻️ Ignoring roomReset event for different room:', data.roomId);
+      }
+    });
+
+    // Handle players removed due to insufficient balance
+    newSocket.on('playersRemoved', (data: any) => {
+      console.log('🗑️ Players removed:', data);
+      const { currentRoom } = get();
+      
+      // Only handle if this is for the current room
+      if (currentRoom && currentRoom.id === data.roomId) {
+        console.log(`⚠️ ${data.removedPlayers.length} players were removed from room ${data.roomId}`);
+        // Refresh room data to update player list
+        get().joinRoom(currentRoom.id);
       }
     });
 

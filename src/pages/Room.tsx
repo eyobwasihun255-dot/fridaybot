@@ -88,8 +88,7 @@ const Room: React.FC = () => {
 );
 
 const [remaining, setRemaining] = useState<number | null>(null);
-// Only display cards claimed by the current user
-const displayedCard = userCard;
+     const displayedCard = userCard || selectedCard ;
  const cardNumbers = displayedCard?.numbers ?? [];
   const [hasBet, setHasBet] = useState(false);
   const [gameMessage, setGameMessage] = useState('');
@@ -318,18 +317,26 @@ React.useEffect(() => {
 
   if (!displayedCard) return;
 
-  // If the card is claimed but user balance < room bet amount → cancel bet
-  if (!currentRoom.isDemoRoom && currentRoom.gameStatus !== "playing" && (user.balance || 0) < currentRoom.betAmount) {
-    (async () => {
-      const cardId = displayedCard.id;
-      const success = await cancelBet(cardId);
-      if (success) {
-        setHasBet(false);
-        setGameMessage(t("insufficient_balance"));
-      }
-    })();
-  } else {
-    // If balance is enough and card is claimed, mark bet as active
+  // Check if user has sufficient balance for non-demo rooms
+  if (!currentRoom.isDemoRoom && currentRoom.gameStatus !== "playing") {
+    const playerData = currentRoom.players?.[user.telegramId];
+    
+    // If user has a bet but insufficient balance, cancel it
+    if (playerData?.betAmount && playerData.betAmount > 0 && (user.balance || 0) < currentRoom.betAmount) {
+      (async () => {
+        const cardId = displayedCard.id;
+        const success = await cancelBet(cardId);
+        if (success) {
+          setHasBet(false);
+          setGameMessage(t("insufficient_balance"));
+        }
+      })();
+    } else if (playerData?.betAmount && playerData.betAmount > 0) {
+      // If balance is enough and card is claimed, mark bet as active
+      setHasBet(true);
+    }
+  } else if (currentRoom.isDemoRoom) {
+    // For demo rooms, just check if bet is active
     const playerData = currentRoom.players?.[user.telegramId];
     if (playerData?.betAmount && playerData.betAmount > 0) {
       setHasBet(true);
@@ -339,7 +346,7 @@ React.useEffect(() => {
 
 
   const handleCardSelect = (cardId: string) => {
-    if (!hasBet && cardId) {
+    if (!hasBet) {
       selectCard(cardId);
     }
   };
@@ -373,11 +380,7 @@ React.useEffect(() => {
   console.log("✅ Socket connection available, setting up winnerConfirmed listener");
 
   socket.on("winnerConfirmed", async ({ roomId, gameId, userId, cardId, patternIndices }: any) => {
-    // Only process if this is for our current room
-    if (!currentRoom || currentRoom.id !== roomId) {
-      console.log('🎉 Ignoring winnerConfirmed event for different room:', roomId);
-      return;
-    }
+    if (!currentRoom || currentRoom.id !== roomId) return;
   
     if (userId === user?.telegramId) {
       // 🎉 I am the winner
@@ -387,7 +390,7 @@ React.useEffect(() => {
         setShowWinnerPopup(true);
       }
     } else {
-      // ❌ I lost → show winner's card
+      // ❌ I lost → show winner’s card
       const cardSnap = await get(ref(rtdb, `rooms/${roomId}/bingoCards/${cardId}`));
       const cardData = cardSnap.val();
       if (!cardData) return;
@@ -857,32 +860,24 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
 
         {/* Card header */}
         <div className="flex justify-between items-center mb-1">
-          <h3 className="font-bold text-sm">{t('your_cards')}</h3>
-          {bingoCards.filter((card)) ? (
-            <select
-              value={displayedCard?.id ?? ''}
-              onChange={(e) => handleCardSelect(e.target.value)}
-              className="bg-theme-light/20 text-white rounded px-1 py-0.5 text-[10px]"
-              disabled={isBetActive}
-            >
-              <option value="" disabled>Select Card</option>
-              {bingoCards
-                .filter((card) => 
-                  card.claimed && card.claimedBy === user?.telegramId
-                )
-                .slice()
-                .sort((a, b) => a.serialNumber - b.serialNumber)
-                .map((card) => (
-                  <option key={card.id} value={card.id}>
-                    {t('cards')} {card.serialNumber} (Your Card)
-                  </option>
-                ))}
-            </select>
-          ) : (
-            <div className="text-xs text-gray-400 italic">
-              {t('no_cards_claimed')}
-            </div>
-          )}
+          <h3 className="font-bold text-sm">{t('select_card')}</h3>
+         <select
+  value={selectedCard?.id ?? ''}
+  onChange={(e) => handleCardSelect(e.target.value)}
+  className="bg-theme-light/20 text-white rounded px-1 py-0.5 text-[10px]"
+  disabled={isBetActive} // ✅ disable dropdown once bet is active
+>
+  <option value="" disabled>Select Card</option>
+  {bingoCards
+    .slice()
+    .sort((a, b) => a.serialNumber - b.serialNumber)
+    .map((card) => (
+      <option key={card.id} value={card.id} disabled={card.claimed}>
+        {t('cards')} {card.serialNumber} {card.claimed ? "(claimed)" : ""}
+      </option>
+    ))}
+</select>
+
         </div>
 
         {/* Bingo Header */}
@@ -987,10 +982,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
 
   </div>
 ) : (
-  <div className="mt-6 text-center">
-    <p className="text-gray-400 mb-2">{t("no_cards_claimed")}</p>
-    <p className="text-xs text-gray-500">{t("claim_card_first")}</p>
-  </div>
+  <p className="mt-6 text-gray-400">{t("no_card_selected")}</p>
 )}
 
 

@@ -136,16 +136,17 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     newSocket.on('numberDrawn', (data: any) => {
       const { number, drawnNumbers, roomId } = data;
-      console.log(`🎲 Number drawn: ${number}`);
-      
-      set((state) => ({
+      const state = get();
+      if (state.currentRoom?.id !== roomId) return; // ✅ ignore other rooms
+      set((s) => ({
         displayedCalledNumbers: {
-          ...state.displayedCalledNumbers,
+          ...s.displayedCalledNumbers,
           [roomId]: drawnNumbers,
         },
       }));
     });
-
+    
+    
     newSocket.on('gameEnded', (data: any) => {
       console.log('🔚 Game ended:', data);
       get().stopNumberDraw();

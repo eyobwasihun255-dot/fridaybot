@@ -400,22 +400,42 @@ export const useGameStore = create<GameState>((set, get) => ({
     });
   },
 
+  // Fetch only specific room data instead of all rooms
+  fetchRoomData: (roomId: string) => {
+    const roomRef = ref(rtdb, `rooms/${roomId}`);
+    onValue(roomRef, (snapshot) => {
+      if (!snapshot.exists()) {
+        set({ currentRoom: null });
+        return;
+      }
+      const roomData = { id: roomId, ...snapshot.val() } as Room;
+      set({ currentRoom: roomData });
+    });
+  },
+
   joinRoom: (roomId: string) => {
     const { socket, currentRoom } = get();
 
-  if (!socket?.connected) {
-    get().connectToServer();
-  }
-
-  if (socket) {
-    // Leave old room before joining new
-    if (currentRoom?.id && currentRoom.id !== roomId) {
-      socket.emit("leaveRoom", currentRoom.id);
+    if (!socket?.connected) {
+      get().connectToServer();
     }
-    socket.emit("joinRoom", roomId);
-  }
-    const roomRef = ref(rtdb, "rooms/" + roomId);
 
+    if (socket) {
+      // Leave old room before joining new
+      if (currentRoom?.id && currentRoom.id !== roomId) {
+        socket.emit("leaveRoom", currentRoom.id);
+      }
+      socket.emit("joinRoom", roomId);
+    }
+
+    // Use room-specific data fetching instead of global rooms listener
+    get().fetchRoomData(roomId);
+    
+    // Always fetch cards for this specific room
+    get().fetchBingoCards();
+
+    // Listen for room-specific updates
+    const roomRef = ref(rtdb, `rooms/${roomId}`);
     onValue(roomRef, (snapshot) => {
       if (!snapshot.exists()) {
         set({ currentRoom: null });
@@ -425,9 +445,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       const updatedRoom = { id: roomId, ...snapshot.val() } as Room;
       set({ currentRoom: updatedRoom });
       
-      // Always fetch cards
-      get().fetchBingoCards();
-
       // If game is in progress, start number stream to sync drawn numbers
       if (updatedRoom.gameStatus === "playing" && updatedRoom.gameId) {
         get().startNumberStream(roomId, updatedRoom.gameId);
@@ -443,7 +460,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         }));
       }
 
-      // Count active players
+      // Count active players for this specific room
       const activePlayers = updatedRoom.players
         ? Object.values(updatedRoom.players).filter((p: any) => {
             if (!p.cardId) return false;
@@ -460,16 +477,14 @@ export const useGameStore = create<GameState>((set, get) => ({
           })
         : [];
 
-      const countdownRef = ref(rtdb, `rooms/${roomId}`);
-
-      // Cancel stale countdown if <2 players
+      // Cancel stale countdown if <2 players (room-specific)
       if (
         activePlayers.length < 2 &&
         updatedRoom.gameStatus === "countdown" &&
         updatedRoom.countdownEndAt > Date.now()
       ) {
         (async () => {
-          await update(countdownRef, {
+          await update(roomRef, {
             gameStatus: "waiting",
             countdownEndAt: null,
             countdownStartedBy: null,
@@ -477,12 +492,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         })();
         return;
       }
-
-      // Server handles countdown logic automatically
-      // Client just listens for state changes
-
-      // Server handles game transitions automatically
-      // Client just listens for state changes
     });
   },
 
@@ -579,17 +588,18 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
   },
 
-  fetchBingoCards: () => {
+  fetchBingoCards: (roomId?: string) => {
     const { currentRoom } = get();
-    if (!currentRoom) return;
+    const targetRoomId = roomId || currentRoom?.id;
+    if (!targetRoomId) return;
 
-    const cardsRef = ref(rtdb, `rooms/${currentRoom.id}/bingoCards`);
+    const cardsRef = ref(rtdb, `rooms/${targetRoomId}/bingoCards`);
     onValue(cardsRef, (snapshot) => {
       const data = snapshot.val();
       const cards: BingoCard[] = data
         ? Object.entries(data).map(([id, value]: [string, any]) => ({
             id,
-            roomId: currentRoom.id,
+            roomId: targetRoomId,
             ...value,
           }))
         : [];

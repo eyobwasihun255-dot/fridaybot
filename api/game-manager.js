@@ -238,6 +238,9 @@ class GameManager {
       // Start number drawing
       this.startNumberDrawing(roomId, gameId);
 
+      // Send Telegram notifications to players with claimed cards
+      await this.notifyClaimedCardPlayers(roomId, room);
+
       // Notify clients - ensure room-specific emission
       if (this.io) {
         this.io.to(roomId).emit('gameStarted', { 
@@ -868,6 +871,132 @@ class GameManager {
       await update(ref(rtdb, `games/${gameData.id}`), { betsDeducted: true });
     } catch (error) {
       console.error("Error deducting bets:", error);
+    }
+  }
+
+  // Send Telegram notifications to players with claimed cards
+  async notifyClaimedCardPlayers(roomId, room) {
+    try {
+      const bingoCards = room.bingoCards || {};
+      const claimedPlayers = new Set();
+
+      // Find all players who have claimed cards
+      for (const [cardId, card] of Object.entries(bingoCards)) {
+        if (card?.claimed && card?.claimedBy) {
+          claimedPlayers.add(card.claimedBy);
+        }
+      }
+
+      if (claimedPlayers.size === 0) {
+        console.log(`📱 No claimed cards found in room ${roomId}`);
+        return;
+      }
+
+      // Get user data for each claimed player
+      const notifications = [];
+      for (const playerId of claimedPlayers) {
+        try {
+          const userRef = ref(rtdb, `users/${playerId}`);
+          const userSnap = await get(userRef);
+          const user = userSnap.val();
+
+          if (user) {
+            notifications.push({
+              telegramId: playerId,
+              username: user.username || `user_${playerId}`,
+              language: user.language || user.lang || 'en'
+            });
+          }
+        } catch (error) {
+          console.error(`Error fetching user ${playerId}:`, error);
+        }
+      }
+
+      // Send notifications
+      for (const notification of notifications) {
+        await this.sendTelegramNotification(notification, roomId, room);
+      }
+
+      console.log(`📱 Sent ${notifications.length} Telegram notifications for room ${roomId}`);
+    } catch (error) {
+      console.error("Error sending Telegram notifications:", error);
+    }
+  }
+
+  // Send individual Telegram notification
+  async sendTelegramNotification(player, roomId, room) {
+    try {
+      const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+      if (!TOKEN) {
+        console.error("❌ Telegram bot token not configured");
+        return;
+      }
+
+      const roomName = room.name || `Room ${roomId}`;
+      const betAmount = room.betAmount || 0;
+      const isDemoRoom = room.isDemoRoom;
+
+      // Create signed URL for the mini app
+      const crypto = await import('crypto');
+      const secret = TOKEN;
+      const sig = crypto
+        .createHmac("sha256", secret)
+        .update(player.telegramId)
+        .digest("hex");
+
+      const baseUrl = process.env.WEBAPP_URL || "https://fridaybot-1.onrender.com";
+      const webAppUrl = `${baseUrl}/room/${roomId}?id=${player.telegramId}&sig=${sig}`;
+
+      // Prepare message based on language
+      const messages = {
+        en: {
+          title: "🎮 Game Started!",
+          message: `🎯 A new Bingo game has started in ${roomName}!\n\n💰 Bet Amount: ${betAmount} ${isDemoRoom ? '(Demo)' : ''}\n\n⚡ Join quickly to participate!\n\n🎲 Numbers are being drawn every 5 seconds.`,
+          button: "🎮 Join Game Now"
+        },
+        am: {
+          title: "🎮 ጨዋታ ጀመረ!",
+          message: `🎯 በ${roomName} ውስጥ አዲስ ቢንጎ ጨዋታ ጀመረ!\n\n💰 የጠፋው ገንዘብ: ${betAmount} ${isDemoRoom ? '(ዲሞ)' : ''}\n\n⚡ በፍጥነት ይግቡ!\n\n🎲 ቁጥሮች በየ 5 ሰከንድ ይተላለፋሉ።`,
+          button: "🎮 ጨዋታ ይጫወቱ"
+        }
+      };
+
+      const lang = player.language === 'am' ? 'am' : 'en';
+      const msg = messages[lang];
+
+      const keyboard = {
+        inline_keyboard: [
+          [
+            {
+              text: msg.button,
+              web_app: { url: webAppUrl },
+            },
+          ],
+        ],
+      };
+
+      const payload = {
+        chat_id: player.telegramId,
+        text: `${msg.title}\n\n${msg.message}`,
+        reply_markup: keyboard,
+        parse_mode: "HTML"
+      };
+
+      const response = await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+      
+      if (result.ok) {
+        console.log(`📱 Sent notification to ${player.username} (${player.telegramId})`);
+      } else {
+        console.error(`❌ Failed to send notification to ${player.telegramId}:`, result.description);
+      }
+    } catch (error) {
+      console.error(`Error sending notification to ${player.telegramId}:`, error);
     }
   }
 

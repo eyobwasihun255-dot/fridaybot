@@ -462,20 +462,12 @@ console.log('🎯 Card search result:', {
   },
 
   selectCard: (cardId: string) => {
-    const { currentRoom, bingoCardsByRoom } = get();
-    if (!currentRoom?.id) return;
-  
-    const roomCards = bingoCardsByRoom[currentRoom.id] || [];
-    const card = roomCards.find(c => c.id === cardId);
-  
+    const { bingoCards } = get();
+    const card = bingoCards.find(c => c.id === cardId);
     if (card && !card.claimed) {
       set({ selectedCard: card });
-      console.log(`🎯 Selected card ${card.serialNumber} in room ${currentRoom.id}`);
-    } else {
-      console.warn(`⚠️ Card ${cardId} not found or already claimed in room ${currentRoom.id}`);
     }
   },
-  
 
   placeBet: async () => {
     const { currentRoom, selectedCard } = get();

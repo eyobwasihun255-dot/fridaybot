@@ -385,79 +385,61 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
  
-joinRoom: (roomId: string) => {
-  const { socket, currentRoom } = get();
-
-  // Ensure socket connection exists
-  if (!socket?.connected) {
-    get().connectToServer();
-  }
-
-  if (socket) {
-    // ✅ Leave all previous rooms before joining a new one
-    socket.emit("leaveAllRooms");
-    socket.emit("joinRoom", roomId);
-    console.log(`🚀 Joined room ${roomId}`);
-  }
-
-  const roomRef = ref(rtdb, `rooms/${roomId}`);
-
-  // Remove previous Firebase listeners to avoid multiple triggers
-  off(roomRef);
-
-  onValue(roomRef, (snapshot) => {
-    if (!snapshot.exists()) {
-      set({ currentRoom: null });
-      return;
+  joinRoom: (roomId: string) => {
+    const { socket } = get();
+  
+    if (!socket?.connected) {
+      get().connectToServer();
     }
-    const updatedRoom = { id: roomId, ...snapshot.val() } as Room;
-    set({ currentRoom: updatedRoom });
-    get().fetchBingoCards();
-
-    // ✅ When joining, update numbers once (from Firebase)
-    if (updatedRoom.calledNumbers?.length > 0) {
-      set((state) => ({
-        displayedCalledNumbers: {
-          ...state.displayedCalledNumbers,
-          [roomId]: updatedRoom.calledNumbers,
-        },
-      }));
+  
+    if (socket) {
+      socket.emit("leaveAllRooms");
+      socket.emit("joinRoom", roomId);
+      console.log(`🚀 Joined room ${roomId}`);
     }
-    
-    // Start stream if game is active
-    if (updatedRoom.gameStatus === "playing" && updatedRoom.gameId) {
-      get().startNumberStream(roomId, updatedRoom.gameId);
-    }
+  
+    // ✅ Immediately set currentRoom placeholder
+    set({
+      currentRoom: { id: roomId, name: "", betAmount: 0, gameStatus: "waiting" } as any,
+    });
+  
+    // Clean previous Firebase listeners
+    const roomRef = ref(rtdb, `rooms/${roomId}`);
+    // Before off(roomRef), remove old listener from previous room
+const { currentRoom } = get();
+if (currentRoom?.id && currentRoom.id !== roomId) {
+  off(ref(rtdb, `rooms/${currentRoom.id}`));
+  console.log(`🧹 Cleaned up listener for room ${currentRoom.id}`);
+}
 
-    // Count active players for auto-countdown logic
-    const activePlayers = updatedRoom.players
-      ? Object.values(updatedRoom.players).filter((p: any) => {
-          if (!p.cardId) return false;
-          if (updatedRoom.isDemoRoom) return true;
-          if (p.betAmount) return true;
-          const card = updatedRoom.bingoCards?.[p.cardId];
-          return !!(card?.auto && card?.claimed && card?.claimedBy === p.telegramId);
-        })
-      : [];
-
-    const countdownRef = ref(rtdb, `rooms/${roomId}`);
-
-    // Cancel stale countdown if <2 players
-    if (
-      activePlayers.length < 2 &&
-      updatedRoom.gameStatus === "countdown" &&
-      updatedRoom.countdownEndAt > Date.now()
-    ) {
-      (async () => {
-        await update(countdownRef, {
-          gameStatus: "waiting",
-          countdownEndAt: null,
-          countdownStartedBy: null,
-        });
-      })();
-    }
-  });
-},
+    off(roomRef);
+  
+    onValue(roomRef, (snapshot) => {
+      if (!snapshot.exists()) {
+        set({ currentRoom: null });
+        return;
+      }
+  
+      const updatedRoom = { id: roomId, ...snapshot.val() } as Room;
+      set({ currentRoom: updatedRoom });
+  
+      get().fetchBingoCards();
+  
+      if (updatedRoom.calledNumbers?.length > 0) {
+        set((state) => ({
+          displayedCalledNumbers: {
+            ...state.displayedCalledNumbers,
+            [roomId]: updatedRoom.calledNumbers,
+          },
+        }));
+      }
+  
+      if (updatedRoom.gameStatus === "playing" && updatedRoom.gameId) {
+        get().startNumberStream(roomId, updatedRoom.gameId);
+      }
+    });
+  },
+  
 
   selectCard: (cardId: string) => {
     const { bingoCards } = get();

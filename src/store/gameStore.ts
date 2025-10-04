@@ -132,7 +132,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     newSocket.on('numberDrawn', (data: any) => {
       const { number, drawnNumbers, roomId } = data;
       const { currentRoom } = get();
-      console.log(`🎲 Number drawn: ${number}`);
+      console.log(`🎲 Number drawn: ${number} room:currentRoom.id:${currentRoom?.id} roomId:${roomId}`);
       if (currentRoom && roomId === currentRoom.id) {
       set((state) => ({
         displayedCalledNumbers: {

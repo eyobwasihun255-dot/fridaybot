@@ -38,7 +38,7 @@ class GameManager {
       console.log(`🎮 Room ${roomId} snapshot:`);
   
       // Check if countdown already active
-      const countdownActive = !!room.countdownEndAt && room.countdownEndAt > Date.now();
+      const countdownActive = room.gameStatus === 'countdown';
       if (countdownActive) {
         console.log(`⏰ Countdown already active for room ${roomId}`);
         return { success: false, message: 'Countdown already active' };

@@ -137,10 +137,17 @@ export const useGameStore = create<GameState>((set, get) => ({
     newSocket.on("numberDrawn", (data: any) => {
       const { number, drawnNumbers, roomId } = data;
       const { currentRoom } = get();
-      if (!currentRoom || currentRoom.id !== roomId) return; // ignore other rooms
-  
+    
+      // 🔒 Ignore updates if user is not currently viewing that room
+      if (!currentRoom || currentRoom.id !== roomId) {
+        console.log(`⚠️ Ignoring numberDrawn from ${roomId} — user in ${currentRoom?.id}`);
+        return;
+      }
+    
+      // ✅ Only update the currently open room
       console.log(`🎲 [${roomId}] Number drawn: ${number}`);
-  
+    
+      // Update state ONLY for the current room
       set((state) => ({
         displayedCalledNumbers: {
           ...state.displayedCalledNumbers,
@@ -148,6 +155,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         },
       }));
     });
+    
   
     // ✅ Game ended event (room-specific)
     newSocket.on("gameEnded", (data: any) => {
@@ -392,21 +400,21 @@ joinRoom: (roomId: string) => {
     console.log(`🚀 Joined room ${roomId}`);
   }
 
-  const roomRef = ref(rtdb, "rooms/" + roomId);
+  const roomRef = ref(rtdb, `rooms/${roomId}`);
+
+  // Remove previous Firebase listeners to avoid multiple triggers
+  off(roomRef);
 
   onValue(roomRef, (snapshot) => {
     if (!snapshot.exists()) {
       set({ currentRoom: null });
       return;
     }
-
     const updatedRoom = { id: roomId, ...snapshot.val() } as Room;
     set({ currentRoom: updatedRoom });
-
-    // Always fetch cards
     get().fetchBingoCards();
 
-    // Sync called numbers from room data if available
+    // ✅ When joining, update numbers once (from Firebase)
     if (updatedRoom.calledNumbers?.length > 0) {
       set((state) => ({
         displayedCalledNumbers: {
@@ -415,7 +423,7 @@ joinRoom: (roomId: string) => {
         },
       }));
     }
-
+    
     // Start stream if game is active
     if (updatedRoom.gameStatus === "playing" && updatedRoom.gameId) {
       get().startNumberStream(roomId, updatedRoom.gameId);

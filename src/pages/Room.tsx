@@ -858,9 +858,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
         {/* Card header */}
         <div className="flex justify-between items-center mb-1">
           <h3 className="font-bold text-sm">{t('your_cards')}</h3>
-          {bingoCards.filter((card) => 
-            card.claimed && card.claimedBy === user?.telegramId
-          ).length > 0 ? (
+          {bingoCards.filter((card)) ? (
             <select
               value={displayedCard?.id ?? ''}
               onChange={(e) => handleCardSelect(e.target.value)}

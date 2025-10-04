@@ -12,6 +12,8 @@ interface BingoCard {
   claimed: boolean;
   claimedBy?: string;
   roomId?: string;
+  auto?: boolean;
+  autoUntil?: number;
   winningPatternIndices?: number[]; // For displaying winning pattern in loser popup
 }
 
@@ -20,6 +22,7 @@ interface Room {
   name: string;
   betAmount: number;
   maxPlayers: number;
+  bingoCards: BingoCard[];
   isActive: boolean;
   isDemoRoom: boolean;
   currentPlayers: number;
@@ -41,6 +44,7 @@ interface GameState {
   currentRoom: Room | null;
   selectedCard: BingoCard | null;
   bingoCards: BingoCard[];
+  bingoCardsByRoom: { [roomId: string]: BingoCard[] };
   loading: boolean;
   startingGame: boolean;
   fetchRooms: () => void;
@@ -89,7 +93,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   startingGame: false,
   socket: null,
   serverUrl: SERVER_URL,
-
+  bingoCardsByRoom: {} as Record<string, BingoCard[]>,
   setShowLoserPopup: (show: boolean) => set({ showLoserPopup: show }),
   setWinnerCard: (card) => set({ winnerCard: card, showWinnerPopup: false }),
   setShowWinnerPopup: (show: boolean) => set({ showWinnerPopup: show }),
@@ -273,19 +277,24 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
 
       // Find user's card (either selected or claimed)
-      const userCard = get().bingoCards.find(
-        (card) =>
-          card.roomId === currentRoom.id &&
-          card.claimed &&
-          card.claimedBy === user.telegramId
-      );
+      const roomId = currentRoom?.id;
+const allCards = get().bingoCardsByRoom[roomId] || [];
 
-      console.log('🎯 Card search result:', { 
-        hasUserCard: !!userCard, 
-        userCardId: userCard?.id,
-        totalBingoCards: get().bingoCards.length,
-        userTelegramId: user.telegramId
-      });
+const userCard = allCards.find(
+  (card) =>
+    card.roomId === roomId &&
+    card.claimed &&
+    card.claimedBy === user.telegramId
+);
+
+console.log('🎯 Card search result:', {
+  hasUserCard: !!userCard,
+  userCardId: userCard?.id,
+  totalBingoCards: allCards.length,
+  roomId,
+  userTelegramId: user.telegramId
+});
+
 
       // If no claimed card found, use selected card
       const cardToUse = userCard || selectedCard;
@@ -453,12 +462,20 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   selectCard: (cardId: string) => {
-    const { bingoCards } = get();
-    const card = bingoCards.find(c => c.id === cardId);
+    const { currentRoom, bingoCardsByRoom } = get();
+    if (!currentRoom?.id) return;
+  
+    const roomCards = bingoCardsByRoom[currentRoom.id] || [];
+    const card = roomCards.find(c => c.id === cardId);
+  
     if (card && !card.claimed) {
       set({ selectedCard: card });
+      console.log(`🎯 Selected card ${card.serialNumber} in room ${currentRoom.id}`);
+    } else {
+      console.warn(`⚠️ Card ${cardId} not found or already claimed in room ${currentRoom.id}`);
     }
   },
+  
 
   placeBet: async () => {
     const { currentRoom, selectedCard } = get();

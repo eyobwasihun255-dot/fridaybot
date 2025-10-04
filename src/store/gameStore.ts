@@ -276,8 +276,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         return { success: false, message: 'Missing required data' };
       }
 
-      // find claimed card in the current room (from bingoCardsByRoom)
-      const cards = get().bingoCardsByRoom[currentRoom.id] || [];
+      const allCards = get().bingoCardsByRoom || {};
+const cards = allCards[currentRoom.id] || [];
+
       const userCard = cards.find(
         (card) => card.claimed && card.claimedBy === user.telegramId
       );
@@ -400,8 +401,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     const { currentRoom } = get();
     if (!currentRoom) return;
 
-    const cards = get().bingoCardsByRoom[currentRoom.id] || [];
-    const card = cards.find((c) => c.id === cardId);
+    const allCards = get().bingoCardsByRoom || {};
+const cards = allCards[currentRoom.id] || [];
+const card = cards.find((c) => c.id === cardId);
+
     if (card && !card.claimed) {
       // ensure selectedCard stores roomId for later ops
       set({ selectedCard: { ...card, roomId: currentRoom.id } });

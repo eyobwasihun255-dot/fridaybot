@@ -425,7 +425,21 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (currentRoom?.id && currentRoom.id !== roomId) {
         socket.emit("leaveRoom", currentRoom.id);
       }
-      socket.emit("joinRoom", roomId);
+      // Ensure client leaves old rooms before joining a new one
+if (socket && socket.rooms) {
+  for (const room of socket.rooms) {
+    if (room !== socket.id) {
+      socket.emit("leaveRoom", room);
+      socket.leave(room);
+      console.log(`👋 Left previous room ${room}`);
+    }
+  }
+}
+
+// Then join the current one
+socket.emit("joinRoom", roomId);
+console.log(`👥 Joined room ${roomId}`);
+
     }
 
     // Use room-specific data fetching instead of global rooms listener

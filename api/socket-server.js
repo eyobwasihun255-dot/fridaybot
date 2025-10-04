@@ -18,9 +18,17 @@ export default function createSocketServer(app) {
     console.log('🔌 Client connected:', socket.id);
 
     // Handle room joining
-    socket.on('joinRoom', (roomId) => {
+    socket.on("joinRoom", (roomId) => {
+      // Leave all previous rooms before joining new one
+      for (const room of socket.rooms) {
+        if (room !== socket.id) {
+          socket.leave(room);
+          console.log(`👋 ${socket.id} left ${room}`);
+        }
+      }
+  
       socket.join(roomId);
-      console.log(`👥 Socket ${socket.id} joined room ${roomId}`);
+      console.log(`👥 ${socket.id} joined ${roomId}`);
     });
 
     // Handle room leaving

@@ -88,7 +88,8 @@ const Room: React.FC = () => {
 );
 
 const [remaining, setRemaining] = useState<number | null>(null);
-     const displayedCard = userCard || selectedCard ;
+// Only display cards claimed by the current user
+const displayedCard = userCard;
  const cardNumbers = displayedCard?.numbers ?? [];
   const [hasBet, setHasBet] = useState(false);
   const [gameMessage, setGameMessage] = useState('');
@@ -338,7 +339,7 @@ React.useEffect(() => {
 
 
   const handleCardSelect = (cardId: string) => {
-    if (!hasBet) {
+    if (!hasBet && cardId) {
       selectCard(cardId);
     }
   };
@@ -372,7 +373,11 @@ React.useEffect(() => {
   console.log("✅ Socket connection available, setting up winnerConfirmed listener");
 
   socket.on("winnerConfirmed", async ({ roomId, gameId, userId, cardId, patternIndices }: any) => {
-    if (!currentRoom || currentRoom.id !== roomId) return;
+    // Only process if this is for our current room
+    if (!currentRoom || currentRoom.id !== roomId) {
+      console.log('🎉 Ignoring winnerConfirmed event for different room:', roomId);
+      return;
+    }
   
     if (userId === user?.telegramId) {
       // 🎉 I am the winner
@@ -382,7 +387,7 @@ React.useEffect(() => {
         setShowWinnerPopup(true);
       }
     } else {
-      // ❌ I lost → show winner’s card
+      // ❌ I lost → show winner's card
       const cardSnap = await get(ref(rtdb, `rooms/${roomId}/bingoCards/${cardId}`));
       const cardData = cardSnap.val();
       if (!cardData) return;
@@ -852,24 +857,34 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
 
         {/* Card header */}
         <div className="flex justify-between items-center mb-1">
-          <h3 className="font-bold text-sm">{t('select_card')}</h3>
-         <select
-  value={selectedCard?.id ?? ''}
-  onChange={(e) => handleCardSelect(e.target.value)}
-  className="bg-theme-light/20 text-white rounded px-1 py-0.5 text-[10px]"
-  disabled={isBetActive} // ✅ disable dropdown once bet is active
->
-  <option value="" disabled>Select Card</option>
-  {bingoCards
-    .slice()
-    .sort((a, b) => a.serialNumber - b.serialNumber)
-    .map((card) => (
-      <option key={card.id} value={card.id} disabled={card.claimed}>
-        {t('cards')} {card.serialNumber} {card.claimed ? "(claimed)" : ""}
-      </option>
-    ))}
-</select>
-
+          <h3 className="font-bold text-sm">{t('your_cards')}</h3>
+          {bingoCards.filter((card) => 
+            card.claimed && card.claimedBy === user?.telegramId
+          ).length > 0 ? (
+            <select
+              value={displayedCard?.id ?? ''}
+              onChange={(e) => handleCardSelect(e.target.value)}
+              className="bg-theme-light/20 text-white rounded px-1 py-0.5 text-[10px]"
+              disabled={isBetActive}
+            >
+              <option value="" disabled>Select Card</option>
+              {bingoCards
+                .filter((card) => 
+                  card.claimed && card.claimedBy === user?.telegramId
+                )
+                .slice()
+                .sort((a, b) => a.serialNumber - b.serialNumber)
+                .map((card) => (
+                  <option key={card.id} value={card.id}>
+                    {t('cards')} {card.serialNumber} (Your Card)
+                  </option>
+                ))}
+            </select>
+          ) : (
+            <div className="text-xs text-gray-400 italic">
+              {t('no_cards_claimed')}
+            </div>
+          )}
         </div>
 
         {/* Bingo Header */}
@@ -974,7 +989,10 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
 
   </div>
 ) : (
-  <p className="mt-6 text-gray-400">{t("no_card_selected")}</p>
+  <div className="mt-6 text-center">
+    <p className="text-gray-400 mb-2">{t("no_cards_claimed")}</p>
+    <p className="text-xs text-gray-500">{t("claim_card_first")}</p>
+  </div>
 )}
 
 

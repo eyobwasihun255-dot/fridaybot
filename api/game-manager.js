@@ -1,5 +1,5 @@
 import { rtdb } from "../bot/firebaseConfig.js";
-import { ref, get, set, update, runTransaction, onValue } from "firebase/database";
+import { ref, get, set, update, runTransaction, onValue, remove } from "firebase/database";
 import { v4 as uuidv4 } from "uuid";
 
 class GameManager {
@@ -44,15 +44,17 @@ class GameManager {
         return { success: false, message: 'Countdown already active' };
       }
   
-      // Count players
+      // Count players with sufficient balance
       const players = Object.values(room.players || {});
+      const validPlayers = await this.validatePlayersForCountdown(roomId, room);
+      
       console.log(
-        `🎮 startCountdown for room ${roomId}: players=${players.length}, gameStatus=${room.gameStatus}, countdownActive=${countdownActive}`
+        `🎮 startCountdown for room ${roomId}: totalPlayers=${players.length}, validPlayers=${validPlayers.length}, gameStatus=${room.gameStatus}, countdownActive=${countdownActive}`
       );
-  
-      if (players.length < 2) {
-        console.log(`❌ Not enough players for room ${roomId}: ${players.length} players`);
-        return { success: false, message: 'Not enough players' };
+
+      if (validPlayers.length < 2) {
+        console.log(`❌ Not enough players with sufficient balance for room ${roomId}: ${validPlayers.length} players`);
+        return { success: false, message: 'Not enough players with sufficient balance' };
       }
   
       if (room.gameStatus !== 'waiting') {
@@ -81,9 +83,10 @@ class GameManager {
       }, durationMs);
       this.countdownTimers.set(roomId, tid);
   
-      // Notify clients
+      // Notify clients in this specific room only
       if (this.io) {
         this.io.to(roomId).emit('countdownStarted', { roomId, countdownEndAt });
+        console.log(`📡 Emitted countdownStarted to room ${roomId}`);
       }
   
       console.log(`⏰ Started countdown for room ${roomId} by ${startedBy || 'unknown'}`);
@@ -106,7 +109,10 @@ class GameManager {
         countdownEndAt: null,
         countdownStartedBy: null,
       });
-      if (this.io) this.io.to(roomId).emit('countdownCancelled', { roomId });
+      if (this.io) {
+        this.io.to(roomId).emit('countdownCancelled', { roomId });
+        console.log(`📡 Emitted countdownCancelled to room ${roomId}`);
+      }
       return { success: true };
     } catch (err) {
       console.error('Error cancelling countdown:', err);
@@ -125,8 +131,19 @@ class GameManager {
         throw new Error("Room not in countdown state");
       }
 
+      // Validate players and remove those with insufficient balance
+      const validatedPlayers = await this.validateAndCleanPlayers(roomId, room);
+      
+      if (validatedPlayers.length < 2) {
+        // Not enough players after validation, cancel countdown
+        await this.cancelCountdown(roomId);
+        throw new Error("Not enough players with sufficient balance to start game");
+      }
+
       const gameId = uuidv4();
-      const playerIds = Object.keys(room.players || {});
+      const playerIds = Object.keys(room.players || {}).filter(playerId => 
+        validatedPlayers.some(p => p.telegramId === playerId)
+      );
       
       if (playerIds.length < 2) {
         throw new Error("Not enough players to start game");
@@ -183,9 +200,10 @@ class GameManager {
       // Start number drawing
       this.startNumberDrawing(roomId, gameId);
 
-      // Notify clients
+      // Notify clients in this specific room only
       if (this.io) {
         this.io.to(roomId).emit('gameStarted', { roomId, gameId });
+        console.log(`📡 Emitted gameStarted to room ${roomId}`);
       }
 
       return { success: true, gameId, drawnNumbers, winners: gameData.winners };
@@ -232,13 +250,14 @@ class GameManager {
           calledNumbers: newDrawnNumbers
         });
 
-        // Notify clients
+        // Notify clients in this specific room only
         if (this.io) {
           this.io.to(roomId).emit('numberDrawn', {
             number: currentNumber,
             drawnNumbers: newDrawnNumbers,
             roomId
           });
+          console.log(`📡 Emitted numberDrawn to room ${roomId}: ${currentNumber}`);
         }
 
         // Auto-bingo for auto players
@@ -378,7 +397,7 @@ class GameManager {
         }
       }
 
-      // Notify clients and include nextGameCountdownEndAt so clients can transition immediately
+      // Notify clients in this specific room only and include nextGameCountdownEndAt so clients can transition immediately
       if (this.io) {
         this.io.to(roomId).emit('gameEnded', {
           roomId,
@@ -387,6 +406,7 @@ class GameManager {
           winners: gameData.winners || [],
           nextGameCountdownEndAt,
         });
+        console.log(`📡 Emitted gameEnded to room ${roomId}: ${reason}`);
       }
 
       console.log(`🔚 Game ended in room ${roomId}: ${reason}`);
@@ -503,7 +523,7 @@ class GameManager {
           cardId,
           patternIndices: pattern,
         };
-        console.log('🎉 Emitting winnerConfirmed event:', eventData);
+        console.log('🎉 Emitting winnerConfirmed event to room:', roomId, eventData);
         this.io.to(roomId).emit('winnerConfirmed', eventData);
       } else {
         console.error('❌ Cannot emit winnerConfirmed event: Socket.IO instance not set!');
@@ -793,6 +813,129 @@ class GameManager {
     return arr;
   }
 
+  // Validate players for countdown (check balance but don't remove yet)
+  async validatePlayersForCountdown(roomId, room) {
+    try {
+      const players = room.players || {};
+      const betAmount = room.betAmount || 0;
+      const validPlayers = [];
+
+      // Check each player's balance
+      for (const [playerId, playerData] of Object.entries(players)) {
+        try {
+          // Skip demo rooms
+          if (room.isDemoRoom) {
+            validPlayers.push({ telegramId: playerId, ...playerData });
+            continue;
+          }
+
+          // Get user balance
+          const userRef = ref(rtdb, `users/${playerId}`);
+          const userSnap = await get(userRef);
+          const user = userSnap.val();
+
+          if (!user) {
+            console.log(`❌ User ${playerId} not found for countdown validation`);
+            continue;
+          }
+
+          const userBalance = user.balance || 0;
+
+          if (userBalance >= betAmount) {
+            // Player has sufficient balance
+            validPlayers.push({ telegramId: playerId, ...playerData });
+          } else {
+            console.log(`❌ Player ${playerId} has insufficient balance for countdown: ${userBalance} < ${betAmount}`);
+          }
+        } catch (error) {
+          console.error(`Error validating player ${playerId} for countdown:`, error);
+        }
+      }
+
+      return validPlayers;
+    } catch (error) {
+      console.error("Error validating players for countdown:", error);
+      return [];
+    }
+  }
+
+  // Validate players and remove those with insufficient balance
+  async validateAndCleanPlayers(roomId, room) {
+    try {
+      const players = room.players || {};
+      const betAmount = room.betAmount || 0;
+      const validatedPlayers = [];
+      const playersToRemove = [];
+
+      // Check each player's balance
+      for (const [playerId, playerData] of Object.entries(players)) {
+        try {
+          // Skip demo rooms
+          if (room.isDemoRoom) {
+            validatedPlayers.push({ telegramId: playerId, ...playerData });
+            continue;
+          }
+
+          // Get user balance
+          const userRef = ref(rtdb, `users/${playerId}`);
+          const userSnap = await get(userRef);
+          const user = userSnap.val();
+
+          if (!user) {
+            console.log(`❌ User ${playerId} not found, removing from room`);
+            playersToRemove.push(playerId);
+            continue;
+          }
+
+          const userBalance = user.balance || 0;
+
+          if (userBalance < betAmount) {
+            console.log(`❌ Player ${playerId} has insufficient balance: ${userBalance} < ${betAmount}, removing from room`);
+            playersToRemove.push(playerId);
+            continue;
+          }
+
+          // Player has sufficient balance
+          validatedPlayers.push({ telegramId: playerId, ...playerData });
+        } catch (error) {
+          console.error(`Error validating player ${playerId}:`, error);
+          playersToRemove.push(playerId);
+        }
+      }
+
+      // Remove players with insufficient balance
+      if (playersToRemove.length > 0) {
+        console.log(`🧹 Removing ${playersToRemove.length} players with insufficient balance from room ${roomId}`);
+        
+        for (const playerId of playersToRemove) {
+          // Remove player from room
+          const playerRef = ref(rtdb, `rooms/${roomId}/players/${playerId}`);
+          await remove(playerRef);
+
+          // Unclaim their card
+          const playerData = players[playerId];
+          if (playerData?.cardId) {
+            const cardRef = ref(rtdb, `rooms/${roomId}/bingoCards/${playerData.cardId}`);
+            await update(cardRef, {
+              claimed: false,
+              claimedBy: null,
+              auto: false,
+              autoUntil: null,
+            });
+          }
+
+          console.log(`✅ Removed player ${playerId} from room ${roomId}`);
+        }
+      }
+
+      console.log(`✅ Validated ${validatedPlayers.length} players for room ${roomId}`);
+      return validatedPlayers;
+    } catch (error) {
+      console.error("Error validating players:", error);
+      return [];
+    }
+  }
+
   // Reset room for next game
   async resetRoom(roomId) {
     try {
@@ -871,9 +1014,10 @@ class GameManager {
         await update(roomRef, updates);
       }
   
-      // Notify clients
+      // Notify clients in this specific room only
       if (this.io) {
         this.io.to(roomId).emit("roomReset", { roomId });
+        console.log(`📡 Emitted roomReset to room ${roomId}`);
       }
   
       console.log(`♻️ Room ${roomId} reset for next game`);

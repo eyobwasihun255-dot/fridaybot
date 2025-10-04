@@ -122,48 +122,72 @@ export const useGameStore = create<GameState>((set, get) => ({
     newSocket.on('gameStarted', (data: any) => {
       console.log('🎮 Game started:', data);
       const { currentRoom } = get();
+      // Only process if this is for our current room
       if (currentRoom && data.roomId === currentRoom.id) {
         get().startNumberStream(data.roomId, data.gameId);
         // Start live balance updates while game is active
         const { startBalanceListener } = useAuthStore.getState() as any;
         if (startBalanceListener) startBalanceListener();
+      } else {
+        console.log('🎮 Ignoring gameStarted event for different room:', data.roomId);
       }
     });
 
     newSocket.on('numberDrawn', (data: any) => {
       const { number, drawnNumbers, roomId } = data;
-      console.log(`🎲 Number drawn: ${number}`);
+      console.log(`🎲 Number drawn: ${number} for room: ${roomId}`);
       
-      set((state) => ({
-        displayedCalledNumbers: {
-          ...state.displayedCalledNumbers,
-          [roomId]: drawnNumbers,
-        },
-      }));
+      // Only update if this is for our current room
+      const { currentRoom } = get();
+      if (currentRoom && roomId === currentRoom.id) {
+        set((state) => ({
+          displayedCalledNumbers: {
+            ...state.displayedCalledNumbers,
+            [roomId]: drawnNumbers,
+          },
+        }));
+      } else {
+        console.log('🎲 Ignoring numberDrawn event for different room:', roomId);
+      }
     });
 
     newSocket.on('gameEnded', (data: any) => {
       console.log('🔚 Game ended:', data);
-      get().stopNumberDraw();
+      const { currentRoom } = get();
       
-      if (data.winner) {
-        // Handle winner announcement
-        const { user } = useAuthStore.getState();
-        if (user?.telegramId === data.winner) {
-          get().setShowWinnerPopup(true);
-          console.log('🔚 showing winner popup', data);
-        } else {
-          get().setShowLoserPopup(true);
-          console.log('🔚 showing loser popup', data);
+      // Only process if this is for our current room
+      if (currentRoom && data.roomId === currentRoom.id) {
+        get().stopNumberDraw();
+        
+        if (data.winner) {
+          // Handle winner announcement
+          const { user } = useAuthStore.getState();
+          if (user?.telegramId === data.winner) {
+            get().setShowWinnerPopup(true);
+            console.log('🔚 showing winner popup', data);
+          } else {
+            get().setShowLoserPopup(true);
+            console.log('🔚 showing loser popup', data);
+          }
         }
+        // Keep live balance listener; it will reflect payout automatically
+      } else {
+        console.log('🔚 Ignoring gameEnded event for different room:', data.roomId);
       }
-      // Keep live balance listener; it will reflect payout automatically
     });
 
     // Winner confirmed immediately after server validates bingo
     newSocket.on('winnerConfirmed', async (data: any) => {
       try {
         const { roomId, userId, cardId, patternIndices } = data as any;
+        const { currentRoom } = get();
+        
+        // Only process if this is for our current room
+        if (!currentRoom || roomId !== currentRoom.id) {
+          console.log('🎉 Ignoring winnerConfirmed event for different room:', roomId);
+          return;
+        }
+        
         const { user } = useAuthStore.getState();
 
         if (user?.telegramId === userId) {
@@ -190,12 +214,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     });
 
-    newSocket.on('roomReset', () => {
-      console.log('♻️ Room reset');
-      // Refresh room data
+    newSocket.on('roomReset', (data: any) => {
+      console.log('♻️ Room reset:', data);
       const { currentRoom } = get();
-      if (currentRoom) {
+      
+      // Only process if this is for our current room
+      if (currentRoom && data.roomId === currentRoom.id) {
+        // Refresh room data
         get().joinRoom(currentRoom.id);
+      } else {
+        console.log('♻️ Ignoring roomReset event for different room:', data.roomId);
       }
     });
 

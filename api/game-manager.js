@@ -35,7 +35,7 @@ class GameManager {
       }
   
       const room = snap.val();
-      console.log(`🎮 Room ${roomId} snapshot:`, room);
+      console.log(`🎮 Room ${roomId} snapshot:`);
   
       // Check if countdown already active
       const countdownActive = !!room.countdownEndAt && room.countdownEndAt > Date.now();

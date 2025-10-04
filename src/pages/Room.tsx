@@ -318,20 +318,34 @@ React.useEffect(() => {
 // Inside Room.tsx, after your other useEffects
 React.useEffect(() => {
   if (!currentRoom || !user) return;
-  if (!selectedCard) return;
 
-  const cardRoomId = selectedCard.roomId;
-  if (cardRoomId !== currentRoom.id) return; // ✅ Only check for current room
+  const displayedCard = bingoCards.find(
+    (card) =>
+      card.roomId === currentRoom.id &&
+      card.claimed &&
+      card.claimedBy === user.telegramId
+  ) || selectedCard;
 
-  const balance = user.balance || 0;
-  if (!currentRoom.isDemoRoom && currentRoom.gameStatus !== "playing" && balance < currentRoom.betAmount) {
+  if (!displayedCard) return;
+
+  // If the card is claimed but user balance < room bet amount → cancel bet
+  if (!currentRoom.isDemoRoom && currentRoom.gameStatus !== "playing" && (user.balance || 0) < currentRoom.betAmount) {
     (async () => {
-      const success = await cancelBet(selectedCard.id);
-      if (success) setGameMessage(t("insufficient_balance"));
+      const cardId = displayedCard.id;
+      const success = await cancelBet(cardId);
+      if (success) {
+        setHasBet(false);
+        setGameMessage(t("insufficient_balance"));
+      }
     })();
+  } else {
+    // If balance is enough and card is claimed, mark bet as active
+    const playerData = currentRoom.players?.[user.telegramId];
+    if (playerData?.betAmount && playerData.betAmount > 0) {
+      setHasBet(true);
+    }
   }
-}, [currentRoom?.id, user?.balance]);
-
+}, [currentRoom, user, bingoCards, selectedCard]);
 
 
   const handleCardSelect = (cardId: string) => {

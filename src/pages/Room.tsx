@@ -80,12 +80,30 @@ const Room: React.FC = () => {
     setShowWinnerPopup
   } = useGameStore();
   const { user, updateBalance } = useAuthStore();
- const userCard = bingoCards.find(
-  (card) =>
-    card.roomId === currentRoom?.id && // ✅ make sure it's the same room
-    card.claimed &&
-    card.claimedBy === user?.telegramId
-);
+  
+let userCard ;
+  async function getUserCard(roomId: string, telegramId: string) {
+    try {
+      const cardsRef = ref(rtdb, `rooms/${roomId}/cards`);
+      const snap = await get(cardsRef);
+  
+      if (!snap.exists()) {
+        console.log("❌ No cards found in RTDB for this room");
+        return null;
+      }
+  
+      const cards = snap.val();
+      const userCard = Object.values(cards).find(
+        (card: any) =>
+          card.claimed && card.claimedBy === telegramId
+      );
+  
+      return userCard || null;
+    } catch (err) {
+      console.error("🔥 Error fetching userCard:", err);
+      return null;
+    }
+  }
 
 const [remaining, setRemaining] = useState<number | null>(null);
      const displayedCard = userCard || selectedCard ;
@@ -133,7 +151,6 @@ const storeIsBetActive = useGameStore((s) => s.isBetActive);
 const flatCard = React.useMemo(() => cardNumbers.flat(), [cardNumbers]);
 
 
-
 const [claimed, setClaimed] = useState(false);
 // 👇 New useEffect inside Room.tsx
 // Connect socket once
@@ -144,6 +161,7 @@ React.useEffect(() => {
 
 React.useEffect(() => {
   if (!displayedCard || !currentRoom) return;
+  getUserCard(currentRoom.id, user?.telegramId as string)
   const cardRef = ref(rtdb, `rooms/${currentRoom.id}/bingoCards/${displayedCard.id}`);
 
   const unsubscribe = onValue(cardRef, (snap) => {

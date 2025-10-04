@@ -72,7 +72,7 @@ interface GameState {
 }
 
 // Server configuration
-const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'https://fridaybot-1.onrender.com/';
+const SERVER_URL =  'https://fridaybot-1.onrender.com/';
 
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -296,7 +296,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       // Find user's card (either selected or claimed)
       const userCard = get().bingoCards.find(
         (card) =>
-          card.roomId === currentRoom.id &&
           card.claimed &&
           card.claimedBy === user.telegramId
       );
@@ -406,7 +405,13 @@ export const useGameStore = create<GameState>((set, get) => ({
       socket.emit("joinRoom", roomId);
       console.log("➡️ Joining room", roomId);
     }
-  
+    set({
+      selectedCard: null,
+      isBetActive: false,
+      bingoCards: [],
+      displayedCalledNumbers: { ...get().displayedCalledNumbers, [roomId]: [] },
+      currentRoom: null, // will be updated below
+    });
     const roomRef = ref(rtdb, "rooms/" + roomId);
   
     // ✅ Remove any old listener on this room before re-attaching

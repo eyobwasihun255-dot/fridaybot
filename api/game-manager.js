@@ -951,12 +951,12 @@ class GameManager {
       const messages = {
         en: {
           title: "🎮 Game Started!",
-          message: `🎯 A new Bingo game has started in ${roomName}!\n\n💰 Bet Amount: ${betAmount} ${isDemoRoom ? '(Demo)' : ''}\n\n⚡ Join quickly to participate!\n\n🎲 Numbers are being drawn every 5 seconds.`,
-          button: "🎮 Join Game Now"
+          message: `🎯 A new Bingo game has started in ${roomName}!\n\n💰 Bet Amount: ${betAmount} ${isDemoRoom ? '(Demo)' : ''}\n\n``,
+          button: "🎮 Join Game Now"`
         },
         am: {
           title: "🎮 ጨዋታ ጀመረ!",
-          message: `🎯 በ${roomName} ውስጥ አዲስ ቢንጎ ጨዋታ ጀመረ!\n\n💰 የጠፋው ገንዘብ: ${betAmount} ${isDemoRoom ? '(ዲሞ)' : ''}\n\n⚡ በፍጥነት ይግቡ!\n\n🎲 ቁጥሮች በየ 5 ሰከንድ ይተላለፋሉ።`,
+          message: `🎯 በ${roomName} ውስጥ አዲስ ቢንጎ ጨዋታ ጀመረ!\n\n💰 ገንዘብ: ${betAmount} ${isDemoRoom ? '(ዲሞ)' : ''}\n\n`,
           button: "🎮 ጨዋታ ይጫወቱ"
         }
       };

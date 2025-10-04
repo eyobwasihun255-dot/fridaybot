@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { rtdb } from '../firebase/config';
 import { ref, onValue, get as fbget, set as fbset, update, remove, push, query, orderByChild, equalTo, runTransaction } from 'firebase/database';
-import { get } from 'firebase/database';
 import { useAuthStore } from '../store/authStore';
 import { io, Socket } from 'socket.io-client';
 
@@ -31,7 +30,7 @@ interface Room {
   payed: boolean;
   currentWinner?: string;
   countdownEndAt: number;
-  players?: { [id: string]: { id: string; username: string; betAmount: number; cardId: string } };
+  players?: { [id: string]: { id: string; username: string; betAmount: number; cardId: string ;attemptedBingo: boolean} };
   gameId?: string;
   nextGameCountdownEndAt?: number;
 }
@@ -72,7 +71,7 @@ interface GameState {
 }
 
 // Server configuration
-const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'https://fridaybot-1.onrender.com/';
+const SERVER_URL =  'https://fridaybot-1.onrender.com/';
 
 export const useGameStore = create<GameState>((set, get) => ({
   rooms: [],
@@ -132,14 +131,15 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     newSocket.on('numberDrawn', (data: any) => {
       const { number, drawnNumbers, roomId } = data;
+      const { currentRoom } = get();
       console.log(`🎲 Number drawn: ${number}`);
-      
+      if (currentRoom && roomId === currentRoom.id) {
       set((state) => ({
         displayedCalledNumbers: {
           ...state.displayedCalledNumbers,
           [roomId]: drawnNumbers,
         },
-      }));
+      }));}
     });
 
     newSocket.on('gameEnded', (data: any) => {

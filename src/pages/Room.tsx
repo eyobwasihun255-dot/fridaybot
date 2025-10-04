@@ -122,7 +122,7 @@ useEffect(() => {
 
 const startNumberStream = useGameStore((s) => s.startNumberStream);
 // Find this player's data inside the room
-const playerData = currentRoom?.players?.[user?.telegramId];
+const playerData = currentRoom?.players?.[user?.telegramId as string];
 
 // True if backend says this player already bet
 const alreadyBetted = !!playerData?.betAmount && playerData.betAmount > 0;
@@ -487,7 +487,7 @@ const handleBingoClick = async () => {
 
   if (hasAttemptedBingo) return;
 
-  setHasAttemptedBingo(true);
+ 
 
   const covered = findCoveredPatternByMarks();
   if (!covered || !patternExistsInCalled(covered.patternNumbers)) {
@@ -500,6 +500,12 @@ const handleBingoClick = async () => {
     const result = await checkBingo(covered.patternIndices);
     if (!result.success) {
        setGameMessage(result.message || t('not_a_winner'));
+       const playerRef = ref(
+        rtdb,
+        `rooms/${currentRoom.id}/players/${user?.telegramId}`
+      );
+       await update(playerRef, { attemptedBingo: true });
+       setHasAttemptedBingo(true);
     }
   } catch (err) {
     console.error('❌ Error sending bingo claim:', err);

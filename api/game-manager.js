@@ -828,11 +828,12 @@ class GameManager {
   
         if (claimedBy && card?.auto === true) {
           const autoUntil = card?.autoUntil || 0;
-          const playerBalance = players[claimedBy]?.balance || 0;
-  
+          const balanceRef = ref(rtdb, `users/${claimedBy}/balance`);
+          const balanceSnap = await get(balanceRef);
+          const balance = balanceSnap.val() || 0;
           // ✅ keep only if auto is still active, less than 24h, and player has enough balance
           const autoActive = autoUntil > Date.now() && autoUntil - Date.now() <= 24 * 60 * 60 * 1000;
-          const hasEnoughBalance = playerBalance >= betAmount;
+          const hasEnoughBalance = balance >= betAmount;
   
           if (autoActive && hasEnoughBalance) {
             keepClaimed = true;

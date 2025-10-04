@@ -101,6 +101,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       clearInterval(id);
       set({ drawIntervalId: null });
     }
+    console.log('🛑 Stopped number drawing');
   },
 
   // Connect to server via Socket.IO
@@ -141,13 +142,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       
       // Only update if this is for the current room
       const { currentRoom } = get();
-      if (currentRoom && currentRoom.id === roomId) {
+      if (currentRoom && currentRoom.id === roomId && currentRoom.gameId === gameId) {
         set((state) => ({
           displayedCalledNumbers: {
             ...state.displayedCalledNumbers,
             [roomId]: drawnNumbers,
           },
         }));
+        console.log(`✅ Updated displayed numbers for room ${roomId}:`, drawnNumbers);
+      } else {
+        console.log(`🚫 Ignored numberDrawn event for room ${roomId} - not current room or wrong game`);
       }
     });
 
@@ -242,6 +246,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       socket.disconnect();
       set({ socket: null });
     }
+    
+    // Clear all room data when disconnecting
+    set({ 
+      displayedCalledNumbers: {},
+      currentRoom: null,
+      bingoCards: []
+    });
+    console.log('🧹 Cleared all room data on disconnect');
   },
 
   // Server-side game start (removed from client)
@@ -262,11 +274,18 @@ export const useGameStore = create<GameState>((set, get) => ({
       socket.emit('joinRoom', roomId);
     }
 
-    // Listen to Firebase for real-time game updates
+    // Listen to Firebase for real-time game updates - ONLY for this specific room's game
     const gameRef = ref(rtdb, `games/${gameId}`);
     onValue(gameRef, (snapshot) => {
       const data = snapshot.val();
       if (!data) return;
+
+      // Double-check this is for the current room
+      const { currentRoom } = get();
+      if (!currentRoom || currentRoom.id !== roomId || currentRoom.gameId !== gameId) {
+        console.log(`🚫 Ignoring game data for room ${roomId} - not current room`);
+        return;
+      }
 
       const { currentDrawnNumbers, gameStatus } = data;
 
@@ -276,7 +295,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         return;
       }
 
-      // Update displayed numbers
+      // Update displayed numbers ONLY for this room
       if (currentDrawnNumbers) {
         set((state) => ({
           displayedCalledNumbers: {
@@ -284,6 +303,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             [roomId]: currentDrawnNumbers,
           },
         }));
+        console.log(`🎲 Updated numbers for room ${roomId}:`, currentDrawnNumbers);
       }
     });
   },
@@ -420,26 +440,40 @@ export const useGameStore = create<GameState>((set, get) => ({
       get().connectToServer();
     }
 
+    // Clean up previous room data
+    if (currentRoom?.id && currentRoom.id !== roomId) {
+      console.log(`🧹 Cleaning up data from previous room ${currentRoom.id}`);
+      
+      // Clear displayed numbers for old room
+      set((state) => {
+        const newDisplayedNumbers = { ...state.displayedCalledNumbers };
+        delete newDisplayedNumbers[currentRoom.id];
+        return { displayedCalledNumbers: newDisplayedNumbers };
+      });
+      
+      // Stop any number drawing for old room
+      get().stopNumberDraw();
+    }
+
     if (socket) {
       // Leave old room before joining new
       if (currentRoom?.id && currentRoom.id !== roomId) {
         socket.emit("leaveRoom", currentRoom.id);
       }
       // Ensure client leaves old rooms before joining a new one
-if (socket && socket.rooms) {
-  for (const room of socket.rooms) {
-    if (room !== socket.id) {
-      socket.emit("leaveRoom", room);
-      socket.leave(room);
-      console.log(`👋 Left previous room ${room}`);
-    }
-  }
-}
+      if (socket && socket.rooms) {
+        for (const room of socket.rooms) {
+          if (room !== socket.id) {
+            socket.emit("leaveRoom", room);
+            socket.leave(room);
+            console.log(`👋 Left previous room ${room}`);
+          }
+        }
+      }
 
-// Then join the current one
-socket.emit("joinRoom", roomId);
-console.log(`👥 Joined room ${roomId}`);
-
+      // Then join the current one
+      socket.emit("joinRoom", roomId);
+      console.log(`👥 Joined room ${roomId}`);
     }
 
     // Use room-specific data fetching instead of global rooms listener
@@ -472,6 +506,7 @@ console.log(`👥 Joined room ${roomId}`);
             [roomId]: updatedRoom.calledNumbers,
           },
         }));
+        console.log(`🔄 Synced called numbers for room ${roomId}:`, updatedRoom.calledNumbers);
       }
 
       // Count active players for this specific room

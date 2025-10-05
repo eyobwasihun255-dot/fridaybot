@@ -676,113 +676,78 @@ class GameManager {
       return { drawnNumbers: [], winners: [] };
     }
   
-    // 🧠 Step 1: Pick a random winner (not the previous winner)
-    const eligibleWinners = cards.filter(c => c.id !== lastWinnerId);
-    const winnerCard =
-      eligibleWinners[Math.floor(Math.random() * eligibleWinners.length)];
+    // --- 1️⃣ Pick random winner excluding last winner
+    const eligibleCards = cards.filter(c => c.id !== lastWinnerId);
+    const winnerCard = eligibleCards[Math.floor(Math.random() * eligibleCards.length)];
     winners.push(winnerCard.id);
   
-    // 🧠 Step 2: Pick a random winning pattern
+    // --- 2️⃣ Pick winner pattern and missing number
     const winnerPatterns = this.pickPatternNumbers(winnerCard);
-    const winnerPattern =
-      winnerPatterns[Math.floor(Math.random() * winnerPatterns.length)];
-  
-    // Randomly choose 1 missing number from winner pattern
+    const winnerPattern = winnerPatterns[Math.floor(Math.random() * winnerPatterns.length)];
     const winnerMissIndex = Math.floor(Math.random() * winnerPattern.length);
     const winnerMissing = winnerPattern[winnerMissIndex];
   
-    // Add all other numbers from the winning pattern to drawnNumbers
-    winnerPattern.forEach((n, i) => {
-      if (i !== winnerMissIndex && n >= 1 && n <= 75) {
-        usedNumbers.add(n);
-        drawnNumbers.push(n);
-      }
-    });
-  
-    // 🧠 Step 3: Handle losers – 1 missing from their pattern
+    // --- 3️⃣ For others: pick pattern & leave 1 missing
     const loserMissingNumbers = [];
-    cards.forEach((card) => {
+    cards.forEach(card => {
       if (card.id === winnerCard.id) return;
   
-      const patterns = this.pickPatternNumbers(card);
-      const chosen = patterns[Math.floor(Math.random() * patterns.length)];
-  
+      const pats = this.pickPatternNumbers(card);
+      const chosen = pats[Math.floor(Math.random() * pats.length)];
       const missIndex = Math.floor(Math.random() * chosen.length);
+  
       chosen.forEach((n, i) => {
-        if (i !== missIndex && n >= 1 && n <= 75 && !usedNumbers.has(n)) {
+        if (i !== missIndex && n > 0 && n <= 75 && !usedNumbers.has(n)) {
           usedNumbers.add(n);
-          drawnNumbers.push(n);
         }
       });
   
       loserMissingNumbers.push(chosen[missIndex]);
     });
   
-    // 🧠 Step 4: Fill the first 25 numbers — 5 per section
-    const ensureFivePerSection = () => {
-      const sections = [
-        [1, 15],
-        [16, 30],
-        [31, 45],
-        [46, 60],
-        [61, 75],
-      ];
+    // --- 4️⃣ Generate first 25 numbers: 5 from each bingo section
+    const sectionRanges = [
+      [1, 15],
+      [16, 30],
+      [31, 45],
+      [46, 60],
+      [61, 75]
+    ];
   
-      const sectionNumbers = [];
+    const first25 = [];
   
-      for (const [start, end] of sections) {
-        const existing = drawnNumbers.filter(
-          (n) => n >= start && n <= end
-        );
-        const needed = 5 - existing.length;
-  
-        for (let i = 0; i < needed; i++) {
-          let rand;
-          do {
-            rand = Math.floor(Math.random() * (end - start + 1)) + start;
-          } while (usedNumbers.has(rand));
+    sectionRanges.forEach(([start, end]) => {
+      const sectionNums = [];
+      while (sectionNums.length < 5) {
+        const rand = Math.floor(Math.random() * (end - start + 1)) + start;
+        if (!usedNumbers.has(rand)) {
           usedNumbers.add(rand);
-          existing.push(rand);
+          sectionNums.push(rand);
         }
-  
-        sectionNumbers.push(...existing.slice(0, 5));
       }
-  
-      // Shuffle 25 numbers and replace drawnNumbers
-      const shuffled = this.shuffleArray(sectionNumbers);
-      drawnNumbers.splice(0, drawnNumbers.length, ...shuffled);
-    };
-  
-    ensureFivePerSection();
-  
-    // Make sure we have only 24 numbers before inserting the winner’s missing number
-    while (drawnNumbers.length > 24) drawnNumbers.pop();
-  
-    // 🧠 Step 5: Add the winner's missing number as 25th number
-    drawnNumbers.push(winnerMissing);
-    usedNumbers.add(winnerMissing);
-  
-    // 🧠 Step 6: Add losers’ missing numbers after 25
-    const rest = [];
-    this.shuffleArray(loserMissingNumbers).forEach((n) => {
-      if (n >= 1 && n <= 75 && !usedNumbers.has(n)) {
-        usedNumbers.add(n);
-        rest.push(n);
-      }
+      first25.push(...sectionNums);
     });
   
-    // 🧠 Step 7: Fill remaining with random unused numbers up to 75 total
-    while (drawnNumbers.length + rest.length < 75) {
-      const rand = Math.floor(Math.random() * 75) + 1;
-      if (!usedNumbers.has(rand)) {
-        usedNumbers.add(rand);
-        rest.push(rand);
-      }
-    }
+    // --- 5️⃣ Ensure winner’s missing number is in first 25
+    // replace one random number with winnerMissing
+    const replaceIndex = Math.floor(Math.random() * first25.length);
+    first25[replaceIndex] = winnerMissing;
   
-    const finalRest = this.shuffleArray(rest);
-    const finalDrawn = [...drawnNumbers, ...finalRest];
+    // --- 6️⃣ Shuffle the first 25 numbers for randomness
+    const shuffled25 = this.shuffleArray(first25);
   
+    // --- 7️⃣ Next come the losers’ missing numbers (to let them win soon)
+    const nextNumbers = this.shuffleArray(loserMissingNumbers.filter(n => n > 0 && n <= 75 && !usedNumbers.has(n)));
+    nextNumbers.forEach(n => usedNumbers.add(n));
+  
+    // --- 8️⃣ Fill the rest with unused random numbers up to 75
+    const allNumbers = new Set([...Array(75).keys()].map(x => x + 1));
+    const remaining = Array.from(allNumbers).filter(n => !usedNumbers.has(n));
+    this.shuffleArray(remaining);
+  
+    const finalDrawn = [...shuffled25, ...nextNumbers, ...remaining].slice(0, 75);
+  
+    // --- 9️⃣ Return same output format
     return { drawnNumbers: finalDrawn, winners };
   }
   
@@ -875,7 +840,7 @@ class GameManager {
           // ✅ keep only if auto is still active, less than 24h, and player has enough balance
           const autoActive = autoUntil > Date.now() && autoUntil - Date.now() <= 24 * 60 * 60 * 1000;
           const hasEnoughBalance = balance >= betAmount;
-          
+  
           if (autoActive && hasEnoughBalance) {
             const playerRef = ref(
               rtdb,

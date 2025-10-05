@@ -2,7 +2,7 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import { gameManager } from "./game-manager.js";
 import { ref, update, remove } from "firebase/database";
-import { rtdb } from "../src/firebase/config.js";
+import { rtdb } from "../bot/firebaseConfig.js";
 export default function createSocketServer(app) {
   const server = createServer(app);
 

@@ -72,7 +72,7 @@
   }
 
   // Server configuration
-  const SERVER_URL =  'https://fridaybot-1.onrender.com/';
+  const SERVER_URL =  process.env.REACT_APP_SERVER_URL || 'https://fridaybot-1.onrender.com/';
 
 
   export const useGameStore = create<GameState>((set, get) => ({

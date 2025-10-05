@@ -46,7 +46,7 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
-          update(ref(rtdb, `users/${user.telegramId}`), { lastActive: Date.now() });
+          
           const snapshot = await dbGet(balanceRef);
           const balance = snapshot.val() ?? 0;
 

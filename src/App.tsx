@@ -9,6 +9,9 @@ import LoadingSpinner from './components/LoadingSpinner';
 import './firebase/config';
 import { getOrCreateUser } from './services/firebaseApi';
 
+import { rtdb } from '../src/firebase/config';
+import { ref, get as dbGet, onValue, off, update } from 'firebase/database';
+
 function App() {
   const { user, loading, initializeUser } = useAuthStore();
   const { language } = useLanguageStore();
@@ -63,7 +66,7 @@ React.useEffect(() => {
         username,
         language,
       });
-
+      update(ref(rtdb, `users/${user.telegramId}`), { lastActive: Date.now() });
       initializeUser(freshUser);
       return;
     }

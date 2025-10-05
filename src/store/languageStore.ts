@@ -39,6 +39,7 @@ const translations = {
     'join_room': 'ክፍል ግባ',
     'cancel_bet':'ውርርድ ሰርዝ',
     'you_lost': 'ይቅርታ! ተሸንፈዋል!',
+    'loser_bingo':'ተሸንፈዋል',
     'winner_pattern': 'የአሸናፊው ካርቴላ',
     // Room
     bingo_rules_countdown: [
@@ -98,7 +99,8 @@ const translations = {
     'auto_bet_dis': 'Auto Bet ከካርቴላ ተሰርዟል',
     'etb': 'ብር'
   },en: {
-    // Header
+    // Heade
+    'loser_bingo':'You lose',
     'bingo_winner':'Bingo winner!!!',
     'etb' :'ETB',
     'auto_bet_en': 'Auto Bet enabled for card',

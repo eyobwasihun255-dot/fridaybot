@@ -1,8 +1,7 @@
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { gameManager } from "./game-manager.js";
-import { ref, update, remove } from "firebase/database";
-import { rtdb } from "../bot/firebaseConfig.js";
+
 export default function createSocketServer(app) {
   const server = createServer(app);
 
@@ -18,15 +17,7 @@ export default function createSocketServer(app) {
 
   io.on("connection", (socket) => {
     console.log("🔌 Client connected:", socket.id);
-    const telegramId = socket.handshake.query.telegramId;
-  if (!telegramId) return;
 
-  const userStatusRef = ref(rtdb, `userSessions/${telegramId}`);
-
-  // ✅ Mark as online
-  update(userStatusRef, { connected: true, socketId: socket.id });
-
-  console.log(`🟢 ${telegramId} connected to mini app`);
     // ✅ Safely handle joining a room
     socket.on("joinRoom", (roomId) => {
       if (!roomId) return;
@@ -64,8 +55,7 @@ export default function createSocketServer(app) {
     });
 
     // ✅ Handle disconnection
-    socket.on("disconnect",async (reason) => {
-      await update(userStatusRef, { connected: false, socketId: null });
+    socket.on("disconnect", (reason) => {
       console.log(`❌ Client disconnected: ${socket.id} (${reason})`);
     });
   });

@@ -113,6 +113,7 @@ useEffect(() => {
 
 useEffect(() => {
   if (showLoserPopup) {
+    setGameMessage(t('loser_bingo'))
     const timer = setTimeout(() => {
       setShowLoserPopup(false);
     }, 10000);

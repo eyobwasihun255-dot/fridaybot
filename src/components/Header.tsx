@@ -21,8 +21,7 @@ const Header: React.FC = () => {
   // 🔄 Auto reload balance every 5s when game is playing
   useEffect(() => {
     if (!user) return;
-    if (currentRoom?.gameStatus !== "playing" || "ended"  ) return;
-
+    
     const interval = setInterval(async () => {
       await reloadBalance();
     }, 5000);

@@ -63,6 +63,7 @@ React.useEffect(() => {
         username,
         language,
       });
+
       initializeUser(freshUser);
       return;
     }

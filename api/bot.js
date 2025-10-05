@@ -869,53 +869,6 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
   telegram("answerCallbackQuery", { callback_query_id: callbackQuery.id });
 }
 
-// ====================== AUTO NOTIFY OFFLINE PLAYERS IN ACTIVE GAMES ======================
-async function notifyOfflinePlayersInPlayingRooms() {
-  try {
-    const roomsSnap = await get(ref(rtdb, "rooms"));
-    if (!roomsSnap.exists()) return;
-
-    const sessionsSnap = await get(ref(rtdb, "userSessions"));
-    const sessions = sessionsSnap.exists() ? sessionsSnap.val() : {};
-
-    const rooms = roomsSnap.val();
-
-    for (const [roomId, room] of Object.entries(rooms)) {
-      if (room.state !== "playing") continue;
-
-      const cards = room.cards || {};
-      for (const [cardId, card] of Object.entries(cards)) {
-        if (!card.claimed || !card.claimedBy) continue;
-
-        const userId = card.claimedBy;
-        const userRef = ref(rtdb, `users/${userId}`);
-        const userSnap = await get(userRef);
-        if (!userSnap.exists()) continue;
-
-        const user = userSnap.val();
-        const lang = user?.lang || "en";
-
-        // ✅ Check if user is offline (mini app not open)
-        const isOnline = sessions[userId]?.connected === true;
-
-        if (!isOnline) {
-          const link = `${process.env.WEBAPP_URL || "https://fridaybot-1.onrender.com"}?id=${userId}`;
-          await sendMessage(
-            userId,
-            `🎯 ${t(lang, "play")}\n\nYour Bingo room *${room.name || roomId}* is now live!\nJoin now 👉 ${link}`,
-            { parse_mode: "Markdown" }
-          );
-          console.log(`📣 Notified inactive player ${userId} to join ${roomId}`);
-        }
-      }
-    }
-  } catch (err) {
-    console.error("Error notifying offline players:", err);
-  }
-}
-
-// Run check every 1 minute
-setInterval(notifyOfflinePlayersInPlayingRooms, 60 * 1000);
 
 
 // ====================== MAIN HANDLER ======================

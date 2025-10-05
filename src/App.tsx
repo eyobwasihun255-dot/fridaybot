@@ -66,7 +66,6 @@ React.useEffect(() => {
         username,
         language,
       });
-      update(ref(rtdb, `users/${user.telegramId}`), { lastActive: Date.now() });
       initializeUser(freshUser);
       return;
     }

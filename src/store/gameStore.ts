@@ -293,12 +293,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         return { success: false, message: 'Missing required data' };
       }
 
-      // Find user's card (either selected or claimed)
-      const userCard = get().bingoCards.find(
-        (card) =>
-          card.claimed &&
-          card.claimedBy === user.telegramId
-      );
+      
+const cardsRef = ref(rtdb, `rooms/${currentRoom.id}/bingoCards`);
+const snap = await fbget(cardsRef);
+const cards = snap.exists() ? Object.values(snap.val()) : [];
+const userCard = cards.find(
+  (card: any) => card.claimed && card.claimedBy === user.telegramId
+);
 
       console.log('🎯 Card search result:', { 
         hasUserCard: !!userCard, 
@@ -400,6 +401,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   
         // ✅ Remove old Firebase listeners
         const oldRoomRef = ref(rtdb, "rooms/" + currentRoom.id);
+        off(ref(rtdb, `rooms/${currentRoom.id}`));
+        off(ref(rtdb, `rooms/${currentRoom.id}/bingoCards`));
         off(oldRoomRef);
       }
       socket.emit("joinRoom", roomId);
@@ -541,12 +544,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       set({ bingoCards: [] });
       return;
     }
-
+    off(ref(rtdb, `rooms/${currentRoom.id}/bingoCards`));
     const cardsRef = ref(rtdb, `rooms/${currentRoom.id}/bingoCards`);
     onValue(cardsRef, (snapshot) => {
       const data = snapshot.val();
       const cards: BingoCard[] = data
-        ? Object.entries(data).map(([id, value]: [string, any]) => ({ id, ...value }))
+        ? Object.entries(data).map(([id, value]: [string, any]) => ({ id, ...value, roomId:currentRoom.id }))
         : [];
       set({ bingoCards: cards });
     });

@@ -868,6 +868,50 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
 
   telegram("answerCallbackQuery", { callback_query_id: callbackQuery.id });
 }
+// ====================== AUTO NOTIFY INACTIVE PLAYERS ======================
+async function notifyInactivePlayers() {
+  try {
+    const roomsRef = ref(rtdb, "rooms");
+    const roomsSnap = await get(roomsRef);
+    if (!roomsSnap.exists()) return;
+
+    const now = Date.now();
+    const rooms = roomsSnap.val();
+
+    for (const [roomId, room] of Object.entries(rooms)) {
+      if (room.state !== "playing") continue;
+
+      const cards = room.cards || {};
+      for (const [cardId, card] of Object.entries(cards)) {
+        if (!card.claimed || !card.claimedBy) continue;
+
+        const userId = card.claimedBy;
+        const userRef = ref(rtdb, `users/${userId}`);
+        const userSnap = await get(userRef);
+
+        if (!userSnap.exists()) continue;
+        const user = userSnap.val();
+        const lang = user?.lang || "en";
+        const lastActive = user.lastActive || 0;
+
+        // If player inactive for > 2 minutes
+        if (now - lastActive > 2 * 60 * 1000) {
+          const link = `${process.env.WEBAPP_URL || "https://fridaybot-1.onrender.com"}?id=${userId}`;
+          await sendMessage(
+            userId,
+            `🎯 ${t(lang, "play")}\n\nYour Bingo room *${room.name || roomId}* is now live!\nJoin here: ${link}`,
+            { parse_mode: "Markdown" }
+          );
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Error notifying inactive players:", err);
+  }
+}
+
+// Run every 1 minute
+setInterval(notifyInactivePlayers, 60 * 1000);
 
 
 // ====================== MAIN HANDLER ======================

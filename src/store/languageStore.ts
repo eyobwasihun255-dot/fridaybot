@@ -12,6 +12,7 @@ const translations = {
     am: {
     // Header
     // Add inside 'am' block
+    'bingo_winner':'ቢንጎ አሸናፊ!!',
 'insufficient_balance': ' በቂ ገንዘብ የለም!',
 'bet_placed': 'ውርርድ ተደርጓል! ለሌሎች ተጫዋቾች ይጠብቁ...',
 'error_player_card': 'ስህተት: ተጫዋች/ካርድ አልተገኘም',
@@ -98,6 +99,7 @@ const translations = {
     'etb': 'ብር'
   },en: {
     // Header
+    'bingo_winner':'Bingo winner!!!',
     'etb' :'ETB',
     'auto_bet_en': 'Auto Bet enabled for card',
     'auto_bet_dis': 'Auto Bet disabled for card',

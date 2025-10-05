@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { rtdb } from '../firebase/config';
-import { ref, get as dbGet, onValue, off } from 'firebase/database';
+import { ref, get as dbGet, onValue, off, update } from 'firebase/database';
 
 export interface User {
   telegramId: string;
@@ -46,6 +46,7 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           const balanceRef = ref(rtdb, `users/${user.telegramId}/balance`);
+          update(ref(rtdb, `users/${user.telegramId}`), { lastActive: Date.now() });
           const snapshot = await dbGet(balanceRef);
           const balance = snapshot.val() ?? 0;
 

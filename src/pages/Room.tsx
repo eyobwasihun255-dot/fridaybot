@@ -491,6 +491,12 @@ const handleBingoClick = async () => {
 
   const covered = findCoveredPatternByMarks();
   if (!covered || !patternExistsInCalled(covered.patternNumbers)) {
+    const playerRef = ref(
+      rtdb,
+      `rooms/${currentRoom.id}/players/${user?.telegramId}`
+    );
+     await update(playerRef, { attemptedBingo: true });
+    
     setGameMessage(t('not_a_winner'));
     setIsDisqualified(true);
     return;
@@ -499,12 +505,12 @@ const handleBingoClick = async () => {
   try {
     const result = await checkBingo(covered.patternIndices);
     if (!result.success) {
-       setGameMessage(result.message || t('not_a_winner'));
-       const playerRef = ref(
+      const playerRef = ref(
         rtdb,
         `rooms/${currentRoom.id}/players/${user?.telegramId}`
       );
        await update(playerRef, { attemptedBingo: true });
+       setGameMessage(result.message || t('not_a_winner'));
        setHasAttemptedBingo(true);
     }
   } catch (err) {

@@ -667,7 +667,7 @@ class GameManager {
   }
 
   // Generate drawn numbers with predetermined winners
-  generateDrawnNumbersMultiWinner(cards, lastWinnerId = null) {
+  generateDrawnNumbersMultiWinner(cards) {
     const winners = [];
     const usedNumbers = new Set();
     const drawnNumbers = [];
@@ -676,78 +676,94 @@ class GameManager {
       return { drawnNumbers: [], winners: [] };
     }
   
-    // --- 1️⃣ Pick random winner excluding last winner
-    const eligibleCards = cards.filter(c => c.id !== lastWinnerId);
-    const winnerCard = eligibleCards[Math.floor(Math.random() * eligibleCards.length)];
-    winners.push(winnerCard.id);
+    // --- Pick random winner but not the same as last winner ---
+    let possibleWinners = [...cards];
+    if (this.lastWinnerId) {
+      possibleWinners = possibleWinners.filter(c => c.id !== this.lastWinnerId);
+    }
   
-    // --- 2️⃣ Pick winner pattern and missing number
-    const winnerPatterns = this.pickPatternNumbers(winnerCard);
-    const winnerPattern = winnerPatterns[Math.floor(Math.random() * winnerPatterns.length)];
+    // If all cards filtered out (only 1 card in total), fallback
+    if (possibleWinners.length === 0) {
+      possibleWinners = [...cards];
+    }
+  
+    const winnerCard = possibleWinners[Math.floor(Math.random() * possibleWinners.length)];
+    this.lastWinnerId = winnerCard.id; // ✅ store for next round
+  
+    // --- Select winner pattern ---
+    const patterns = this.pickPatternNumbers(winnerCard);
+    const winnerPattern = patterns[Math.floor(Math.random() * patterns.length)];
+  
+    // --- Randomly choose one missing number from winner pattern ---
     const winnerMissIndex = Math.floor(Math.random() * winnerPattern.length);
     const winnerMissing = winnerPattern[winnerMissIndex];
   
-    // --- 3️⃣ For others: pick pattern & leave 1 missing
+    // Add all other numbers from the winner pattern
+    winnerPattern.forEach((n, i) => {
+      if (i !== winnerMissIndex && n > 0 && n <= 75 && !usedNumbers.has(n)) {
+        usedNumbers.add(n);
+        drawnNumbers.push(n);
+      }
+    });
+  
+    // --- For other cards: pick a pattern & leave 1 missing ---
     const loserMissingNumbers = [];
-    cards.forEach(card => {
+    cards.forEach((card) => {
       if (card.id === winnerCard.id) return;
   
       const pats = this.pickPatternNumbers(card);
       const chosen = pats[Math.floor(Math.random() * pats.length)];
-      const missIndex = Math.floor(Math.random() * chosen.length);
   
+      const missIndex = Math.floor(Math.random() * chosen.length);
       chosen.forEach((n, i) => {
         if (i !== missIndex && n > 0 && n <= 75 && !usedNumbers.has(n)) {
           usedNumbers.add(n);
+          drawnNumbers.push(n);
         }
       });
   
       loserMissingNumbers.push(chosen[missIndex]);
     });
   
-    // --- 4️⃣ Generate first 25 numbers: 5 from each bingo section
-    const sectionRanges = [
-      [1, 15],
-      [16, 30],
-      [31, 45],
-      [46, 60],
-      [61, 75]
-    ];
-  
-    const first25 = [];
-  
-    sectionRanges.forEach(([start, end]) => {
-      const sectionNums = [];
-      while (sectionNums.length < 5) {
-        const rand = Math.floor(Math.random() * (end - start + 1)) + start;
-        if (!usedNumbers.has(rand)) {
-          usedNumbers.add(rand);
-          sectionNums.push(rand);
-        }
+    // --- Fill up to 24 numbers ---
+    while (drawnNumbers.length < 24) {
+      const rand = Math.floor(Math.random() * 75) + 1;
+      if (!usedNumbers.has(rand)) {
+        usedNumbers.add(rand);
+        drawnNumbers.push(rand);
       }
-      first25.push(...sectionNums);
+    }
+  
+    // --- Shuffle first 24 numbers ---
+    const first24 = this.shuffleArray(drawnNumbers.slice(0, 24));
+  
+    // --- Make 25th number the winner's missing number ---
+    const first25 = [...first24, winnerMissing];
+    usedNumbers.add(winnerMissing);
+  
+    // --- Build 26–75 pool ---
+    const rest = [];
+    this.shuffleArray(loserMissingNumbers).forEach((n) => {
+      if (!usedNumbers.has(n)) {
+        usedNumbers.add(n);
+        rest.push(n);
+      }
     });
   
-    // --- 5️⃣ Ensure winner’s missing number is in first 25
-    // replace one random number with winnerMissing
-    const replaceIndex = Math.floor(Math.random() * first25.length);
-    first25[replaceIndex] = winnerMissing;
+    // --- Fill remaining random numbers ---
+    while (first25.length + rest.length < 75) {
+      const rand = Math.floor(Math.random() * 75) + 1;
+      if (!usedNumbers.has(rand)) {
+        usedNumbers.add(rand);
+        rest.push(rand);
+      }
+    }
   
-    // --- 6️⃣ Shuffle the first 25 numbers for randomness
-    const shuffled25 = this.shuffleArray(first25);
+    const finalRest = this.shuffleArray(rest);
+    const finalDrawn = [...first25, ...finalRest];
   
-    // --- 7️⃣ Next come the losers’ missing numbers (to let them win soon)
-    const nextNumbers = this.shuffleArray(loserMissingNumbers.filter(n => n > 0 && n <= 75 && !usedNumbers.has(n)));
-    nextNumbers.forEach(n => usedNumbers.add(n));
+    winners.push(winnerCard.id);
   
-    // --- 8️⃣ Fill the rest with unused random numbers up to 75
-    const allNumbers = new Set([...Array(75).keys()].map(x => x + 1));
-    const remaining = Array.from(allNumbers).filter(n => !usedNumbers.has(n));
-    this.shuffleArray(remaining);
-  
-    const finalDrawn = [...shuffled25, ...nextNumbers, ...remaining].slice(0, 75);
-  
-    // --- 9️⃣ Return same output format
     return { drawnNumbers: finalDrawn, winners };
   }
   

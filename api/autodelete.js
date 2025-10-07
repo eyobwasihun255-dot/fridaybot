@@ -51,3 +51,4 @@ cleanEvery30Minutes();
 cleanEvery6Hours();
 
 console.log('🧩 Auto-delete service initialized.');
+export default {};

@@ -581,7 +581,8 @@ return (
       
       {/* Show winner's card number */}
       <p className="mb-4 text-sm text-gray-600">
-        {t('card_number')} {winnerCard.serialNumber}
+        {t('card_number')}: {winnerCard.serialNumber}
+        {t('winner')}: {winnerCard.claimedBy}
       </p>
       
       {/* Display winner card in proper 5x5 grid */}

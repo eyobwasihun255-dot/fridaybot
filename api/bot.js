@@ -1,7 +1,42 @@
-import { ref, get, set, update, push } from "firebase/database";
+import { ref, get, set, update, push , remove } from "firebase/database";
 import { rtdb } from "../bot/firebaseConfig.js"; 
 import fetch from "node-fetch";
 
+const ADMIN_PASSCODE = "19991999"; // Ideally move to process.env.ADMIN_PASSCODE
+const CLEANUP_HOURS = 6;
+const CLEANUP_MS = CLEANUP_HOURS * 60 * 60 * 1000;
+
+// Utility: Cleanup old deposits & withdrawals
+async function cleanupOldTransactions() {
+  const now = Date.now();
+  const deleteIfOld = async (nodePath) => {
+    try {
+      const nodeRef = ref(rtdb, nodePath);
+      const snap = await get(nodeRef);
+
+      if (snap.exists()) {
+        const data = snap.val();
+        let deletedCount = 0;
+
+        for (const [id, record] of Object.entries(data)) {
+          if (record.date && now - record.date > CLEANUP_MS) {
+            await remove(ref(rtdb, `${nodePath}/${id}`));
+            deletedCount++;
+          }
+        }
+
+        if (deletedCount > 0) {
+          console.log(`🧹 Deleted ${deletedCount} old records from ${nodePath}`);
+        }
+      }
+    } catch (err) {
+      console.error(`❌ Cleanup error in ${nodePath}:`, err);
+    }
+  };
+
+  await deleteIfOld("deposits");
+  await deleteIfOld("withdrawals");
+}
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ADMIN_IDS = (process.env.ADMIN_IDS || "")
   .split(",")
@@ -558,16 +593,14 @@ if (text === "/profit") {
     return;
   }
 
-  // Step 1: Ask for passcode
   await sendMessage(chatId, "🔐 Enter admin passcode to confirm revenue withdrawal:");
   pendingActions.set(userId, { type: "awaiting_revenue_passcode" });
   return;
 }
 
-// Step 2: Handle passcode
+// Step 2: Verify passcode
 if (pending?.type === "awaiting_revenue_passcode") {
-  const passcode = "19991999"; // <-- your secure passcode
-  if (text !== passcode) {
+  if (text !== ADMIN_PASSCODE) {
     await sendMessage(chatId, "❌ Incorrect passcode. Process cancelled.");
     pendingActions.delete(userId);
     return;
@@ -578,7 +611,7 @@ if (pending?.type === "awaiting_revenue_passcode") {
   return;
 }
 
-// Step 3: Handle amount
+// Step 3: Process withdrawal
 if (pending?.type === "awaiting_revenue_amount") {
   const amountToWithdraw = parseFloat(text);
   if (isNaN(amountToWithdraw) || amountToWithdraw <= 0) {
@@ -588,22 +621,19 @@ if (pending?.type === "awaiting_revenue_amount") {
   }
 
   try {
-    // Fetch current revenue data
+    // Fetch revenue data
     const response = await fetch(`${process.env.WEBAPP_URL}/api/revenue`);
     if (!response.ok) throw new Error("Failed to fetch revenue");
 
     const data = await response.json();
 
-    // Check if withdrawal amount exceeds total undrawned revenue
     if (amountToWithdraw > data.undrawnedTotal) {
       await sendMessage(chatId, `❌ Amount exceeds total undrawned revenue ($${data.undrawnedTotal})`);
       pendingActions.delete(userId);
       return;
     }
 
-    // ✅ Process undrawned entries
     let remaining = amountToWithdraw;
-    const updatedEntries = [];
     const updates = {};
 
     for (const entry of data.undrawnedDetails) {
@@ -611,9 +641,7 @@ if (pending?.type === "awaiting_revenue_amount") {
         const take = Math.min(remaining, entry.amount);
         remaining -= take;
 
-        // Update entry as drawned in RTDB
         updates[`revenue/${entry.gameId}/drawned`] = true;
-        updatedEntries.push(entry.gameId);
 
         if (remaining <= 0) break;
       }
@@ -627,11 +655,16 @@ if (pending?.type === "awaiting_revenue_amount") {
       date: Date.now(),
     });
 
-    // Update undrawned entries in RTDB
+    // Update entries
     const revenueRef = ref(rtdb);
     await update(revenueRef, updates);
 
+    // 🧹 Clean old transactions (>6 hours)
+    await cleanupOldTransactions();
+
     await sendMessage(chatId, `✅ Revenue withdrawal of $${amountToWithdraw} successful!`);
+    console.log(`💸 Admin ${userId} withdrew $${amountToWithdraw}`);
+
   } catch (err) {
     console.error("Error withdrawing revenue:", err);
     await sendMessage(chatId, "❌ Failed to process revenue withdrawal.");

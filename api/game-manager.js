@@ -676,29 +676,28 @@ class GameManager {
       return { drawnNumbers: [], winners: [] };
     }
   
-    // --- Pick random winner but not the same as last winner ---
+    // --- Pick random winner (different from last winner) ---
     let possibleWinners = [...cards];
     if (this.lastWinnerId) {
       possibleWinners = possibleWinners.filter(c => c.id !== this.lastWinnerId);
     }
   
-    // If all cards filtered out (only 1 card in total), fallback
     if (possibleWinners.length === 0) {
       possibleWinners = [...cards];
     }
   
     const winnerCard = possibleWinners[Math.floor(Math.random() * possibleWinners.length)];
-    this.lastWinnerId = winnerCard.id; // ✅ store for next round
+    this.lastWinnerId = winnerCard.id;
   
     // --- Select winner pattern ---
     const patterns = this.pickPatternNumbers(winnerCard);
     const winnerPattern = patterns[Math.floor(Math.random() * patterns.length)];
   
-    // --- Randomly choose one missing number from winner pattern ---
+    // --- Pick missing number for the winner ---
     const winnerMissIndex = Math.floor(Math.random() * winnerPattern.length);
     const winnerMissing = winnerPattern[winnerMissIndex];
   
-    // Add all other numbers from the winner pattern
+    // --- Add all other numbers from winner pattern first ---
     winnerPattern.forEach((n, i) => {
       if (i !== winnerMissIndex && n > 0 && n <= 75 && !usedNumbers.has(n)) {
         usedNumbers.add(n);
@@ -706,7 +705,7 @@ class GameManager {
       }
     });
   
-    // --- For other cards: pick a pattern & leave 1 missing ---
+    // --- Handle loser cards ---
     const loserMissingNumbers = [];
     cards.forEach((card) => {
       if (card.id === winnerCard.id) return;
@@ -715,6 +714,8 @@ class GameManager {
       const chosen = pats[Math.floor(Math.random() * pats.length)];
   
       const missIndex = Math.floor(Math.random() * chosen.length);
+      const missingNum = chosen[missIndex];
+  
       chosen.forEach((n, i) => {
         if (i !== missIndex && n > 0 && n <= 75 && !usedNumbers.has(n)) {
           usedNumbers.add(n);
@@ -722,10 +723,12 @@ class GameManager {
         }
       });
   
-      loserMissingNumbers.push(chosen[missIndex]);
+      if (missingNum > 0 && missingNum <= 75) {
+        loserMissingNumbers.push(missingNum);
+      }
     });
   
-    // --- Fill up to 24 numbers ---
+    // --- Fill up until 24 numbers ---
     while (drawnNumbers.length < 24) {
       const rand = Math.floor(Math.random() * 75) + 1;
       if (!usedNumbers.has(rand)) {
@@ -737,11 +740,13 @@ class GameManager {
     // --- Shuffle first 24 numbers ---
     const first24 = this.shuffleArray(drawnNumbers.slice(0, 24));
   
-    // --- Make 25th number the winner's missing number ---
+    // --- Make 25th number = winner’s missing number ---
     const first25 = [...first24, winnerMissing];
     usedNumbers.add(winnerMissing);
   
-    // --- Build 26–75 pool ---
+    // ✅ Up to here, after 25 numbers → 1 winner only
+  
+    // --- Losers’ missing numbers drawn *after* 25th ---
     const rest = [];
     this.shuffleArray(loserMissingNumbers).forEach((n) => {
       if (!usedNumbers.has(n)) {
@@ -750,7 +755,7 @@ class GameManager {
       }
     });
   
-    // --- Fill remaining random numbers ---
+    // --- Fill remaining up to 75 with randoms ---
     while (first25.length + rest.length < 75) {
       const rand = Math.floor(Math.random() * 75) + 1;
       if (!usedNumbers.has(rand)) {

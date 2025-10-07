@@ -12,6 +12,7 @@ import startGameHandler from './start-game.js';
 import endGameHandler from './end-game.js';
 import resetRoomHandler from './reset-room.js';
 import checkbingohandler from './check-bingo.js'
+import autodelete from './autodelete.js';
 const app = express();
 const PORT = process.env.PORT || 3001;
 

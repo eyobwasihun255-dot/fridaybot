@@ -470,7 +470,7 @@ const Room: React.FC = () => {
             <div
               key={card.id}
               onClick={() => !isClaimed && selectCard(card.id)}
-              className={`w-12 h-12 flex items-center justify-center rounded-lg font-bold cursor-pointer transition ${color}`}
+              className={`w-6 h-6 flex items-center justify-center rounded-lg font-bold cursor-pointer transition  text-xs${color}`}
             >
               {card.serialNumber}
             </div>
@@ -479,24 +479,24 @@ const Room: React.FC = () => {
       </div>
   
       <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
-        <button
-          onClick={handlePlaceBet}
-          disabled={!selectedCard || hasBet}
-          className={`flex-1 px-4 py-2 rounded-lg font-semibold shadow ${
-            hasBet
-              ? "bg-gray-500 text-white"
-              : "bg-green-600 hover:bg-green-700 text-white"
-          }`}
-        >
-          {hasBet ? "Bet Placed" : "Place Bet"}
-        </button>
+      <button
+                  onClick={isBetActive ? handleCancelBet : handlePlaceBet}
+                  className={`w-full px-4 py-2 rounded-lg shadow font-semibold ${isBetActive
+                      ? "bg-theme-secondary hover:bg-theme-red text-white"
+                      : "bg-theme-primary hover:bg-theme-green text-white"
+                    }`}
+                >
+                  {isBetActive
+                    ? `${t("cancel_bet")} card:${displayedCard?.serialNumber}`
+                    : `${t("place_bet")} card:${displayedCard?.serialNumber}`}
+                </button>
   
         <button
           onClick={() => setEnteredRoom(true)}
           className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow font-semibold"
         >
           Enter Room
-        </button>
+        </button> 
       </div>
     </div>
   );

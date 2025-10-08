@@ -24,17 +24,9 @@ class GameManager {
   }
 
   // Start countdown if conditions allow
-  async startCountdown(roomId, durationMs = 30000, startedBy = null) {
+  async startCountdown(room,roomId,players, durationMs = 30000, startedBy = null) {
     try {
-      const roomRef = ref(rtdb, `rooms/${roomId}`);
-      const snap = await get(roomRef);
-  
-      if (!snap.exists()) {
-        console.error(`❌ Room ${roomId} not found in RTDB`);
-        return { success: false, message: 'Room not found' };
-      }
-  
-      const room = snap.val();
+      
       console.log(`🎮 Room ${roomId} snapshot:`);
   
       // Check if countdown already active
@@ -45,11 +37,7 @@ class GameManager {
       }
   
       // Count players
-      const players = Object.values(room.players || {});
-      console.log(
-        `🎮 startCountdown for room ${roomId}: players=${players.length}, gameStatus=${room.gameStatus}, countdownActive=${countdownActive}`
-      );
-  
+     
       if (players.length < 2) {
         console.log(`❌ Not enough players for room ${roomId}: ${players.length} players`);
         return { success: false, message: 'Not enough players' };

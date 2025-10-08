@@ -43,6 +43,8 @@
     bingoCards: BingoCard[];
     loading: boolean;
     startingGame: boolean;
+    remaining: number;
+    setRemaining: (remaining: number) => void;
     fetchRooms: () => void;
     joinRoom: (roomId: string) => void;
     selectCard: (cardId: string) => void;
@@ -80,6 +82,8 @@
     drawIntervalId: null,
     displayedCalledNumbers: {} as { [roomId: string]: number[] },
     winnerCard: null,
+    remaining: 0,
+   
     showWinnerPopup: false,
     showLoserPopup: false,
     currentRoom: null,
@@ -90,7 +94,7 @@
     startingGame: false,
     socket: null,
     serverUrl: SERVER_URL,
-
+    setRemaining: (remaining: number) => set({ remaining: remaining }),
     setShowLoserPopup: (show: boolean) => set({ showLoserPopup: show }),
     setWinnerCard: (card) => set({ winnerCard: card, showWinnerPopup: false }),
     setShowWinnerPopup: (show: boolean) => set({ showWinnerPopup: show }),
@@ -140,7 +144,15 @@
         }
       });
       
-
+      newSocket.on("countdownStarted", ({ roomId, countdownEndAt }) => {
+        console.log("⏰ countdownStarted", roomId);
+        const updateTimer = () => {
+          const remaining = countdownEndAt - Date.now();
+          set({ remaining: remaining > 0 ? remaining : 0 });
+        };
+        updateTimer();
+      });
+  
       newSocket.on('numberDrawn', (data: any) => {
         const { number, drawnNumbers, roomId } = data;
         console.log(`🎲 Number drawn: ${number} room:currentRoom.id:${get().currentRoom?.id} roomId:${roomId}`);
@@ -233,12 +245,7 @@
       }
     },
 
-    // Server-side game start (removed from client)
-    startGameIfCountdownEnded: async () => {
-      // This is now handled by the server automatically
-      // Client just listens for gameStarted event
-      console.log('⏰ Countdown ended, server will start game automatically');
-    },
+    
 
     startNumberStream: (roomId, gameId) => {
       const { currentRoom, socket } = get();

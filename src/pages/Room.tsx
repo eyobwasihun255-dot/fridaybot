@@ -13,14 +13,8 @@ const CountdownOverlay = ({
   countdownEndAt: number;
   label: string;
 }) => {
-  // Calculate remaining time, but ensure it doesn't exceed 30 seconds
-  const calculateRemaining = () => {
-    const remainingMs = countdownEndAt - Date.now();
-    const remainingSeconds = Math.ceil(remainingMs / 1000);
-    return Math.max(0, Math.min(30, remainingSeconds)); // Cap at 30 seconds
-  };
-
-  const [remaining, setRemaining] = React.useState(calculateRemaining);
+ 
+  
 
   React.useEffect(() => {
     const interval = setInterval(() => {
@@ -74,7 +68,7 @@ const Room: React.FC = () => {
  const {
     winnerCard, showWinnerPopup, closeWinnerPopup,setWinnerCard,
     currentRoom, bingoCards, joinRoom, selectCard,
-    placeBet, selectedCard,
+    placeBet, selectedCard,remaining,setRemaining,
     showLoserPopup, setShowLoserPopup,
     connectToServer, checkBingo,
     setShowWinnerPopup
@@ -86,8 +80,6 @@ const Room: React.FC = () => {
     card.claimed &&
     card.claimedBy === user?.telegramId
 );
-
-const [remaining, setRemaining] = useState<number | null>(null);
      const displayedCard = userCard || selectedCard ;
  const cardNumbers = displayedCard?.numbers ?? [];
   const [hasBet, setHasBet] = useState(false);

@@ -167,7 +167,19 @@ app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api')) return next();
   res.sendFile(path.join(distPath, 'index.html'));
 });
-  
+
+// Auto-start games when countdown ends
+
+
+
+// Create Socket.IO server
+const server = createSocketServer(app);
+// Reuse same io instance from socket-server
+// Hack: socket-server internally creates and owns io; expose by setting on connection
+// We can set it via a small timeout after server starts by attaching to globalThis.io if set there.
+
+// Auto-countdown monitor: if room is waiting, has >=2 players, and no active countdown, start one
+// ✅ Auto-countdown monitor only
 const autoCountdownCheck = async () => {
   try {
     const roomsSnap = await get(ref(rtdb, 'rooms'));

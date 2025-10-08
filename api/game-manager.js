@@ -135,7 +135,7 @@ class GameManager {
       console.error("Error starting countdown:", err);
       return { success: false, message: "Server error" };
     }
-  
+  }
   async cancelCountdown(roomId) {
     try {
       this.clearRoomCountdownTimers(roomId);

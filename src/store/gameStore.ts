@@ -248,15 +248,7 @@
           console.error('Failed to show loser winner card:', e);
         }
       });
-      newSocket.on('roomUpdated', ({ roomId, room }) => {
-        set({
-          currentRoom: { id: roomId, ...room },
-          displayedCalledNumbers: {
-            ...get().displayedCalledNumbers,
-            [roomId]: Object.values(room.drawnNumbers || {}),
-          },
-        });
-      });
+   
       
       
       newSocket.on('roomReset', () => {

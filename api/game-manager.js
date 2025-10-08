@@ -314,6 +314,10 @@ class GameManager {
 
   // End game
   async endGame(roomId, gameId, reason = "manual") {
+          // Update room status and set nextGameCountdownEndAt so clients can transition
+          const roomRef = ref(rtdb, `rooms/${roomId}`);
+          const nextGameCountdownMs = 10; // 10s until reset (tunable)
+          const nextGameCountdownEndAt = Date.now() + nextGameCountdownMs;
     try {
       // Stop drawing numbers for this room
       this.stopNumberDrawing(roomId);
@@ -356,10 +360,7 @@ class GameManager {
         endReason: reason,
       });
 
-      // Update room status and set nextGameCountdownEndAt so clients can transition
-      const roomRef = ref(rtdb, `rooms/${roomId}`);
-      const nextGameCountdownMs = 10; // 10s until reset (tunable)
-      const nextGameCountdownEndAt = Date.now() + nextGameCountdownMs;
+
 
       await update(roomRef, {
         gameStatus: "ended",

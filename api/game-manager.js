@@ -1,5 +1,6 @@
 import { rtdb } from "../bot/firebaseConfig.js";
 import { ref, get, set, update, runTransaction, onValue } from "firebase/database";
+import { platform } from "os";
 import { v4 as uuidv4 } from "uuid";
 
 class GameManager {
@@ -24,64 +25,84 @@ class GameManager {
   }
 
   // Start countdown if conditions allow
-  async startCountdown(room,roomId,players, durationMs = 30000, startedBy = null) {
+  async startCountdown(room, roomId, players, durationMs = 30000, startedBy = "auto") {
     try {
-      
-      console.log(`🎮 Room ${roomId} snapshot:`);
+      console.log(`🎮 Room ${roomId} snapshot received for countdown`);
   
-      // Check if countdown already active
-      const countdownActive = room.gameStatus === 'countdown';
-      if (countdownActive) {
-        console.log(`⏰ Countdown already active for room ${roomId}`);
-        return { success: false, message: 'Countdown already active' };
+      // Prevent double countdowns
+      if (room.gameStatus === "countdown") {
+        console.log(`⚠️ Countdown already active for room ${roomId}`);
+        return { success: false, message: "Countdown already active" };
       }
   
-      // Count players
-     
+      // Require at least 2 players
       if (players.length < 2) {
-        console.log(`❌ Not enough players for room ${roomId}: ${players.length} players`);
-        return { success: false, message: 'Not enough players' };
+        console.log(`❌ Not enough players for room ${roomId}: ${players.length}`);
+        return { success: false, message: "Not enough players" };
       }
   
-      if (room.gameStatus !== 'waiting') {
-        console.log(`❌ Room ${roomId} not in waiting state: ${room.gameStatus}`);
-        return { success: false, message: 'Room not in waiting state' };
+      // Must be waiting
+      if (room.gameStatus !== "waiting") {
+        console.log(`⚠️ Room ${roomId} not in waiting state: ${room.gameStatus}`);
+        return { success: false, message: "Room not in waiting state" };
       }
   
+      // Calculate countdown end
       const countdownEndAt = Date.now() + durationMs;
       const roomRef = ref(rtdb, `rooms/${roomId}`);
-      
-      // ✅ Update instead of transaction
+  
+      // Save countdown state
       await update(roomRef, {
-        gameStatus: 'countdown',
+        gameStatus: "countdown",
         countdownEndAt,
         countdownStartedBy: startedBy,
       });
   
-      // Schedule auto start
+      console.log(`⏳ Countdown started for room ${roomId} (${durationMs / 1000}s)`);
+  
+      // Cancel old timer if exists
       if (this.countdownTimers.has(roomId)) {
         clearTimeout(this.countdownTimers.get(roomId));
       }
-      const tid = setTimeout(() => {
-        this.startGame(roomId).catch((e) =>
-          console.error('Auto startGame error:', e)
-        );
-        this.countdownTimers.delete(roomId);
+  
+      // --- ⏰ Schedule automatic game start
+      const tid = setTimeout(async () => {
+        try {
+          const snap = await get(roomRef);
+          const latest = snap.val();
+  
+          // Only start if still in countdown
+          if (latest?.gameStatus === "countdown") {
+            console.log(`🎮 Countdown ended → Starting game for room ${roomId}`);
+            await this.startGame(roomId, room);
+          } else {
+            console.log(`⚠️ Skipping startGame for room ${roomId}, state changed to ${latest?.gameStatus}`);
+          }
+        } catch (err) {
+          console.error(`❌ Auto startGame error for room ${roomId}:`, err);
+        } finally {
+          this.countdownTimers.delete(roomId);
+        }
       }, durationMs);
       this.countdownTimers.set(roomId, tid);
   
-      // Notify clients
+      // --- 🔊 Notify all players
       if (this.io) {
-        this.io.to(roomId).emit('countdownStarted', { roomId, countdownEndAt });
+        this.io.to(roomId).emit("countdownStarted", { roomId, countdownEndAt });
       }
   
-      console.log(`⏰ Started countdown for room ${roomId} by ${startedBy || 'unknown'}`);
+      // Optional: Notify via bot
+      if (this.notifier) {
+        this.notifier.send(`🕒 Countdown started for room ${roomId} (${durationMs / 1000}s)`);
+      }
+  
       return { success: true, countdownEndAt };
     } catch (err) {
-      console.error('Error starting countdown:', err);
-      return { success: false, message: 'Server error' };
+      console.error(`❌ Error starting countdown for room ${roomId}:`, err);
+      return { success: false, message: "Server error" };
     }
   }
+  
   
   async cancelCountdown(roomId) {
     try {
@@ -104,11 +125,9 @@ class GameManager {
   }
 
   // Start a new game
-  async startGame(roomId) {
+  async startGame(roomId, room) {
     try {
       const roomRef = ref(rtdb, `rooms/${roomId}`);
-      const roomSnap = await get(roomRef);
-      const room = roomSnap.val();
 
       if (!room || room.gameStatus !== "countdown") {
         throw new Error("Room not in countdown state");
@@ -168,14 +187,14 @@ class GameManager {
       // Save game data
       const gameRef = ref(rtdb, `games/${gameId}`);
       await set(gameRef, gameData);
-
-      // Start number drawing
-      this.startNumberDrawing(roomId, gameId);
-
-      // Notify clients
       if (this.io) {
         this.io.to(roomId).emit('gameStarted', { roomId, gameId });
       }
+      // Start number drawing
+      this.startNumberDrawing(roomId, gameId, room);
+
+      // Notify clients
+      
 
       return { success: true, gameId, drawnNumbers, winners: gameData.winners };
     } catch (error) {
@@ -185,12 +204,10 @@ class GameManager {
   }
 
   // Start number drawing process
-  startNumberDrawing(roomId, gameId) {
+  startNumberDrawing(roomId, gameId, room) {
     const gameRef = ref(rtdb, `games/${gameId}`);
-    const roomRef = ref(rtdb, `rooms/${roomId}`);
     if (this.numberDrawIntervals.has(roomId)) {
-      const roomSnap =  get(roomRef);
-      const room = roomSnap.val();
+      
       if (room.gameStatus !== "playing") {
         this.stopNumberDrawing(roomId);
         return;
@@ -261,7 +278,7 @@ class GameManager {
             }
             if (winningPattern) {
               // Trigger server bingo
-              await this.checkBingo(roomId, cardId, card.claimedBy, winningPattern);
+              await this.checkBingo(roomId, cardId, card.claimedBy, winningPattern, room, room.players[card.claimedBy]);
               break; // stop loop after first auto-winner
             }
           }
@@ -274,7 +291,7 @@ class GameManager {
         console.error("Error in number drawing:", error);
         this.stopNumberDrawing(roomId);
       }
-    }, 5000); // 5 second intervals
+    }, 3000); // 5 second intervals
 
     this.numberDrawIntervals.set(roomId, drawInterval);
   }
@@ -315,7 +332,7 @@ class GameManager {
 
       // Update room status and set nextGameCountdownEndAt so clients can transition
       const roomRef = ref(rtdb, `rooms/${roomId}`);
-      const nextGameCountdownMs = 10000; // 10s until reset (tunable)
+      const nextGameCountdownMs = 3000; // 10s until reset (tunable)
       const nextGameCountdownEndAt = Date.now() + nextGameCountdownMs;
 
       await update(roomRef, {
@@ -455,20 +472,16 @@ class GameManager {
   }
 
   // Check bingo claim
-  async checkBingo(roomId, cardId, userId, pattern) {
+  async checkBingo(roomId, cardId, userId, pattern , room , player) {
     try {
-      const roomRef = ref(rtdb, `rooms/${roomId}`);
-      const roomSnap = await get(roomRef);
-      const room = roomSnap.val();
+     
 
       if (!room || room.gameStatus !== "playing") {
         return { success: false, message: "Game not in playing state" };
       }
 
       // Check if user already attempted bingo
-      const playerRef = ref(rtdb, `rooms/${roomId}/players/${userId}`);
-      const playerSnap = await get(playerRef);
-      const player = playerSnap.val();
+ 
 
       if (player?.attemptedBingo) {
         return { success: false, message: "Already attempted bingo" };
@@ -485,8 +498,7 @@ class GameManager {
 
       // Valid bingo - write winner and notify immediately
       const gameRef = ref(rtdb, `games/${room.gameId}`);
-      const gameSnap = await get(gameRef);
-      const gameData = gameSnap.val() || {};
+     
 
       await update(gameRef, {
         winner: { winnerId: userId, winningPattern: pattern },

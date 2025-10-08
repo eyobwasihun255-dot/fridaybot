@@ -73,7 +73,7 @@ const Room: React.FC = () => {
     connectToServer, checkBingo,
     setShowWinnerPopup
   } = useGameStore();
-  const { user, updateBalance } = useAuthStore();
+  const { user, updateBalance } = useAuthStore(); 
   
  const userCard = bingoCards.find(
   (card) => // ✅ make sure it's the same room
@@ -113,7 +113,6 @@ useEffect(() => {
   }
 }, [showLoserPopup, setShowLoserPopup]);
 
-const startNumberStream = useGameStore((s) => s.startNumberStream);
 // Find this player's data inside the room
 const playerData = currentRoom?.players?.[user?.telegramId as string];
 
@@ -216,19 +215,12 @@ function patternExistsInCalled(patternNumbers: number[]) {
 
 
 
-// Reuse your existing covered pattern logic
-const coveredPattern = findCoveredPatternByMarks();
-
 
   
 
 // Combine with local state for smoother UX
 const isBetActive = hasBet || alreadyBetted || storeIsBetActive;
-React.useEffect(() => {
-  if (currentRoom?.gameStatus === "playing" && currentRoom.gameId) {
-    startNumberStream(currentRoom.id, currentRoom.gameId);
-  }
-}, [currentRoom?.gameStatus, currentRoom?.gameId]);
+
  // Inside Room.tsx
 
 const alreadyAttempted = playerData?.attemptedBingo ?? false;

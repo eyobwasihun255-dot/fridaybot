@@ -167,124 +167,51 @@ app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api')) return next();
   res.sendFile(path.join(distPath, 'index.html'));
 });
-
-// Auto-start games when countdown ends
-const startGameIfCountdownEnded = async () => {
-  try {
-    const roomsRef = ref(rtdb, 'rooms');
-    const roomsSnap = await get(roomsRef);
-    const rooms = roomsSnap.val() || {};
-
-    for (const [roomId, room] of Object.entries(rooms)) {
-      if (room.gameStatus === 'countdown' && 
-          room.countdownEndAt && 
-          room.countdownEndAt <= Date.now()) {
-        
-        console.log(`⏰ Auto-starting game for room ${roomId}`);
-        
-        // Import and call start-game handler
-        const { default: startGameHandler } = await import('./start-game.js');
-        const mockReq = { body: { roomId } };
-        const mockRes = {
-          status: (code) => ({ json: (data) => console.log(`Game start result:`, data) }),
-          json: (data) => console.log(`Game start result:`, data)
-        };
-        
-        await startGameHandler(mockReq, mockRes);
-      }
-    }
-  } catch (error) {
-    console.error('Error in auto-start check:', error);
-  }
-};
-
-// Check for countdowns every 5 seconds
-setInterval(startGameIfCountdownEnded, 2000);
-
-// Auto-reset rooms after game ends
-const resetRoomIfGameEnded = async () => {
-  try {
-    const roomsRef = ref(rtdb, 'rooms');
-    const roomsSnap = await get(roomsRef);
-    const rooms = roomsSnap.val() || {};
-
-    for (const [roomId, room] of Object.entries(rooms)) {
-      if (room.gameStatus === 'ended' && 
-          room.nextGameCountdownEndAt && 
-          room.nextGameCountdownEndAt <= Date.now()) {
-        
-        console.log(`♻️ Auto-resetting room ${roomId}`);
-        // Call game manager directly to avoid HTTP method issues
-        await gameManager.resetRoom(roomId);
-      }
-    }
-  } catch (error) {
-    console.error('Error in auto-reset check:', error);
-  }
-};
-
-// Check for room resets every 5 seconds
-setInterval(resetRoomIfGameEnded, 5000);
-
-// Create Socket.IO server
-const server = createSocketServer(app);
-// Reuse same io instance from socket-server
-// Hack: socket-server internally creates and owns io; expose by setting on connection
-// We can set it via a small timeout after server starts by attaching to globalThis.io if set there.
-
-// Auto-countdown monitor: if room is waiting, has >=2 players, and no active countdown, start one
+  
 const autoCountdownCheck = async () => {
   try {
     const roomsSnap = await get(ref(rtdb, 'rooms'));
     const rooms = roomsSnap.val() || {};
+
     for (const [roomId, room] of Object.entries(rooms)) {
       const players = Object.values(room.players || {}).filter((p) => {
         if (!p.cardId) return false;
         if (room.isDemoRoom) return true;
-        
-        // For non-demo rooms, count players who have either:
-        // 1. Placed a bet (have betAmount)
-        // 2. Set auto-bet (have a claimed card with auto: truec)
-        if (p.betAmount) return true;
-        
-        // Check if their card has auto-bet enabled
+
+        // Bet placed or card claimed (for auto-bet)
+        const hasBet = !!p.betAmount;
         const card = room.bingoCards?.[p.cardId];
-        return !!( card?.claimed && card?.claimedBy === p.telegramId);
+        const hasAuto = card?.claimed && card?.auto;
+
+        return hasBet || hasAuto;
       });
-      const hasEnough = players.length >= 2;
-      const countdownActive = !!room.countdownEndAt && room.countdownEndAt > Date.now();
-      const isWaiting = room.gameStatus === 'waiting';
-      
-      // Debug logging for rooms with players
-      if (players.length > 0) {
-        console.log(`🔍 Room ${roomId}: status=${room.gameStatus}, players=${players.length}, countdownActive=${countdownActive}, countdownStartedBy=${room.countdownStartedBy}`);
-      }
-      
-      // Only start auto-countdown if:
-      // 1. Room is waiting
-      // 2. Has enough players
-      // 3. No active countdown
-      if (isWaiting && hasEnough ) {
-        console.log(`🔄 Auto-starting countdown for room ${roomId} with ${players.length} players`);
-        const result = await gameManager.startCountdown(room,roomId,players, 30000, 'auto');
+
+      const hasEnoughPlayers = players.length >= 2;
+      const isWaiting = room.gameStatus === "waiting";
+      const countdownActive = room.countdownEndAt && room.countdownEndAt > Date.now();
+
+      if (isWaiting && hasEnoughPlayers && !countdownActive) {
+        console.log(`🔄 Starting countdown for room ${roomId} with ${players.length} players`);
+        const result = await gameManager.startCountdown(room, roomId, players, 30000, "auto");
         if (!result.success) {
-          console.log(`❌ Failed to start auto-countdown for room ${roomId}: ${result.message}`);
+          console.warn(`❌ Failed to start countdown for room ${roomId}: ${result.message}`);
         }
       }
-      
-        
-      
-      // Cancel countdown if players drop below 2, but only if it was started by auto
-      if (room.gameStatus === 'countdown' && !hasEnough ) {
-        console.log(`❌ Cancelling auto-countdown for room ${roomId} - not enough players`);
+
+      // Cancel countdown if not enough players remain (only if auto)
+      if (room.gameStatus === "countdown" && !hasEnoughPlayers && room.countdownStartedBy === "auto") {
+        console.log(`❌ Cancelling countdown for room ${roomId} (not enough players)`);
         await gameManager.cancelCountdown(roomId);
       }
     }
-  } catch (e) {
-    console.error('autoCountdownCheck error:', e);
+  } catch (error) {
+    console.error("⚠️ autoCountdownCheck error:", error);
   }
 };
-setInterval(autoCountdownCheck, 3000);
+
+// 🔁 Run only this loop every 3 seconds
+setInterval(autoCountdownCheck, 2000);
+
 
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);

@@ -49,7 +49,8 @@ class GameManager {
       }
   
       const countdownEndAt = Date.now() + durationMs;
-  
+      const roomRef = ref(rtdb, `rooms/${roomId}`);
+      
       // ✅ Update instead of transaction
       await update(roomRef, {
         gameStatus: 'countdown',

@@ -22,7 +22,7 @@ const Room: React.FC = () => {
  const {
     winnerCard, showWinnerPopup, closeWinnerPopup,setWinnerCard,
     currentRoom, bingoCards, joinRoom, selectCard,
-    placeBet, selectedCard,remaining,setRemaining,
+    placeBet, selectedCard,remaining,
     showLoserPopup, setShowLoserPopup,
     connectToServer, checkBingo,
     setShowWinnerPopup
@@ -59,10 +59,10 @@ const CountdownOverlay = ({
   const isNextRound = label === "Next round starting in";
 
   // ✅ Format seconds into mm:ss
-  const minutes = Math.floor(remaining / 60)
+  const minutes = Math.floor(countdownEndAt / 60)
     .toString()
     .padStart(2, "0");
-  const seconds = (remaining % 60).toString().padStart(2, "0");
+  const seconds = (countdownEndAt % 60).toString().padStart(2, "0");
   const formattedTime = `${minutes}:${seconds}`;
 
   return (
@@ -780,7 +780,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
   {/* Countdown overlay ONLY on top of numbers grid */}
   {currentRoom?.gameStatus === "countdown" && currentRoom.countdownEndAt && (
     <CountdownOverlay
-      countdownEndAt={currentRoom.countdownEndAt}
+      countdownEndAt={remaining}
       label="Game starting soon"
     />
   )}
@@ -830,12 +830,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
 
   
 
-  {currentRoom?.gameStatus === "ended" && currentRoom.nextGameCountdownEndAt && (
-    <CountdownOverlay
-      countdownEndAt={currentRoom.nextGameCountdownEndAt}
-      label="Next round starting in"
-    />
-  )}
+ 
 </div>
 
 

@@ -289,6 +289,7 @@ class GameManager {
             if (winningPattern) {
               // Trigger server bingo
               await this.checkBingo(roomId, cardId, card.claimedBy, winningPattern, room, room.players[card.claimedBy]);
+              this.stopNumberDrawing(roomId);
               break; // stop loop after first auto-winner
             }
           }

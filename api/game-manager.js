@@ -90,7 +90,9 @@ class GameManager {
       if (this.io) {
         this.io.to(roomId).emit("countdownStarted", { roomId, countdownEndAt });
       }
-  
+      const roomSnap = (await get(ref(rtdb, `rooms/${roomId}`))).val();
+      if (this.io) this.io.to(roomId).emit('roomUpdated', { roomId, room: roomSnap });
+
       // Optional: Notify via bot
       if (this.notifier) {
         this.notifier.send(`🕒 Countdown started for room ${roomId} (${durationMs / 1000}s)`);
@@ -117,6 +119,9 @@ class GameManager {
         countdownStartedBy: null,
       });
       if (this.io) this.io.to(roomId).emit('countdownCancelled', { roomId });
+      const roomSnap = (await get(ref(rtdb, `rooms/${roomId}`))).val();
+      if (this.io) this.io.to(roomId).emit('roomUpdated', { roomId, room: roomSnap });
+
       return { success: true };
     } catch (err) {
       console.error('Error cancelling countdown:', err);
@@ -128,6 +133,8 @@ class GameManager {
   async startGame(roomId, room) {
     try {
       const roomRef = ref(rtdb, `rooms/${roomId}`);
+      const roomSnap = await get(roomRef);
+      const room = roomSnap.val();
 
       if (!room || room.gameStatus !== "countdown") {
         throw new Error("Room not in countdown state");
@@ -190,6 +197,9 @@ class GameManager {
       if (this.io) {
         this.io.to(roomId).emit('gameStarted', { roomId, gameId });
       }
+      
+      if (this.io) this.io.to(roomId).emit('roomUpdated', { roomId, room: roomSnap });
+
       // Start number drawing
       this.startNumberDrawing(roomId, gameId, room);
 
@@ -402,6 +412,9 @@ class GameManager {
           nextGameCountdownEndAt,
         });
       }
+      const roomSnap = (await get(ref(rtdb, `rooms/${roomId}`))).val();
+      if (this.io) this.io.to(roomId).emit('roomUpdated', { roomId, room: roomSnap });
+
 
       console.log(`🔚 Game ended in room ${roomId}: ${reason}`);
     } catch (error) {

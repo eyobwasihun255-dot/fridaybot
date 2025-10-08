@@ -44,6 +44,7 @@
     loading: boolean;
     startingGame: boolean;
     remaining: number;
+    syncRoomState: (roomId: string) => Promise<void>;
     setRemaining: (remaining: number) => void;
     fetchRooms: () => void;
     joinRoom: (roomId: string) => void;
@@ -98,7 +99,22 @@
     setShowWinnerPopup: (show: boolean) => set({ showWinnerPopup: show }),
     closeWinnerPopup: () => set({ showWinnerPopup: false }),
 
- 
+    syncRoomState: async (roomId: string) => {
+      const snap = await fbget(ref(rtdb, `rooms/${roomId}`));
+      const room = snap.val();
+      if (!room) return;
+    
+      set({
+        currentRoom: { id: roomId, ...room },
+        displayedCalledNumbers: {
+          ...get().displayedCalledNumbers,
+          [roomId]: Object.values(room.drawnNumbers || {}),
+        },
+      });
+    
+      console.log("🔄 Room synced:", room.gameStatus);
+    },
+    
 
     // Connect to server via Socket.IO
     connectToServer: () => {
@@ -108,9 +124,14 @@
       console.log('🔌 Connecting to server:', SERVER_URL);
       const newSocket = io(SERVER_URL);
 
-      newSocket.on('connect', () => {
+      newSocket.on('connect', async () => {
         console.log('✅ Connected to server');
+        const { currentRoom, syncRoomState } = get();
+        if (currentRoom?.id) {
+          await syncRoomState(currentRoom.id);
+        }
       });
+      
 
       newSocket.on('disconnect', () => {
         console.log('❌ Disconnected from server');
@@ -210,7 +231,17 @@
           console.error('Failed to show loser winner card:', e);
         }
       });
-
+      newSocket.on('roomUpdated', ({ roomId, room }) => {
+        set({
+          currentRoom: { id: roomId, ...room },
+          displayedCalledNumbers: {
+            ...get().displayedCalledNumbers,
+            [roomId]: Object.values(room.drawnNumbers || {}),
+          },
+        });
+      });
+      
+      
       newSocket.on('roomReset', () => {
         console.log('♻️ Room reset');
         // Refresh room data

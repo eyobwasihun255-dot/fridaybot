@@ -780,7 +780,7 @@ const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
   {/* Countdown overlay ONLY on top of numbers grid */}
   {currentRoom?.gameStatus === "countdown" && currentRoom.countdownEndAt && (
     <CountdownOverlay
-      countdownEndAt={remaining}
+      countdownEndAt={currentRoom.countdownEndAt}
       label="Game starting soon"
     />
   )}

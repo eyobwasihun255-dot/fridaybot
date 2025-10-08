@@ -280,10 +280,11 @@ class GameManager {
             if (!card.claimed || !card.claimedBy) continue;
             
             const flat = card.numbers.flat();
+         
             // find first winning pattern
             let winningPattern = null;
             for (const pat of patterns) {
-              const ok = pat.every((idx) => flat[idx] === 0 || calledSet.has(flatf[idx]));
+              const ok = pat.every((idx) => flat[idx] === 0 || calledSet.has(flat[idx]));
               if (ok) { winningPattern = pat; break; }
             }
             if (winningPattern) {

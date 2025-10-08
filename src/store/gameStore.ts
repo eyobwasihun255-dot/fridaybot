@@ -63,7 +63,8 @@
     cancelBet: (cardId?: string) => Promise<boolean>;
     isBetActive: boolean;
     drawIntervalId: ReturnType<typeof setInterval> | null;
-    
+    countdownInterval: ReturnType<typeof setInterval> | null;
+    startCountdownTicker: () => void;
     // Server communication
     socket: Socket | null;
     serverUrl: string;
@@ -82,7 +83,7 @@
     displayedCalledNumbers: {} as { [roomId: string]: number[] },
     winnerCard: null,
     remaining: 0,
-   
+    countdownInterval: null,
     showWinnerPopup: false,
     showLoserPopup: false,
     currentRoom: null,
@@ -98,7 +99,26 @@
     setWinnerCard: (card) => set({ winnerCard: card, showWinnerPopup: false }),
     setShowWinnerPopup: (show: boolean) => set({ showWinnerPopup: show }),
     closeWinnerPopup: () => set({ showWinnerPopup: false }),
-
+    startCountdownTicker: () => {
+      const { remaining ,countdownInterval } = get();
+      if (remaining <= 0) return;
+    
+      // clear any previous interval
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+      }
+    
+      const timer = setInterval(() => {
+        const r = get().remaining - 1;
+        set({ remaining: r > 0 ? r : 0 });
+        if (r <= 0) {
+          clearInterval(timer);
+          set({ countdownInterval: null });
+        }
+      }, 1000);
+    
+      set({ countdownInterval: timer });
+    },
     syncRoomState: async (roomId: string) => {
       const snap = await fbget(ref(rtdb, `rooms/${roomId}`));
       const room = snap.val();
@@ -149,16 +169,13 @@
           if (startBalanceListener) startBalanceListener();
         }
       });
-      
       newSocket.on("countdownStarted", ({ roomId, countdownEndAt }) => {
         console.log("⏰ countdownStarted", roomId);
       
-        const updateTimer = () => {
-          const remainingSec = Math.ceil((countdownEndAt - Date.now()) / 1000);
-          set({ remaining: remainingSec > 0 ? remainingSec : 0 });
-        };
+        const remainingSec = Math.ceil((countdownEndAt - Date.now()) / 1000);
+        set({ remaining: remainingSec > 0 ? remainingSec : 0 });
       
-        updateTimer();
+        get().startCountdownTicker(); // ✅ start ticking locally
       });
       
         newSocket.on('numberDrawn', (data: any) => {
@@ -416,6 +433,7 @@
         }
       });
     },
+    
     
 
     selectCard: (cardId: string) => {

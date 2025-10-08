@@ -9,8 +9,6 @@ class GameManager {
     this.countdownTimers = new Map(); // roomId -> timeout ID
     this.resetRoomTimers = new Map(); // roomId -> timeout ID for scheduled reset
     this.io = null; // Will be set when Socket.IO is initialized
-    this.countdownIntervals = new Map(); // roomId -> interval id for periodic countdown tick
-
   }
 
   // Singleton pattern
@@ -24,131 +22,94 @@ class GameManager {
   setSocketIO(io) {
     this.io = io;
   }
-  clearRoomCountdownTimers(roomId) {
-    if (this.countdownTimers.has(roomId)) {
-      clearTimeout(this.countdownTimers.get(roomId));
-      this.countdownTimers.delete(roomId);
-    }
-    if (this.countdownIntervals.has(roomId)) {
-      clearInterval(this.countdownIntervals.get(roomId));
-      this.countdownIntervals.delete(roomId);
-    }
-  }
+
   // Start countdown if conditions allow
   async startCountdown(roomId, durationMs = 30000, startedBy = null) {
     try {
       const roomRef = ref(rtdb, `rooms/${roomId}`);
+      const snap = await get(roomRef);
   
-      // Use runTransaction to ensure we only set countdown when room is in 'waiting'
-      const res = await runTransaction(roomRef, (currentRoom) => {
-        if (!currentRoom) return; // room missing -> abort
-        // if already countdown or playing -> abort
-        if (currentRoom.gameStatus && currentRoom.gameStatus !== "waiting") {
-          return; // abort transaction (no change)
-        }
-  
-        const now = Date.now();
-        const countdownEndAt = now + durationMs;
-  
-        currentRoom.gameStatus = "countdown";
-        currentRoom.countdownEndAt = countdownEndAt;
-        currentRoom.countdownStartedBy = startedBy;
-  
-        return currentRoom;
-      });
-  
-      if (!res.committed) {
-        // someone else started it or room not waiting
-        console.log(`⏰ startCountdown aborted for ${roomId} - not in waiting or already started`);
-        return { success: false, message: "Countdown not started (state mismatch)" };
+      if (!snap.exists()) {
+        console.error(`❌ Room ${roomId} not found in RTDB`);
+        return { success: false, message: 'Room not found' };
       }
   
-      // --- schedule server-side auto-start using exact remaining ms ---
-      const roomSnap = await get(roomRef);
-      const room = roomSnap.val();
-      const remaining = Math.max((room.countdownEndAt || 0) - Date.now(), 0);
+      const room = snap.val();
+      console.log(`🎮 Room ${roomId} snapshot:`);
   
-      // clear any previous timers for safety
-      this.clearRoomCountdownTimers(roomId);
+      // Check if countdown already active
+      const countdownActive = room.gameStatus === 'countdown';
+      if (countdownActive) {
+        console.log(`⏰ Countdown already active for room ${roomId}`);
+        return { success: false, message: 'Countdown already active' };
+      }
   
-      // final auto-start timeout
-      const tid = setTimeout(async () => {
-        try {
-          // Final verification before starting
-          const finalSnap = await get(roomRef);
-          const finalRoom = finalSnap.val();
-          const now = Date.now();
+      // Count players
+      const players = Object.values(room.players || {});
+      console.log(
+        `🎮 startCountdown for room ${roomId}: players=${players.length}, gameStatus=${room.gameStatus}, countdownActive=${countdownActive}`
+      );
   
-          // If countdownEndAt is in the future (due to race), postpone
-          if (!finalRoom || finalRoom.gameStatus !== "countdown") {
-            console.log(`⏰ auto-start aborted; state changed for ${roomId}`);
-            return;
-          }
-          if (finalRoom.countdownEndAt && now < finalRoom.countdownEndAt - 250) {
-            // If we're slightly early, reschedule for the exact remaining ms
-            const rem = finalRoom.countdownEndAt - now;
-            const t = setTimeout(() => this.startGame(roomId).catch(e => console.error(e)), rem);
-            this.countdownTimers.set(roomId, t);
-            return;
-          }
+      if (players.length < 2) {
+        console.log(`❌ Not enough players for room ${roomId}: ${players.length} players`);
+        return { success: false, message: 'Not enough players' };
+      }
   
-          await this.startGame(roomId);
-        } catch (e) {
-          console.error('Auto startGame error:', e);
-        } finally {
-          this.countdownTimers.delete(roomId);
-        }
-      }, remaining);
-      this.countdownTimers.set(roomId, tid);
+      if (room.gameStatus !== 'waiting') {
+        console.log(`❌ Room ${roomId} not in waiting state: ${room.gameStatus}`);
+        return { success: false, message: 'Room not in waiting state' };
+      }
   
-      // periodic sync emitter (every 2 seconds) to keep clients in sync with server time
-      const tickInterval = setInterval(async () => {
-        try {
-          const snap = await get(roomRef);
-          const r = snap.val() || {};
-          if (r.gameStatus !== "countdown") {
-            this.clearRoomCountdownTimers(roomId);
-            return;
-          }
-          const countdownEndAt = r.countdownEndAt || null;
-          if (this.io) {
-            this.io.to(roomId).emit("countdownTick", { roomId, countdownEndAt });
-          }
-        } catch (e) {
-          console.error('countdownTick error:', e);
-        }
-      }, 2000);
-      this.countdownIntervals.set(roomId, tickInterval);
+      const countdownEndAt = Date.now() + durationMs;
   
-      // Notify clients immediately
-      const finalSnap2 = await get(roomRef);
-      const finalRoom2 = finalSnap2.val() || {};
-      if (this.io) this.io.to(roomId).emit("countdownStarted", {
-        roomId,
-        countdownEndAt: finalRoom2.countdownEndAt,
-        countdownStartedBy: finalRoom2.countdownStartedBy
+      // ✅ Update instead of transaction
+      await update(roomRef, {
+        gameStatus: 'countdown',
+        countdownEndAt,
+        countdownStartedBy: startedBy,
       });
   
-      console.log(`⏰ Started countdown for room ${roomId} (by ${startedBy})`);
-      return { success: true, countdownEndAt: finalRoom2.countdownEndAt };
+      // Schedule auto start
+      if (this.countdownTimers.has(roomId)) {
+        clearTimeout(this.countdownTimers.get(roomId));
+      }
+      const tid = setTimeout(() => {
+        this.startGame(roomId).catch((e) =>
+          console.error('Auto startGame error:', e)
+        );
+        this.countdownTimers.delete(roomId);
+      }, durationMs);
+      this.countdownTimers.set(roomId, tid);
+  
+      // Notify clients
+      if (this.io) {
+        this.io.to(roomId).emit('countdownStarted', { roomId, countdownEndAt });
+      }
+  
+      console.log(`⏰ Started countdown for room ${roomId} by ${startedBy || 'unknown'}`);
+      return { success: true, countdownEndAt };
     } catch (err) {
-      console.error("Error starting countdown:", err);
-      return { success: false, message: "Server error" };
+      console.error('Error starting countdown:', err);
+      return { success: false, message: 'Server error' };
     }
   }
+  
   async cancelCountdown(roomId) {
     try {
-      this.clearRoomCountdownTimers(roomId);
+      if (this.countdownTimers.has(roomId)) {
+        clearTimeout(this.countdownTimers.get(roomId));
+        this.countdownTimers.delete(roomId);
+      }
       const roomRef = ref(rtdb, `rooms/${roomId}`);
       await update(roomRef, {
-        gameStatus: "waiting",
+        gameStatus: 'waiting',
         countdownEndAt: null,
         countdownStartedBy: null,
       });
-      if (this.io) this.io.to(roomId).emit("countdownCancelled", { roomId });
+      if (this.io) this.io.to(roomId).emit('countdownCancelled', { roomId });
       return { success: true };
     } catch (err) {
-      console.error("Error cancelling countdown:", err);
+      console.error('Error cancelling countdown:', err);
       return { success: false };
     }
   }
@@ -159,27 +120,22 @@ class GameManager {
       const roomRef = ref(rtdb, `rooms/${roomId}`);
       const roomSnap = await get(roomRef);
       const room = roomSnap.val();
-  
-      if (!room) throw new Error("Room not found");
-      if (room.gameStatus !== "countdown") {
+
+      if (!room || room.gameStatus !== "countdown") {
         throw new Error("Room not in countdown state");
       }
-  
-      // final server-side time check
-      const now = Date.now();
-      if (room.countdownEndAt && now < room.countdownEndAt - 250) {
-        // Too early: let the scheduled timer handle it
-        throw new Error("Attempted to start game too early");
-      }
-  
+
       const gameId = uuidv4();
       const playerIds = Object.keys(room.players || {});
-      if (playerIds.length < 2) throw new Error("Not enough players");
-  
-      // Prepare game data (generate drawn numbers & winners)
-      const cards = playerIds.map(pid => room.bingoCards?.[room.players[pid]?.cardId]).filter(Boolean);
+      
+      if (playerIds.length < 2) {
+        throw new Error("Not enough players to start game");
+      }
+
+      // Generate drawn numbers and determine winners
+      const cards = playerIds.map(pid => room.bingoCards[room.players[pid].cardId]);
       const { drawnNumbers, winners } = this.generateDrawnNumbersMultiWinner(cards);
-  
+
       const gameData = {
         id: gameId,
         roomId,
@@ -195,58 +151,44 @@ class GameManager {
         winners: winners.map(cardId => ({
           id: uuidv4(),
           cardId,
-          userId: room.bingoCards?.[cardId]?.claimedBy || null,
+          userId: room.bingoCards[cardId]?.claimedBy,
+          username: room.players[room.bingoCards[cardId]?.claimedBy]?.username || "Unknown",
           checked: false
         })),
         gameStatus: "playing"
       };
-  
-      // Clear countdown timers for room
-      this.clearRoomCountdownTimers(roomId);
-  
-      // Do a single multi-path update to write both game and room updates in one roundtrip
-      const rootRef = ref(rtdb, "/");
-      const updates = {};
-      updates[`games/${gameId}`] = gameData;
-      updates[`rooms/${roomId}/gameStatus`] = "playing";
-      updates[`rooms/${roomId}/gameId`] = gameId;
-      updates[`rooms/${roomId}/calledNumbers`] = [];
-      updates[`rooms/${roomId}/countdownEndAt`] = null;
-      updates[`rooms/${roomId}/countdownStartedBy`] = null;
-      updates[`rooms/${roomId}/currentWinner`] = null;
-      updates[`rooms/${roomId}/payed`] = false;
-  
-      await update(rootRef, updates);
-  
-      // Deduct bets (still per-user transaction for balances) - run in parallel but not blocking room update
-      this.deductBets(roomId, gameData).catch(e => console.error("deductBets error:", e));
-  
-      // Start number drawing (starts reading from games/${gameId})
+
+      // Update room status
+      await runTransaction(roomRef, (currentRoom) => {
+        if (!currentRoom || currentRoom.gameStatus !== "countdown") return currentRoom;
+        
+        currentRoom.gameStatus = "playing";
+        currentRoom.gameId = gameId;
+        currentRoom.calledNumbers = [];
+        currentRoom.countdownEndAt = null;
+        currentRoom.countdownStartedBy = null;
+        currentRoom.currentWinner = null;
+        currentRoom.payed = false;
+        
+        return currentRoom;
+      });
+
+      // Deduct bets from players
+      await this.deductBets(roomId, gameData);
+
+      // Save game data
+      const gameRef = ref(rtdb, `games/${gameId}`);
+      await set(gameRef, gameData);
+
+      // Start number drawing
       this.startNumberDrawing(roomId, gameId);
-  
-      // Immediately notify clients with game details
+
+      // Notify clients
       if (this.io) {
-        this.io.to(roomId).emit("gameStarted", { roomId, gameId, drawnNumbers: gameData.drawnNumbers, game: gameData });
+        this.io.to(roomId).emit('gameStarted', { roomId, gameId });
       }
-  
-      // Send notifications to claimed-but-offline players (use notifier)
-      try {
-        // lazy require to avoid circular deps if any
-        const { sendBotMessage } = await import("./notifier.js");
-        for (const pid of Object.keys(room.players || {})) {
-          const player = room.players[pid];
-          // we expect frontend sets players[pid].isActive = true while miniapp is open
-          const hasClaimed = Object.values(room.bingoCards || {}).some(c => c.claimedBy === pid);
-          if (hasClaimed && !player?.isActive) {
-            // Non-blocking
-            sendBotMessage(pid, `🎯 Your game in room ${roomId} has started — open the mini app to continue playing!`).catch(e => console.error("notify error:", e));
-          }
-        }
-      } catch (e) {
-        console.error("Notifier error (non-fatal):", e);
-      }
-  
-      return { success: true, gameId, winners: gameData.winners };
+
+      return { success: true, gameId, drawnNumbers, winners: gameData.winners };
     } catch (error) {
       console.error("Error starting game:", error);
       throw error;

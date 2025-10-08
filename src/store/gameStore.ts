@@ -131,28 +131,30 @@
       
       newSocket.on("countdownStarted", ({ roomId, countdownEndAt }) => {
         console.log("⏰ countdownStarted", roomId);
+      
         const updateTimer = () => {
-          const remaining = countdownEndAt - Date.now();
-          set({ remaining: remaining > 0 ? remaining : 0 });
+          const remainingSec = Math.ceil((countdownEndAt - Date.now()) / 1000);
+          set({ remaining: remainingSec > 0 ? remainingSec : 0 });
         };
+      
         updateTimer();
       });
-  
-      newSocket.on('numberDrawn', (data: any) => {
-        const { number, drawnNumbers, roomId } = data;
-        console.log(`🎲 Number drawn: ${number} room:currentRoom.id:${get().currentRoom?.id} roomId:${roomId}`);
-        const { currentRoom } = get();
+      
+        newSocket.on('numberDrawn', (data: any) => {
+          const { number, drawnNumbers, roomId } = data;
+          console.log(`🎲 Number drawn: ${number} room:currentRoom.id:${get().currentRoom?.id} roomId:${roomId}`);
+          const { currentRoom } = get();
 
-      // ✅ Ignore events not from current room
-      if (!currentRoom || roomId !== currentRoom.id) return;
-        if (currentRoom && roomId === currentRoom.id) {
-        set((state) => ({
-          displayedCalledNumbers: {
-            ...state.displayedCalledNumbers,
-            [roomId]: drawnNumbers,
-          },
-        }));}
-      });
+        // ✅ Ignore events not from current room
+        if (!currentRoom || roomId !== currentRoom.id) return;
+          if (currentRoom && roomId === currentRoom.id) {
+          set((state) => ({
+            displayedCalledNumbers: {
+              ...state.displayedCalledNumbers,
+              [roomId]: drawnNumbers,
+            },
+          }));}
+        });
 
       newSocket.on('gameEnded', (data: any) => {
         const { currentRoom } = get();

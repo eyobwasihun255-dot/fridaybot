@@ -328,6 +328,25 @@ class GameManager {
         this.countdownTimers.delete(roomId);
       }
 
+      
+      try {
+        if (this.resetRoomTimers.has(roomId)) {
+          clearTimeout(this.resetRoomTimers.get(roomId));
+          this.resetRoomTimers.delete(roomId);
+        }
+        const rid = setTimeout(async () => {
+          try {
+            await this.resetRoom(roomId);
+          } catch (e) {
+            console.error('Error in scheduled resetRoom:', e);
+          } finally {
+            this.resetRoomTimers.delete(roomId);
+          }
+        }, nextGameCountdownMs );
+        this.resetRoomTimers.set(roomId, rid);
+      } catch (e) {
+        console.error('Error scheduling resetRoom timer:', e);
+      }
       const gameRef = ref(rtdb, `games/${gameId}`);
       const gameSnap = await get(gameRef);
       const gameData = gameSnap.val();
@@ -343,7 +362,7 @@ class GameManager {
 
       // Update room status and set nextGameCountdownEndAt so clients can transition
       const roomRef = ref(rtdb, `rooms/${roomId}`);
-      const nextGameCountdownMs = 3000; // 10s until reset (tunable)
+      const nextGameCountdownMs = 10; // 10s until reset (tunable)
       const nextGameCountdownEndAt = Date.now() + nextGameCountdownMs;
 
       await update(roomRef, {
@@ -353,25 +372,6 @@ class GameManager {
         countdownStartedBy: null,
       });
 
-      // Schedule per-room reset to avoid waiting for global poll
-      try {
-        if (this.resetRoomTimers.has(roomId)) {
-          clearTimeout(this.resetRoomTimers.get(roomId));
-          this.resetRoomTimers.delete(roomId);
-        }
-        const rid = setTimeout(async () => {
-          try {
-            await this.resetRoom(roomId);
-          } catch (e) {
-            console.error('Error in scheduled resetRoom:', e);
-          } finally {
-            this.resetRoomTimers.delete(roomId);
-          }
-        }, nextGameCountdownMs + 200);
-        this.resetRoomTimers.set(roomId, rid);
-      } catch (e) {
-        console.error('Error scheduling resetRoom timer:', e);
-      }
 
       // If numbers finished and no winner confirmed, add revenue and skip payouts
       const hasConfirmedWinner = !!gameData.winner;

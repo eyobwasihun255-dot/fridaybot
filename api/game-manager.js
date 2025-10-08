@@ -283,13 +283,12 @@ class GameManager {
             // find first winning pattern
             let winningPattern = null;
             for (const pat of patterns) {
-              const ok = pat.every((idx) => flat[idx] === 0 || calledSet.has(flat[idx]));
+              const ok = pat.every((idx) => flat[idx] === 0 || calledSet.has(flatf[idx]));
               if (ok) { winningPattern = pat; break; }
             }
             if (winningPattern) {
               // Trigger server bingo
               await this.checkBingo(roomId, cardId, card.claimedBy, winningPattern, room, room.players[card.claimedBy]);
-              this.stopNumberDrawing(roomId);
               break; // stop loop after first auto-winner
             }
           }
@@ -500,7 +499,7 @@ class GameManager {
       if (player?.attemptedBingo) {
         return { success: false, message: "Already attempted bingo" };
       }
-
+      const playerRef = ref(rtdb, `rooms/${roomId}/players/${userId}`);
       // Validate bingo pattern
       const isValidBingo = this.validateBingoPattern(cardId, room, pattern, room.calledNumbers);
       
@@ -536,7 +535,7 @@ class GameManager {
       const playerCount = Object.keys(room.players || {}).length;
       const roomAmount = room.betAmount || 0;
       const payoutAmount = Math.floor((playerCount - 1) * roomAmount * 0.85 + roomAmount);
-      
+      const roomRef = ref(rtdb, `rooms/${roomId}`);
       if (payoutAmount > 0) {
         const balanceRef = ref(rtdb, `users/${userId}/balance`);
         await runTransaction(balanceRef, (current) => (current || 0) + payoutAmount);

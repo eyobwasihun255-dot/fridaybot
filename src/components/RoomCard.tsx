@@ -3,7 +3,7 @@ import { Users, Coins, Play } from 'lucide-react';
 import { useLanguageStore } from '../store/languageStore';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-
+import { useEffect, useState } from 'react';
 interface Room {
   id: string;
   name: string;
@@ -12,6 +12,7 @@ interface Room {
   players: { [id: string]: any } | number; // could be number or object
   gameStatus: string;
   isDemoRoom?: boolean;
+  countdownEndAt : number;
 }
 
 interface RoomCardProps {
@@ -72,7 +73,28 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
     !room.isDemoRoom && playerCount > 1
       ? Math.max(0, Math.floor((playerCount ) * room.betAmount * 0.9))
       : 0;
+      const [timeLeft, setTimeLeft] = useState(0);
 
+useEffect(() => {
+        if (room.gameStatus === "countdown" && room.countdownEndAt) {
+          const updateTimer = () => {
+            const now = new Date().getTime();
+            const endTime = new Date(room.countdownEndAt).getTime();
+            const diff = Math.max(0, Math.floor((endTime - now) / 1000)); // in seconds
+            setTimeLeft(diff);
+          };
+    
+          updateTimer(); // initial call
+          const interval = setInterval(updateTimer, 1000);
+    
+          return () => clearInterval(interval); // cleanup
+        }
+      }, [room.gameStatus, room.countdownEndAt]);
+      const formatTime = (seconds) => {
+        const m = String(Math.floor(seconds / 60)).padStart(2, "0");
+        const s = String(seconds % 60).padStart(2, "0");
+        return `${m}:${s}`;
+      };
   return (
     <div
       className={`relative rounded-xl overflow-hidden border border-white/20 shadow-lg hover:scale-105 transition-all duration-300
@@ -121,11 +143,15 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
           </div>
 
           <div className="flex items-center justify-between">
-            <span className="text-white/80">{t('status')}:</span>
-            <span className={`font-medium ${getStatusColor(room.gameStatus)}`}>
-              {t(room.gameStatus)}
-            </span>
-          </div>
+      <span className="text-white/80">{t("status")}:</span>
+      <span className={`font-medium ${getStatusColor(room.gameStatus)}`}>
+        {t(room.gameStatus)}
+        {room.gameStatus === "countdown" && timeLeft > 0 && (
+          <span className="ml-2 bg-red-400">{formatTime(timeLeft)}</span>
+        )}
+      </span>
+    </div>
+
 
           {/* ✅ Payout Display */}
           {!room.isDemoRoom && (

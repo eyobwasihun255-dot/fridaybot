@@ -59,10 +59,11 @@ const CountdownOverlay = ({
   const isNextRound = label === "Next round starting in";
 
   // ✅ Format seconds into mm:ss
-  const minutes = Math.floor(countdownEndAt / 60)
+  const sec= Math.ceil((countdownEndAt - Date.now()) / 1000)
+  const minutes = Math.floor(sec / 60)
     .toString()
     .padStart(2, "0");
-  const seconds = (countdownEndAt % 60).toString().padStart(2, "0");
+  const seconds = (sec % 60).toString().padStart(2, "0");
   const formattedTime = `${minutes}:${seconds}`;
 
   return (

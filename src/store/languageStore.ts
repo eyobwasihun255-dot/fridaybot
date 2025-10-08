@@ -73,7 +73,7 @@ const translations = {
     'n_column': 'ኤን (31-45)',
     'g_column': 'ጂ (46-60)',
     'o_column': 'ኦ (61-75)',
-     'countdown': 'ቆጠራ',
+     'countdown': 'ክፍት',
     'waiting_for_players': 'ለተጫዋቾች በመጠበቅ...',
     'game_in_progress': 'ጨዋታ በሂደት ላይ ነው',
     'place_your_bet': 'ውርርድዎን ያድርጉ',

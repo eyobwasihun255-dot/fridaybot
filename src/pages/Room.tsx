@@ -6,53 +6,7 @@ import { useAuthStore } from '../store/authStore';
 import { rtdb } from '../firebase/config';
 import { ref, update, get , onValue } from 'firebase/database';
 
-const CountdownOverlay = ({
-  countdownEndAt,
-  label,
-}: {
-  countdownEndAt: number;
-  label: string;
-}) => {
- 
-  
 
-  React.useEffect(() => {
-    const interval = setInterval(() => {
-      setRemaining(calculateRemaining());
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [countdownEndAt]);
-
-  if (remaining <= 0) return null;
-
-  const isNextRound = label === "Next round starting in";
-
-  // ✅ Format seconds into mm:ss
-  const minutes = Math.floor(remaining / 60)
-    .toString()
-    .padStart(2, "0");
-  const seconds = (remaining % 60).toString().padStart(2, "0");
-  const formattedTime = `${minutes}:${seconds}`;
-
-  return (
-    <div className="absolute inset-0 bg-black/70 flex items-center justify-center rounded">
-      <div
-        className={`bg-white text-black text-center shadow-xl flex flex-col items-center justify-center
-          ${isNextRound 
-            ? "w-4/5 h-4/5 rounded scale-75"   // 🔹 1/4th size (next round)
-            : "w-4/5 h-2/5 rounded-xl p-2"}    // 🔹 30s countdown always fits
-        `}
-      >
-        <h2 className={`font-bold mb-2 ${isNextRound ? "text-1" : "text-l"}`}>
-          {label}
-        </h2>
-        <p className={`${isNextRound ? "text-2xl" : "text-2xl"} font-mono`}>
-          {formattedTime}
-        </p>
-      </div>
-    </div>
-  );
-};
 
 const Room: React.FC = () => {
   const { roomId } = useParams();
@@ -92,7 +46,44 @@ const displayedCalledNumbers = useGameStore(
 );
 const [hasAttemptedBingo, setHasAttemptedBingo] = useState(false);
 const [isDisqualified, setIsDisqualified] = useState(false);
+const CountdownOverlay = ({
+  countdownEndAt,
+  label,
+}: {
+  countdownEndAt: number;
+  label: string;
+}) => {
+ 
+  if (remaining <= 0) return null;
 
+  const isNextRound = label === "Next round starting in";
+
+  // ✅ Format seconds into mm:ss
+  const minutes = Math.floor(remaining / 60)
+    .toString()
+    .padStart(2, "0");
+  const seconds = (remaining % 60).toString().padStart(2, "0");
+  const formattedTime = `${minutes}:${seconds}`;
+
+  return (
+    <div className="absolute inset-0 bg-black/70 flex items-center justify-center rounded">
+      <div
+        className={`bg-white text-black text-center shadow-xl flex flex-col items-center justify-center
+          ${isNextRound 
+            ? "w-4/5 h-4/5 rounded scale-75"   // 🔹 1/4th size (next round)
+            : "w-4/5 h-2/5 rounded-xl p-2"}    // 🔹 30s countdown always fits
+        `}
+      >
+        <h2 className={`font-bold mb-2 ${isNextRound ? "text-1" : "text-l"}`}>
+          {label}
+        </h2>
+        <p className={`${isNextRound ? "text-2xl" : "text-2xl"} font-mono`}>
+          {formattedTime}
+        </p>
+      </div>
+    </div>
+  );
+};
 // Auto-close popups after 5 seconds
 useEffect(() => {
   if (showWinnerPopup) {

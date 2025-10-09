@@ -34,7 +34,7 @@ const Room: React.FC = () => {
       card.claimed &&
       card.claimedBy === user?.telegramId
   );
-  const displayedCard = userCard || selectedCard;
+  const displayedCard = selectedCard;
   const cardNumbers = userCard?.numbers ?? [];
   const [hasBet, setHasBet] = useState(false);
   const [gameMessage, setGameMessage] = useState('');
@@ -881,7 +881,7 @@ const Room: React.FC = () => {
                    {t('time_left')}
                  </h2>
                  <p className={`text-l font-mono`}>
-                   {formatTime(timeLeft)}{t('seconds')}
+                   {formatTime(timeLeft)} {t('seconds')}
                  </p>
                </div>
              </div>

@@ -338,14 +338,6 @@ const Room: React.FC = () => {
       socket?.off("winnerConfirmed");
     };
   }, [currentRoom?.id, user?.telegramId]);
-  React.useEffect(() => {
-    return () => {
-      const { currentRoom } = useGameStore.getState();
-      if (currentRoom && ["waiting", "countdown"].includes(currentRoom.gameStatus)) {
-        useGameStore.getState().setEnteredRoom(false);
-      }
-    };
-  }, []);
 
   // Auto Bingo is now handled server-side
 
@@ -544,7 +536,7 @@ const Room: React.FC = () => {
   
   
 
-  if (["waiting", "countdown"].includes(currentRoom?.gameStatus) && !userCard && !enteredRoom) {
+  if (["waiting", "countdown"].includes(currentRoom?.gameStatus) && !userCard ) {
     return <CardSelectionGrid />;
   }
   
@@ -605,7 +597,14 @@ const Room: React.FC = () => {
     if (num >= 61 && num <= 75) return "O-";
     return "";
   }
- 
+  useEffect(() => {
+    return () => {
+      const { currentRoom } = useGameStore.getState();
+      if (currentRoom && ["waiting", "countdown"].includes(currentRoom.gameStatus)) {
+        useGameStore.getState().setEnteredRoom(false);
+      }
+    };
+  }, []);
   
 
   

@@ -443,7 +443,12 @@ const Room: React.FC = () => {
           Select Your Bingo Card
           
         </h2>
-        <p>{formatTime(timeLeft)} {t('seconds')}</p>
+        {currentRoom?.gameStatus !== "playing" && (
+  <p>
+    {formatTime(timeLeft)} {t('seconds')}
+  </p>
+)}
+
   
         {/* ✅ Bingo Card Grid */}
         <div className="grid grid-cols-10 gap-2 mb-6 justify-items-center">

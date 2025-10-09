@@ -441,9 +441,10 @@ const Room: React.FC = () => {
       <div className="flex flex-col items-center justify-center min-h-screen text-white p-4">
         <h2 className="text-2xl font-bold mb-6 text-theme-white">
           Select Your Bingo Card
-         
+          
         </h2>
-        <p> {formatTime(timeLeft)} {t('seconds')}</p>
+        <p>{formatTime(timeLeft)} {t('seconds')}</p>
+  
         {/* ✅ Bingo Card Grid */}
         <div className="grid grid-cols-10 gap-2 mb-6 justify-items-center">
           {sortedCards.slice(0, 100).map((card) => {
@@ -535,8 +536,9 @@ const Room: React.FC = () => {
   };
   
   
-
-  if (["waiting", "countdown"].includes(currentRoom?.gameStatus) && !userCard ) {
+  
+  
+  if (["waiting", "countdown"].includes(currentRoom?.gameStatus) && !userCard) {
     return <CardSelectionGrid />;
   }
   
@@ -597,15 +599,7 @@ const Room: React.FC = () => {
     if (num >= 61 && num <= 75) return "O-";
     return "";
   }
-  useEffect(() => {
-    return () => {
-      const { currentRoom } = useGameStore.getState();
-      if (currentRoom && ["waiting", "countdown"].includes(currentRoom.gameStatus)) {
-        useGameStore.getState().setEnteredRoom(false);
-      }
-    };
-  }, []);
-  
+
 
   
 

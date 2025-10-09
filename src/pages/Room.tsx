@@ -224,23 +224,6 @@ const Room: React.FC = () => {
   }, [gameMessage]);
 
 
-  React.useEffect(() => {
-    if (!selectedCard) return;
-
-    // find the updated version of this card in bingoCards
-    const updatedCard = bingoCards.find((c) => c.id === selectedCard.id);
-
-    if (!updatedCard) return;
-
-    // ✅ If my card is still available OR claimed by me → keep it
-    if (!updatedCard.claimed || updatedCard.claimedBy === user?.telegramId) {
-      return;
-    }
-
-    // ❌ If my card was claimed by another player → clear/reset selection
-    selectCard("");
-  }, [bingoCards, selectedCard, user?.telegramId, selectCard]);
-
   const [popupMessage, setPopupMessage] = useState<string | null>(null);
   React.useEffect(() => {
     if (!popupMessage) return;
@@ -294,11 +277,7 @@ const Room: React.FC = () => {
   }, [currentRoom, user, bingoCards, selectedCard]);
 
 
-  const handleCardSelect = (cardId: string) => {
-    if (!hasBet) {
-      selectCard(cardId);
-    }
-  };
+
 
   const handlePlaceBet = async () => {
     if (!displayedCard || !currentRoom) return;
@@ -437,7 +416,9 @@ const Room: React.FC = () => {
     const handleSelectCard = (cardId: string) => {
       setSelectedCardId(cardId);
       if (!bingoCards.find((c) => c.id === cardId)?.claimed) {
+        
         selectCard(cardId);
+
       }
     };
   
@@ -448,7 +429,7 @@ const Room: React.FC = () => {
   
     // ✅ The displayed card should be either selected or claimed one
     const displayedCard =
-      bingoCards.find((c) => c.id === selectedCardId) || myClaimedCard;
+      bingoCards.find((c) => c.id === selectedCard?.id) || myClaimedCard;
   
     // ✅ Sort cards by serial number
     const sortedCards = [...bingoCards].sort(
@@ -466,7 +447,7 @@ const Room: React.FC = () => {
           {sortedCards.slice(0, 100).map((card) => {
             const isClaimed = card.claimed;
             const isMine = card.claimedBy === user?.telegramId;
-            const isSelected = selectedCardId === card.id;
+            const isSelected = selectedCard?.id === card.id;
   
             // ✅ Treat selected (not yet claimed) card like a claimed green card
             const isHighlighted = isMine || isSelected;
@@ -486,12 +467,20 @@ const Room: React.FC = () => {
             return (
               <div
                 key={card.id}
-                onClick={() => handleSelectCard(card.id)}
-                className={`w-8 h-8 flex items-center justify-center rounded-lg font-bold cursor-pointer transition-transform duration-150 transform hover:scale-105 text-xs ${colorClass}`}
+                onClick={() => {
+                  console.log("Clicked:", card.id, "Claimed:", card.claimed);
+                  if (!card.claimed) {
+                    handleSelectCard(card.id);
+                  }
+                }}
+                className={`w-8 h-8 flex items-center justify-center rounded-lg font-bold cursor-pointer transition-transform duration-150 transform hover:scale-105 text-xs ${
+                  card.claimed ? 'bg-gradient-to-br from-theme-red to-rose-700 text-white border border-red-700 shadow-sm' : colorClass
+                }`}
               >
                 {card.serialNumber}
               </div>
             );
+            
           })}
         </div>
   
@@ -890,7 +879,7 @@ const Room: React.FC = () => {
                  <h2 className={`font-bold mb-2 text-l`}>
                    {t('time_left')}
                  </h2>
-                 <p className={`text-2xl font-mono`}>
+                 <p className={`text-l font-mono`}>
                    {formatTime(timeLeft)}{t('seconds')}
                  </p>
                </div>

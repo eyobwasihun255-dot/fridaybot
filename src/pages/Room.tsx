@@ -441,9 +441,9 @@ const Room: React.FC = () => {
       <div className="flex flex-col items-center justify-center min-h-screen text-white p-4">
         <h2 className="text-2xl font-bold mb-6 text-theme-white">
           Select Your Bingo Card
-          {formatTime(timeLeft)} {t('seconds')}
+         
         </h2>
-  
+        <p> {formatTime(timeLeft)} {t('seconds')}</p>
         {/* ✅ Bingo Card Grid */}
         <div className="grid grid-cols-10 gap-2 mb-6 justify-items-center">
           {sortedCards.slice(0, 100).map((card) => {

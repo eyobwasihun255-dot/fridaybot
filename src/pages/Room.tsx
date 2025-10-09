@@ -451,66 +451,83 @@ const Room: React.FC = () => {
       </div>
     );
   };
-  const CardSelectionGrid = () => (
-    <div className="flex flex-col items-center justify-center min-h-screen text-white p-4">
-      <h2 className="text-2xl font-bold mb-6 text-theme-primary">
-        Select Your Bingo Card
-      </h2>
+  const CardSelectionGrid = () => {
+    // State to keep track of selected card
+    const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   
-      {/* Bingo Card Grid */}
-      <div className="grid grid-cols-10 gap-2 mb-6">
-        {bingoCards.slice(0, 100).map((card) => {
-          const isClaimed = card.claimed;
-          const isMine = card.claimedBy === user?.telegramId;
+    const handleSelectCard = (cardId: string) => {
+      setSelectedCardId(cardId);
+      if (!bingoCards.find((c) => c.id === cardId)?.claimed) {
+        selectCard(cardId);
+      }
+    };
   
-          let colorClass = "";
-          if (isMine) {
-            colorClass =
-              "bg-gradient-to-br from-theme-green to-emerald-600 text-white shadow-md border border-green-700";
-          } else if (isClaimed) {
-            colorClass =
-              "bg-gradient-to-br from-theme-red to-rose-700 text-white border border-red-700 shadow-sm";
-          } else {
-            colorClass =
-              "bg-gradient-to-br from-theme-light to-white text-gray-800 border border-gray-300 hover:from-theme-accent hover:to-theme-secondary hover:text-white transition";
-          }
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen text-white p-4">
+        <h2 className="text-2xl font-bold mb-6 text-theme-secondary">
+          Select Your Bingo Card
+        </h2>
   
-          return (
-            <div
-              key={card.id}
-              onClick={() => !isClaimed && selectCard(card.id)}
-              className={`w-8 h-8 flex items-center justify-center rounded-lg font-bold cursor-pointer transition-transform duration-150 transform hover:scale-105 text-xs ${colorClass}`}
-            >
-              {card.serialNumber}
-            </div>
-          );
-        })}
+        {/* ✅ Fixed Grid Layout (horizontal numbering, no diagonal effect) */}
+        <div className="grid grid-cols-10 gap-2 mb-6 justify-items-center">
+          {bingoCards.slice(0, 100).map((card) => {
+            const isClaimed = card.claimed;
+            const isMine = card.claimedBy === user?.telegramId;
+            const isSelected = selectedCardId === card.id;
+  
+            let colorClass = "";
+  
+            // ✅ Make selected cards green like owned ones
+            if (isMine || isSelected) {
+              colorClass =
+                "bg-gradient-to-br from-theme-green to-emerald-600 text-white shadow-md border border-green-700";
+            } else if (isClaimed) {
+              colorClass =
+                "bg-gradient-to-br from-theme-red to-rose-700 text-white border border-red-700 shadow-sm";
+            } else {
+              colorClass =
+                "bg-gradient-to-br from-theme-light to-white text-gray-800 border border-gray-300 hover:from-theme-accent hover:to-theme-secondary hover:text-white transition";
+            }
+  
+            return (
+              <div
+                key={card.id}
+                onClick={() => handleSelectCard(card.id)}
+                className={`w-8 h-8 flex items-center justify-center rounded-lg font-bold cursor-pointer transition-transform duration-150 transform hover:scale-105 text-xs ${colorClass}`}
+              >
+                {card.serialNumber}
+              </div>
+            );
+          })}
+        </div>
+  
+        {/* Buttons */}
+        <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
+          <button
+            onClick={isBetActive ? handleCancelBet : handlePlaceBet}
+            className={`w-full px-4 py-2 rounded-lg shadow font-semibold transition ${
+              isBetActive
+                ? "bg-gradient-to-r from-theme-secondary to-theme-red hover:opacity-90 text-white"
+                : "bg-gradient-to-r from-theme-primary to-theme-green hover:opacity-90 text-white"
+            }`}
+          >
+           {isBetActive
+          ? `${t("cancel_bet")} card:${displayedCard?.serialNumber ?? 0}`
+          : `${t("place_bet")} card:${displayedCard?.serialNumber ?? 0}`}
+
+          </button>
+  
+          <button
+            onClick={() => setEnteredRoom(true)}
+            className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-theme-primary hover:opacity-90 text-white rounded-lg shadow font-semibold"
+          >
+            {t('enter_room')}
+          </button>
+        </div>
       </div>
+    );
+  };
   
-      {/* Buttons */}
-      <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
-        <button
-          onClick={isBetActive ? handleCancelBet : handlePlaceBet}
-          className={`w-full px-4 py-2 rounded-lg shadow font-semibold transition ${
-            isBetActive
-              ? "bg-gradient-to-r from-theme-secondary to-theme-red hover:opacity-90 text-white"
-              : "bg-gradient-to-r from-theme-primary to-theme-green hover:opacity-90 text-white"
-          }`}
-        >
-          {isBetActive
-            ? `${t("cancel_bet")} card:${displayedCard?.serialNumber}`
-            : `${t("place_bet")} card:${displayedCard?.serialNumber}`}
-        </button>
-  
-        <button
-          onClick={() => setEnteredRoom(true)}
-          className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-theme-primary hover:opacity-90 text-white rounded-lg shadow font-semibold"
-        >
-          Enter Room
-        </button>
-      </div>
-    </div>
-  );
   
   if (["waiting", "countdown"].includes(currentRoom?.gameStatus) && !enteredRoom) {
     return <CardSelectionGrid />;

@@ -79,7 +79,7 @@ const translations = {
     'place_your_bet': 'ውርርድዎን ያድርጉ',
     'playing' : 'በመጫዋታ ላይ',
      'ended' : 'ተጠናቋል',
-     
+     'enter_room' : 'ክፍል ግባ',
     // General
     'loading': 'በመጫን ላይ...',
     'error': 'ስህተት ተከስቷል',
@@ -166,7 +166,7 @@ const translations = {
     'n_column': 'N (31-45)',
     'g_column': 'G (46-60)',
     'o_column': 'O (61-75)',
-    
+    'enter_room' : 'Enter room',
     // General
     'loading': 'Loading...',
     'error': 'An error occurred',

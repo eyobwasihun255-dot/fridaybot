@@ -386,6 +386,7 @@ const Room: React.FC = () => {
     const success = await cancelBet(cardId);
     if (success) {
       setHasBet(false);
+      setEnteredRoom(false);
       setGameMessage('Bet canceled');
     } else {
       console.error("❌ Failed to cancel bet");

@@ -443,7 +443,7 @@ const Room: React.FC = () => {
           Select Your Bingo Card
           
         </h2>
-        {currentRoom?.gameStatus !== "playing" && (
+        {currentRoom?.gameStatus === "countdown" && (
   <p>
     {formatTime(timeLeft)} {t('seconds')}
   </p>

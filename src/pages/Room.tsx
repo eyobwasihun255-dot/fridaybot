@@ -34,7 +34,7 @@ const Room: React.FC = () => {
       card.claimed &&
       card.claimedBy === user?.telegramId
   );
-  const displayedCard = selectedCard;
+  const displayedCard = selectedCard || userCard;
   const cardNumbers = userCard?.numbers ?? [];
   const [hasBet, setHasBet] = useState(false);
   const [gameMessage, setGameMessage] = useState('');

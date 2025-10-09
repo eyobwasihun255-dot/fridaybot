@@ -155,7 +155,7 @@ const translations = {
     'waiting_players': 'Waiting ...',
     'game_starts_in': 'Game starts in',
     'seconds': 'seconds',
-    'time_left': 'remaining'
+    'time_left': 'remaining',
     'you_won': 'Congratulations! You won!',
     'not_a_winner': 'Not a winner this time.',
     'card': 'Card',

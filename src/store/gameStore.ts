@@ -103,6 +103,7 @@
     setWinnerCard: (card) => set({ winnerCard: card, showWinnerPopup: false }),
     setShowWinnerPopup: (show: boolean) => set({ showWinnerPopup: show }),
     closeWinnerPopup: () => set({ showWinnerPopup: false }),
+    
     startCountdownTicker: () => {
       const { remaining ,countdownInterval } = get();
       if (remaining <= 0) return;
@@ -139,7 +140,7 @@
       console.log("🔄 Room synced:", room.gameStatus);
     },
     
-
+    
     // Connect to server via Socket.IO
     connectToServer: () => {
       const { socket } = get();
@@ -413,13 +414,23 @@
           set({ currentRoom: null, isBetActive: false, selectedCard: null });
           return;
         }
-    
+      
+        const prevRoom = get().currentRoom;
         const updatedRoom = { id: roomId, ...snapshot.val() } as Room;
         set({ currentRoom: updatedRoom });
-    
+      
+        // ✅ Detect transition from ENDED → WAITING
+        if (
+          prevRoom?.gameStatus === "ended" &&
+          updatedRoom.gameStatus === "waiting"
+        ) {
+          console.log("♻️ Room restarted, resetting enteredRoom state");
+          get().setEnteredRoom(false);
+        }
+      
+        // Continue with your existing logic
         get().fetchBingoCards();
-    
-        
+      
         if (updatedRoom.calledNumbers?.length > 0) {
           set((state) => ({
             displayedCalledNumbers: {
@@ -429,6 +440,7 @@
           }));
         }
       });
+      
     },
     
     
@@ -540,6 +552,7 @@
         set({ bingoCards: cards });
       });
     },
+    
 
     // Firebase listener for room updates
     // This is handled within joinRoom now

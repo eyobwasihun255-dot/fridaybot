@@ -497,7 +497,7 @@ const Room: React.FC = () => {
                 row.map((num, colIdx) => (
                   <div
                     key={`${rowIdx}-${colIdx}`}
-                    className="w-5 h-5 flex items-center justify-center text-[10px] rounded bg-gradient-to-br from-theme-light to-theme-accent text-white font-bold border border-white/20"
+                    className="w-5 h-5 flex items-center justify-center text-[10px] rounded bg-gradient-to-br from-theme-primary to-theme-accent text-white font-bold border border-white/20"
                   >
                     {num === 0 && rowIdx === 2 && colIdx === 2 ? "★" : num}
                   </div>
@@ -524,7 +524,7 @@ const Room: React.FC = () => {
   
           <button
             onClick={() => setEnteredRoom(true)}
-            className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-theme-primary hover:opacity-90 text-white rounded-lg shadow font-semibold"
+            className="w-full bg-gradient-to-r from-theme-primary to-theme-secondary hover:from-theme-secondary hover:to-theme-accent text-white font-bold py-3 px-4 rounded-lg transition-all duration-200 flex items-center justify-center space-x-2 shadow-md hover:shadow-xl"
           >
             {t("enter_room")}
           </button>

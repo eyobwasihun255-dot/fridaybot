@@ -535,9 +535,8 @@ const Room: React.FC = () => {
   };
   
   
-  
-  
-  if (["waiting", "countdown"].includes(currentRoom?.gameStatus) && !userCard) {
+
+  if (["waiting", "countdown"].includes(currentRoom?.gameStatus) && !userCard && !enteredRoom) {
     return <CardSelectionGrid />;
   }
   
@@ -598,7 +597,15 @@ const Room: React.FC = () => {
     if (num >= 61 && num <= 75) return "O-";
     return "";
   }
-
+  useEffect(() => {
+    return () => {
+      const { currentRoom } = useGameStore.getState();
+      if (currentRoom && ["waiting", "countdown"].includes(currentRoom.gameStatus)) {
+        useGameStore.getState().setEnteredRoom(false);
+      }
+    };
+  }, []);
+  
 
   
 

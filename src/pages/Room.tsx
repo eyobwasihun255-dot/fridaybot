@@ -988,7 +988,7 @@ const Room: React.FC = () => {
             <div className="mt-6 space-y-3">
               {/* Main Bet Button */}
 
-              {userCard && currentRoom?.gameStatus !== "playing" && (
+              {displayedCard && currentRoom?.gameStatus !== "playing" && (
                 <button
                 onClick={isBetActive ? handleCancelBet : handlePlaceBet}
                 className={`w-full px-4 py-2 rounded-lg shadow font-semibold transition ${
@@ -998,7 +998,7 @@ const Room: React.FC = () => {
                 }`}
               >
                 {isBetActive
-                  &&`${t("cancel_bet")} card:${userCard?.serialNumber ?? 0}`
+                  &&`${t("cancel_bet")} card:${displayedCard?.serialNumber ?? 0}`
                   }
               </button>
               )}

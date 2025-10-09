@@ -387,7 +387,7 @@
         if (currentRoom?.id && currentRoom.id !== roomId) {
           socket.emit("leaveRoom", currentRoom.id);
           console.log("➡️ Leaving room", currentRoom.id);
-    
+          get().setEnteredRoom(false)
           // ✅ Remove old Firebase listeners
           const oldRoomRef = ref(rtdb, "rooms/" + currentRoom.id);
           off(ref(rtdb, `rooms/${currentRoom.id}`));

@@ -1147,21 +1147,6 @@ const Room: React.FC = () => {
   
 
 };
-// 🧩 Leave Room Cleanup Effect
-useEffect(() => {
-  // When component unmounts (player navigates away or closes the page)
-  return () => {
-    const { currentRoom } = useGameStore.getState();
-
-    if (
-      currentRoom &&
-      ["waiting", "countdown"].includes(currentRoom.gameStatus)
-    ) {
-      console.log("🚪 Player left room during waiting/countdown → setting enteredRoom=false");
-      useGameStore.getState().setEnteredRoom(false);
-    }
-  };
-}, []);
 
 
 export default Room;

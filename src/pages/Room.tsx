@@ -984,7 +984,21 @@ const Room: React.FC = () => {
           {displayedCard ? (
             <div className="mt-6 space-y-3">
               {/* Main Bet Button */}
-             
+              {userCard && (
+                <button
+                onClick={isBetActive ? handleCancelBet : handlePlaceBet}
+                className={`w-full px-4 py-2 rounded-lg shadow font-semibold transition ${
+                  isBetActive
+                    ? "bg-gradient-to-r from-theme-secondary to-theme-red hover:opacity-90 text-white"
+                    : "bg-gradient-to-r from-theme-primary to-theme-green hover:opacity-90 text-white"
+                }`}
+              >
+                {isBetActive
+                  &&`${t("cancel_bet")} card:${userCard?.serialNumber ?? 0}`
+                  }
+              </button>
+              )}
+              
 
               {/* Auto Bet Toggle Button → only visible if bet is active */}
               {autoCard && isBetActive && claimed && (

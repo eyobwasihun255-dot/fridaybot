@@ -24,7 +24,7 @@ const Room: React.FC = () => {
     currentRoom, bingoCards, joinRoom, selectCard,
     placeBet, selectedCard, remaining,
     showLoserPopup, setShowLoserPopup,
-    connectToServer, checkBingo,
+    connectToServer, checkBingo,enteredRoom, setEnteredRoom,
     setShowWinnerPopup
   } = useGameStore();
   const { user, updateBalance } = useAuthStore();
@@ -38,7 +38,6 @@ const Room: React.FC = () => {
   const cardNumbers = displayedCard?.numbers ?? [];
   const [hasBet, setHasBet] = useState(false);
   const [gameMessage, setGameMessage] = useState('');
-  const [enteredRoom, setEnteredRoom] = useState(false);
 
   const [markedNumbers, setMarkedNumbers] = React.useState<number[]>([]);
   const cancelBet = useGameStore((state) => state.cancelBet);
@@ -454,23 +453,33 @@ const Room: React.FC = () => {
   };
   const CardSelectionGrid = () => (
     <div className="flex flex-col items-center justify-center min-h-screen text-white p-4">
-      <h2 className="text-2xl font-bold mb-6">Select Your Bingo Card</h2>
+      <h2 className="text-2xl font-bold mb-6 text-theme-primary">
+        Select Your Bingo Card
+      </h2>
   
+      {/* Bingo Card Grid */}
       <div className="grid grid-cols-10 gap-2 mb-6">
         {bingoCards.slice(0, 100).map((card) => {
           const isClaimed = card.claimed;
           const isMine = card.claimedBy === user?.telegramId;
-          const color = isMine
-            ? "bg-green-500"
-            : isClaimed
-            ? "bg-red-500"
-            : "bg-gray-400 hover:bg-gray-500";
+  
+          let colorClass = "";
+          if (isMine) {
+            colorClass =
+              "bg-gradient-to-br from-theme-green to-emerald-600 text-white shadow-md border border-green-700";
+          } else if (isClaimed) {
+            colorClass =
+              "bg-gradient-to-br from-theme-red to-rose-700 text-white border border-red-700 shadow-sm";
+          } else {
+            colorClass =
+              "bg-gradient-to-br from-theme-light to-white text-gray-800 border border-gray-300 hover:from-theme-accent hover:to-theme-secondary hover:text-white transition";
+          }
   
           return (
             <div
               key={card.id}
               onClick={() => !isClaimed && selectCard(card.id)}
-              className={`w-6 h-6 flex items-center justify-center rounded-lg font-bold cursor-pointer transition  text-xs${color}`}
+              className={`w-8 h-8 flex items-center justify-center rounded-lg font-bold cursor-pointer transition-transform duration-150 transform hover:scale-105 text-xs ${colorClass}`}
             >
               {card.serialNumber}
             </div>
@@ -478,25 +487,27 @@ const Room: React.FC = () => {
         })}
       </div>
   
+      {/* Buttons */}
       <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
-      <button
-                  onClick={isBetActive ? handleCancelBet : handlePlaceBet}
-                  className={`w-full px-4 py-2 rounded-lg shadow font-semibold ${isBetActive
-                      ? "bg-theme-secondary hover:bg-theme-red text-white"
-                      : "bg-theme-primary hover:bg-theme-green text-white"
-                    }`}
-                >
-                  {isBetActive
-                    ? `${t("cancel_bet")} card:${displayedCard?.serialNumber}`
-                    : `${t("place_bet")} card:${displayedCard?.serialNumber}`}
-                </button>
+        <button
+          onClick={isBetActive ? handleCancelBet : handlePlaceBet}
+          className={`w-full px-4 py-2 rounded-lg shadow font-semibold transition ${
+            isBetActive
+              ? "bg-gradient-to-r from-theme-secondary to-theme-red hover:opacity-90 text-white"
+              : "bg-gradient-to-r from-theme-primary to-theme-green hover:opacity-90 text-white"
+          }`}
+        >
+          {isBetActive
+            ? `${t("cancel_bet")} card:${displayedCard?.serialNumber}`
+            : `${t("place_bet")} card:${displayedCard?.serialNumber}`}
+        </button>
   
         <button
           onClick={() => setEnteredRoom(true)}
-          className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow font-semibold"
+          className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-theme-primary hover:opacity-90 text-white rounded-lg shadow font-semibold"
         >
           Enter Room
-        </button> 
+        </button>
       </div>
     </div>
   );
@@ -617,13 +628,15 @@ const Room: React.FC = () => {
               </p>
 
               {/* Display winner card in proper 5x5 grid */}
-              <div className="mb-4">
+              {/* Winner Card Display */}
+              <div className="mb-4 animate-scale-in">
                 {/* Column headers */}
-                <div className="grid grid-cols-5 gap-1 mb-1">
+                <div className="grid grid-cols-5 gap-1 mb-2">
                   {['B', 'I', 'N', 'G', 'O'].map((letter) => (
                     <div
                       key={letter}
-                      className="w-8 h-8 flex items-center justify-center rounded font-bold text-sm text-gray-600 bg-gradient-to-br from-theme-primary to-theme-secondary w-8 h-8 flex items-center justify-center rounded font-bold text-[11px]"
+                      className="w-10 h-10 flex items-center justify-center rounded-lg font-extrabold text-sm 
+                      bg-gradient-to-br from-theme-primary to-theme-secondary text-white shadow-md"
                     >
                       {letter}
                     </div>
@@ -631,37 +644,34 @@ const Room: React.FC = () => {
                 </div>
 
                 {/* Card numbers */}
-                {winnerCard.numbers.map((row: number[], rowIdx: number) => (
-                  <div key={rowIdx} className="grid grid-cols-5 gap-1 mb-1">
-                    {row.map((num: number, colIdx: number) => {
-                      // Flat index for the pattern reference
-                      const flatIdx = rowIdx * 5 + colIdx;
+                <div className="p-2 rounded-xl bg-gradient-to-br from-theme-light to-white shadow-lg border border-theme-accent">
+                  {winnerCard.numbers.map((row: number[], rowIdx: number) => (
+                    <div key={rowIdx} className="grid grid-cols-5 gap-1 mb-1">
+                      {row.map((num: number, colIdx: number) => {
+                        const flatIdx = rowIdx * 5 + colIdx;
+                        const isInWinningPattern =
+                          winnerCard.winningPatternIndices?.includes(flatIdx) || false;
 
-                      // Check if this cell is part of the winning pattern
-                      const isInWinningPattern = winnerCard.winningPatternIndices?.includes(flatIdx) || false;
+                        const displayNum =
+                          num === 0 && rowIdx === 2 && colIdx === 2 ? "★" : num;
 
-                      // Show the actual card number (free space in middle)
-                      const displayNum = num === 0 && rowIdx === 2 && colIdx === 2
-                        ? "★" // free space in middle
-                        : num;
-
-                      return (
-                        <div
-                          key={`${rowIdx}-${colIdx}`}
-                          className={`text-xs font-bold w-8 h-8 flex items-center justify-center rounded border
-                    ${isInWinningPattern
-                              ? 'bg-green-500 text-white border-green-600'
-                              : 'bg-white text-black border-gray-300'
-                            }
-                  `}
-                        >
-                          {displayNum}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-
+                        return (
+                          <div
+                            key={`${rowIdx}-${colIdx}`}
+                            className={`text-sm font-bold w-10 h-10 flex items-center justify-center rounded-lg border transition-all duration-200
+                              ${
+                                isInWinningPattern
+                                  ? 'bg-gradient-to-br from-theme-green to-emerald-600 text-white border-green-700 shadow-md scale-105'
+                                  : 'bg-white text-gray-800 border-gray-300 hover:bg-theme-light hover:text-theme-primary'
+                              }`}
+                          >
+                            {displayNum}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <button
@@ -839,6 +849,7 @@ const Room: React.FC = () => {
                 countdownEndAt={currentRoom.countdownEndAt}
                 label="Game starting soon"
               />
+              
             )}
           </div>
 

@@ -54,6 +54,8 @@
     winnerCard: BingoCard | null;
     showWinnerPopup: boolean;
     showLoserPopup: boolean;
+    enteredRoom : boolean;
+    setEnteredRoom: (show: boolean) => void;
     closeWinnerPopup: () => void;
     setWinnerCard: (card: BingoCard) => void;
     setShowWinnerPopup: (show: boolean) => void;
@@ -94,6 +96,8 @@
     startingGame: false,
     socket: null,
     serverUrl: SERVER_URL,
+    enteredRoom:false,
+    setEnteredRoom : (show:boolean) => set({enteredRoom : show}),
     setRemaining: (remaining: number) => set({ remaining: remaining }),
     setShowLoserPopup: (show: boolean) => set({ showLoserPopup: show }),
     setWinnerCard: (card) => set({ winnerCard: card, showWinnerPopup: false }),
@@ -206,6 +210,7 @@
           const { user } = useAuthStore.getState();
           if (user?.telegramId === data.winner) {
             get().setShowWinnerPopup(true);
+            get().setEnteredRoom(false)
             console.log('🔚 showing winner popup', data);
           } else {
             get().setShowLoserPopup(true);

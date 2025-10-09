@@ -38,7 +38,7 @@ const Room: React.FC = () => {
   const cardNumbers = displayedCard?.numbers ?? [];
   const [hasBet, setHasBet] = useState(false);
   const [gameMessage, setGameMessage] = useState('');
-
+  const [timeLeft, setTimeLeft] = useState(0);
   const [markedNumbers, setMarkedNumbers] = React.useState<number[]>([]);
   const cancelBet = useGameStore((state) => state.cancelBet);
   const displayedCalledNumbers = useGameStore(
@@ -46,45 +46,7 @@ const Room: React.FC = () => {
   );
   const [hasAttemptedBingo, setHasAttemptedBingo] = useState(false);
   const [isDisqualified, setIsDisqualified] = useState(false);
-  const CountdownOverlay = ({
-    countdownEndAt,
-    label,
-  }: {
-    countdownEndAt: number;
-    label: string;
-  }) => {
-
-    if (remaining <= 0) return null;
-
-    const isNextRound = label === "Next round starting in";
-
-    // ✅ Format seconds into mm:ss
-    const sec = Math.ceil((countdownEndAt - Date.now()) / 1000)
-    const minutes = Math.floor(sec / 60)
-      .toString()
-      .padStart(2, "0");
-    const seconds = (sec % 60).toString().padStart(2, "0");
-    const formattedTime = `${minutes}:${seconds}`;
-
-    return (
-      <div className="absolute inset-0 bg-black/70 flex items-center justify-center rounded">
-        <div
-          className={`bg-white text-black text-center shadow-xl flex flex-col items-center justify-center
-          ${isNextRound
-              ? "w-4/5 h-4/5 rounded scale-75"   // 🔹 1/4th size (next round)
-              : "w-4/5 h-2/5 rounded-xl p-2"}    // 🔹 30s countdown always fits
-        `}
-        >
-          <h2 className={`font-bold mb-2 ${isNextRound ? "text-1" : "text-l"}`}>
-            {label}
-          </h2>
-          <p className={`${isNextRound ? "text-2xl" : "text-2xl"} font-mono`}>
-            {formattedTime}
-          </p>
-        </div>
-      </div>
-    );
-  };
+  
   // Auto-close popups after 5 seconds
   useEffect(() => {
     if (showWinnerPopup) {
@@ -94,7 +56,21 @@ const Room: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [showWinnerPopup, setShowWinnerPopup]);
+  useEffect(() => {
+    if (currentRoom?.gameStatus === "countdown" && currentRoom.countdownEndAt) {
+      const updateTimer = () => {
+        const now = new Date().getTime();
+        const endTime = new Date(currentRoom.countdownEndAt).getTime();
+        const diff = Math.max(0, Math.floor((endTime - now) / 1000)); // in seconds
+        setTimeLeft(diff);
+      };
 
+      updateTimer(); // initial call
+      const interval = setInterval(updateTimer, 1000);
+
+      return () => clearInterval(interval); // cleanup
+    }
+  }, [currentRoom?.gameStatus, currentRoom?.countdownEndAt]);
   useEffect(() => {
     if (showLoserPopup) {
       setGameMessage(t('loser_bingo'))
@@ -204,7 +180,11 @@ const Room: React.FC = () => {
     const calledSet = new Set(displayedCalledNumbers);
     return patternNumbers.every((n) => n === 0 || calledSet.has(n));
   }
-
+  const formatTime = (seconds) => {
+    const m = String(Math.floor(seconds / 60)).padStart(2, "0");
+    const s = String(seconds % 60).padStart(2, "0");
+    return `${m}:${s}`;
+  };
 
 
 
@@ -470,21 +450,29 @@ const Room: React.FC = () => {
     const displayedCard =
       bingoCards.find((c) => c.id === selectedCardId) || myClaimedCard;
   
+    // ✅ Sort cards by serial number
+    const sortedCards = [...bingoCards].sort(
+      (a, b) => (a.serialNumber ?? 0) - (b.serialNumber ?? 0)
+    );
+  
     return (
       <div className="flex flex-col items-center justify-center min-h-screen text-white p-4">
         <h2 className="text-2xl font-bold mb-6 text-theme-white">
           Select Your Bingo Card
         </h2>
   
-        {/* ✅ Bingo Card Grid (All cards to choose) */}
+        {/* ✅ Bingo Card Grid */}
         <div className="grid grid-cols-10 gap-2 mb-6 justify-items-center">
-          {bingoCards.slice(0, 100).map((card) => {
+          {sortedCards.slice(0, 100).map((card) => {
             const isClaimed = card.claimed;
             const isMine = card.claimedBy === user?.telegramId;
             const isSelected = selectedCardId === card.id;
   
+            // ✅ Treat selected (not yet claimed) card like a claimed green card
+            const isHighlighted = isMine || isSelected;
+  
             let colorClass = "";
-            if (isMine || isSelected) {
+            if (isHighlighted) {
               colorClass =
                 "bg-gradient-to-br from-theme-green to-emerald-600 text-white shadow-md border border-green-700";
             } else if (isClaimed) {
@@ -514,7 +502,6 @@ const Room: React.FC = () => {
               Card #{displayedCard.serialNumber}
             </div>
   
-            {/* Small Bingo grid */}
             <div className="grid grid-cols-5 gap-0.5">
               {displayedCard.numbers.slice(0, 5).map((row, rowIdx) =>
                 row.map((num, colIdx) => (
@@ -541,9 +528,7 @@ const Room: React.FC = () => {
             }`}
           >
             {isBetActive
-              ? `${t("cancel_bet")} card:${
-                  displayedCard?.serialNumber ?? 0
-                }`
+              ? `${t("cancel_bet")} card:${displayedCard?.serialNumber ?? 0}`
               : `${t("place_bet")} card:${displayedCard?.serialNumber ?? 0}`}
           </button>
   
@@ -557,6 +542,7 @@ const Room: React.FC = () => {
       </div>
     );
   };
+  
   
   
   
@@ -893,11 +879,22 @@ const Room: React.FC = () => {
             </div>
 
             {/* Countdown overlay ONLY on top of numbers grid */}
-            {currentRoom?.gameStatus === "countdown" && currentRoom.countdownEndAt && (
-              <CountdownOverlay
-                countdownEndAt={currentRoom.countdownEndAt}
-                label="Game starting soon"
-              />
+            {currentRoom?.gameStatus === "countdown" && currentRoom.countdownEndAt && timeLeft > 0 &&(
+               <div className="absolute inset-0 bg-black/70 flex items-center justify-center rounded">
+               <div
+                 className={`bg-white text-black text-center shadow-xl flex flex-col items-center justify-center
+                 
+                w-4/5 h-2/5 rounded-xl p-2    
+               `}
+               >
+                 <h2 className={`font-bold mb-2 text-l`}>
+                   {t('time_left')}
+                 </h2>
+                 <p className={`text-2xl font-mono`}>
+                   {formatTime(timeLeft)}{t('seconds')}
+                 </p>
+               </div>
+             </div>
               
             )}
           </div>

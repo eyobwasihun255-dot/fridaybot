@@ -59,6 +59,7 @@ const translations = {
     'select_card': 'ካርቴላ ይምረጡ 👉',
     'card_number': 'ካርቴላ #',
     'place_bet': 'ውርርድ ያድርጉ',
+
     'bingo': 'ቢንጎ!',
     'numbers_called': 'የተጠሩ ቁጥሮች',
     'waiting_players': 'በመጠበቅ..',
@@ -66,8 +67,8 @@ const translations = {
     'seconds': 'ሰከንዶች',
     'you_won': 'እንኳን ደስ አለዎት! አሸንፈዋል!',
     'game_ended': 'ጨዋታ ተጠናቋል። አዲስ ዙር እየጀመረ...',
-    
-    // Game
+     'time_left' : 'ለመጀመር',
+     
     'b_column': 'ቢ (1-15)',
     'i_column': 'ኣይ (16-30)',
     'n_column': 'ኤን (31-45)',
@@ -154,6 +155,7 @@ const translations = {
     'waiting_players': 'Waiting ...',
     'game_starts_in': 'Game starts in',
     'seconds': 'seconds',
+    'time_left': 'remaining'
     'you_won': 'Congratulations! You won!',
     'not_a_winner': 'Not a winner this time.',
     'card': 'Card',

@@ -452,7 +452,6 @@ const Room: React.FC = () => {
     );
   };
   const CardSelectionGrid = () => {
-    // State to keep track of selected card
     const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   
     const handleSelectCard = (cardId: string) => {
@@ -462,13 +461,22 @@ const Room: React.FC = () => {
       }
     };
   
+    // ✅ Get player's claimed card if any
+    const myClaimedCard = bingoCards.find(
+      (c) => c.claimedBy === user?.telegramId
+    );
+  
+    // ✅ The displayed card should be either selected or claimed one
+    const displayedCard =
+      bingoCards.find((c) => c.id === selectedCardId) || myClaimedCard;
+  
     return (
       <div className="flex flex-col items-center justify-center min-h-screen text-white p-4">
-        <h2 className="text-2xl font-bold mb-6 text-theme-secondary">
+        <h2 className="text-2xl font-bold mb-6 text-theme-white">
           Select Your Bingo Card
         </h2>
   
-        {/* ✅ Fixed Grid Layout (horizontal numbering, no diagonal effect) */}
+        {/* ✅ Bingo Card Grid (All cards to choose) */}
         <div className="grid grid-cols-10 gap-2 mb-6 justify-items-center">
           {bingoCards.slice(0, 100).map((card) => {
             const isClaimed = card.claimed;
@@ -476,8 +484,6 @@ const Room: React.FC = () => {
             const isSelected = selectedCardId === card.id;
   
             let colorClass = "";
-  
-            // ✅ Make selected cards green like owned ones
             if (isMine || isSelected) {
               colorClass =
                 "bg-gradient-to-br from-theme-green to-emerald-600 text-white shadow-md border border-green-700";
@@ -501,7 +507,30 @@ const Room: React.FC = () => {
           })}
         </div>
   
-        {/* Buttons */}
+        {/* ✅ Small Preview of Displayed Card */}
+        {displayedCard && (
+          <div className="mb-4 p-2 bg-white/10 rounded-lg shadow-inner flex flex-col items-center w-1/2 max-w-[160px]">
+            <div className="text-xs mb-2 font-semibold text-theme-light">
+              Card #{displayedCard.serialNumber}
+            </div>
+  
+            {/* Small Bingo grid */}
+            <div className="grid grid-cols-5 gap-0.5">
+              {displayedCard.numbers.slice(0, 5).map((row, rowIdx) =>
+                row.map((num, colIdx) => (
+                  <div
+                    key={`${rowIdx}-${colIdx}`}
+                    className="w-5 h-5 flex items-center justify-center text-[10px] rounded bg-gradient-to-br from-theme-light to-theme-accent text-white font-bold border border-white/20"
+                  >
+                    {num === 0 && rowIdx === 2 && colIdx === 2 ? "★" : num}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+  
+        {/* ✅ Buttons */}
         <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
           <button
             onClick={isBetActive ? handleCancelBet : handlePlaceBet}
@@ -511,22 +540,24 @@ const Room: React.FC = () => {
                 : "bg-gradient-to-r from-theme-primary to-theme-green hover:opacity-90 text-white"
             }`}
           >
-           {isBetActive
-          ? `${t("cancel_bet")} card:${displayedCard?.serialNumber ?? 0}`
-          : `${t("place_bet")} card:${displayedCard?.serialNumber ?? 0}`}
-
+            {isBetActive
+              ? `${t("cancel_bet")} card:${
+                  displayedCard?.serialNumber ?? 0
+                }`
+              : `${t("place_bet")} card:${displayedCard?.serialNumber ?? 0}`}
           </button>
   
           <button
             onClick={() => setEnteredRoom(true)}
             className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-theme-primary hover:opacity-90 text-white rounded-lg shadow font-semibold"
           >
-            {t('enter_room')}
+            {t("enter_room")}
           </button>
         </div>
       </div>
     );
   };
+  
   
   
   if (["waiting", "countdown"].includes(currentRoom?.gameStatus) && !enteredRoom) {
@@ -592,7 +623,7 @@ const Room: React.FC = () => {
   }
 
 
-
+  
 
 
 
@@ -640,6 +671,7 @@ const Room: React.FC = () => {
               {/* Show winner's card number */}
               <p className="mb-4 text-sm text-gray-600">
                 {t('card_number')}: {winnerCard.serialNumber}
+                <p></p>
                 {t('winner')}: {currentRoom?.players?.[winnerCard.claimedBy as string]?.username}
 
               </p>
@@ -1112,7 +1144,24 @@ const Room: React.FC = () => {
 
     </div>
   );
+  
 
 };
+// 🧩 Leave Room Cleanup Effect
+useEffect(() => {
+  // When component unmounts (player navigates away or closes the page)
+  return () => {
+    const { currentRoom } = useGameStore.getState();
+
+    if (
+      currentRoom &&
+      ["waiting", "countdown"].includes(currentRoom.gameStatus)
+    ) {
+      console.log("🚪 Player left room during waiting/countdown → setting enteredRoom=false");
+      useGameStore.getState().setEnteredRoom(false);
+    }
+  };
+}, []);
+
 
 export default Room;

@@ -35,7 +35,7 @@ const Room: React.FC = () => {
       card.claimedBy === user?.telegramId
   );
   const displayedCard = userCard || selectedCard;
-  const cardNumbers = displayedCard?.numbers ?? [];
+  const cardNumbers = userCard?.numbers ?? [];
   const [hasBet, setHasBet] = useState(false);
   const [gameMessage, setGameMessage] = useState('');
   const [timeLeft, setTimeLeft] = useState(0);
@@ -536,7 +536,7 @@ const Room: React.FC = () => {
   
   
   
-  if (["waiting", "countdown"].includes(currentRoom?.gameStatus) && !enteredRoom) {
+  if (["waiting", "countdown"].includes(currentRoom?.gameStatus) && !userCard) {
     return <CardSelectionGrid />;
   }
   

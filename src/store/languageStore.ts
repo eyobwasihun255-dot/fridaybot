@@ -56,7 +56,7 @@ const translations = {
     'payout': 'ደራሽ',
     'max_players': 'ከፍተኛ ተጫዋቾች',
     'game_area': 'የጨዋታ አካባቢ',
-    'select_card': 'ካርቴላ ይምረጡ 👉',
+    'select_card': 'ካርቴላ ይምረጡ ',
     'card_number': 'ካርቴላ #',
     'place_bet': 'ውርርድ ያድርጉ',
 
@@ -148,7 +148,7 @@ const translations = {
     'payout': 'Payout',
     'max_players': 'Max Players',
     'game_area': 'Game Area',
-    'select_card': 'Select Your Card 👉',
+    'select_card': 'Select Your Card',
     'card_number': 'Card #',
     'bingo': 'BINGO!',
     'numbers_called': 'Numbers Called',

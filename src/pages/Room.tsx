@@ -440,7 +440,7 @@ const Room: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen text-white p-4">
         <h2 className="text-2xl font-bold mb-6 text-theme-white">
-          Select Your Bingo Card
+          {t('select_card')}
           
         </h2>
         {currentRoom?.gameStatus === "countdown" && (
@@ -504,7 +504,7 @@ const Room: React.FC = () => {
                 row.map((num, colIdx) => (
                   <div
                     key={`${rowIdx}-${colIdx}`}
-                    className="w-5 h-5 flex items-center justify-center text-[10px] rounded bg-gradient-to-br from-theme-primary to-theme-accent text-white font-bold border border-white/20"
+                    className="w-5 h-5 flex items-center justify-center text-[10px] rounded bg-gradient-to-br bg-theme-primary  text-white font-bold border border-white/20"
                   >
                     {num === 0 && rowIdx === 2 && colIdx === 2 ? "★" : num}
                   </div>

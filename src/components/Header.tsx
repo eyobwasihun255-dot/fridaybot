@@ -31,7 +31,7 @@ const Header: React.FC = () => {
 
   return (
 <header className="fixed top-0 left-0 right-0 bg-gradient-to-r from-theme-primary to-theme-secondary backdrop-blur-md bg-opacity-90 z-50 border-b border-white/20">
-  <div className="max-w-7xl mx-auto px-4 py-3 pl-10"> {/* 👈 added pl-10 */}
+  <div className="max-w-7xl mx-auto px-4 py-3 pl-30"> {/* 👈 added pl-10 */}
     <div className="flex items-center justify-between">
       <div className="flex items-center space-x-4">
         <LanguageToggle />

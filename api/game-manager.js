@@ -25,7 +25,7 @@ class GameManager {
   }
 
   // Start countdown if conditions allow
-  async startCountdown(room, roomId, players, durationMs = 30000, startedBy = "auto") {
+  async startCountdown(room, roomId, players, durationMs = 29000, startedBy = "auto") {
     try {
       console.log(`🎮 Room ${roomId} snapshot received for countdown`);
   

@@ -611,12 +611,12 @@ const Room: React.FC = () => {
     <div className=" min-h-screen bg-gradient-to-br from-purple-800 via-purple-900 to-blue-900 flex flex-col items-center p-2 text-white">
       {/* Header Info Dashboard */}
       <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 mb-3 w-full text-xs">
-        <button
-          onClick={() => navigate("/")}
-          className="flex-1 bg-gradient-to-r from-red-500 to-pink-500 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition"
-        >
-          {t('home')}
-        </button>
+      <button
+  onClick={() => navigate("/")}
+  className="fixed top-3 left-3 bg-gradient-to-r from-red-500 to-pink-500 px-4 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition z-50"
+>
+  {t('home')}
+</button>
         <div className="bg-white/10 rounded text-center py-1 border border-white/20">
           {t('bet')}: {currentRoom.betAmount}
         </div>

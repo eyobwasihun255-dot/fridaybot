@@ -528,7 +528,7 @@ const Room: React.FC = () => {
               "bg-gradient-to-r from-theme-primary to-theme-green hover:opacity-90 text-white"
             }`}
           >
-            `${t("place_bet")} card:${displayedCard?.serialNumber ?? 0}`
+            {t("place_bet")} card:{displayedCard?.serialNumber ?? 0}
           </button>
   
         </div>

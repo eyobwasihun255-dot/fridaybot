@@ -86,26 +86,7 @@ React.useEffect(() => {
 
       initializeUser(freshUser);
     }
-    const telegramId = String(tgUser.id);
-    if (telegramId) {
-      const ping = async () => {
-        try {
-          await fetch("/api/ping", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ telegramId }),
-          });
-        } catch (err) {
-          console.error("Ping failed:", err);
-        }
-      };
   
-      ping();
-  
-      // optionally keep alive every minute
-      const interval = setInterval(ping, 60000);
-      return () => clearInterval(interval);
-    }
   };
 
   initUser();

@@ -439,6 +439,12 @@ const Room: React.FC = () => {
   
     return (
       <div className="flex flex-col items-center justify-center min-h-screen text-white p-4">
+         <button
+          onClick={() => navigate("/")}
+          className="flex-1 bg-gradient-to-r from-red-500 to-pink-500 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition"
+        >
+          {t('home')}
+        </button>
         <h2 className="text-2xl font-bold mb-6 text-theme-white">
           {t('select_card')}
           
@@ -519,14 +525,10 @@ const Room: React.FC = () => {
           <button
             onClick={isBetActive ? handleCancelBet : handlePlaceBet}
             className={`w-full px-4 py-2 rounded-lg shadow font-semibold transition ${
-              isBetActive
-                ? "bg-gradient-to-r from-theme-secondary to-theme-red hover:opacity-90 text-white"
-                : "bg-gradient-to-r from-theme-primary to-theme-green hover:opacity-90 text-white"
+              "bg-gradient-to-r from-theme-primary to-theme-green hover:opacity-90 text-white"
             }`}
           >
-            {isBetActive
-              ? `${t("cancel_bet")} card:${displayedCard?.serialNumber ?? 0}`
-              : `${t("place_bet")} card:${displayedCard?.serialNumber ?? 0}`}
+            `${t("place_bet")} card:${displayedCard?.serialNumber ?? 0}`
           </button>
   
           <button

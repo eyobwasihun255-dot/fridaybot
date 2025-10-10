@@ -93,7 +93,7 @@ const translations = {
     'players_in_room': 'ተጫዋቾች ',
     'no_card_selected': 'ካርቴላ አልተመረጠም...',
     'game_already_in_progress': 'ጨዋታ በሂደት ላይ ነው',
-    'home': 'back',
+    'home': 'ተመለስ',
     'set_auto_bet': 'auto ውርርድ ያድርጉ',
     'remove_auto_bet': 'auto ውርርድ ሰርዝ',
     'auto_bet_en': 'Auto Bet ለካርቴላ ተደርጓል',

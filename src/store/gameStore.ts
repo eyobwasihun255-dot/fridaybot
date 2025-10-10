@@ -212,6 +212,7 @@
           if (user?.telegramId === data.winner) {
             get().setShowWinnerPopup(true);
             get().setEnteredRoom(false)
+            
             console.log('🔚 showing winner popup', data);
           } else {
             get().setShowLoserPopup(true);

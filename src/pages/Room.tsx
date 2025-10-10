@@ -531,12 +531,6 @@ const Room: React.FC = () => {
             `${t("place_bet")} card:${displayedCard?.serialNumber ?? 0}`
           </button>
   
-          <button
-            onClick={() => setEnteredRoom(true)}
-            className="w-full bg-gradient-to-r from-theme-primary to-theme-secondary hover:from-theme-secondary hover:to-theme-accent text-white font-bold py-3 px-4 rounded-lg transition-all duration-200 flex items-center justify-center space-x-2 shadow-md hover:shadow-xl"
-          >
-            {t("enter_room")}
-          </button>
         </div>
       </div>
     );

@@ -211,7 +211,6 @@
           const { user } = useAuthStore.getState();
           if (user?.telegramId === data.winner) {
             get().setShowWinnerPopup(true);
-            get().setEnteredRoom(false)
             
             console.log('🔚 showing winner popup', data);
           } else {

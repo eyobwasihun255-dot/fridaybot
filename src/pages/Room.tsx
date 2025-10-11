@@ -620,7 +620,7 @@ const Room: React.FC = () => {
 {/* Refresh button — place next to your Home button */}
 <button
   onClick={() => window.location.reload()}
-  className="bg-gradient-to-r from-indigo-500 to-blue-500 px-4 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition z-50"
+  className="bg-gradient-to-r from-indigo-500 to-blue-500 px-4 py-2 rounded font-bold text-sm shadow "
 >
   {t('refresh') ?? 'Refresh'}
 </button>

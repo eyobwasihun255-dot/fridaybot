@@ -325,7 +325,7 @@
         
         if (result.success) {
           console.log('🏆 Bingo confirmed by server!');
-          get().setWinnerCard(cardToUse.val() as BingoCard);  
+          get().setWinnerCard(cardToUse as BingoCard);  
           get().setShowWinnerPopup(true);
         } else {
           console.log('❌ Bingo rejected by server:', result.message);

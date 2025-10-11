@@ -617,6 +617,14 @@ const Room: React.FC = () => {
 >
   {t('home')}
 </button>
+{/* Refresh button — place next to your Home button */}
+<button
+  onClick={() => window.location.reload()}
+  className="bg-gradient-to-r from-indigo-500 to-blue-500 px-4 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition z-50"
+>
+  {t('refresh') ?? 'Refresh'}
+</button>
+
         <div className="bg-white/10 rounded text-center py-1 border border-white/20">
           {t('bet')}: {currentRoom.betAmount}
         </div>

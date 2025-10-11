@@ -756,21 +756,24 @@ class GameManager {
     const first24 = this.shuffleArray(drawnNumbers.slice(0, 24));
   
     // --- Make 25th number = winner’s missing number ---
+    // --- Make 25th number = winner’s missing number ---
     const first25 = [...first24, winnerMissing];
     usedNumbers.add(winnerMissing);
-  
-    // ✅ Up to here, after 25 numbers → 1 winner only
-  
-    // --- Losers’ missing numbers drawn *after* 25th ---
+
+    // ✅ After 25 numbers → exactly one winner
+
+    // --- Losers’ missing numbers come right after ---
     const rest = [];
-    this.shuffleArray(loserMissingNumbers).forEach((n) => {
-      if (!usedNumbers.has(n)) {
+
+    // Ensure losers’ missing numbers appear first (ordered, not shuffled yet)
+    loserMissingNumbers.forEach((n) => {
+      if (n > 0 && n <= 75 && !usedNumbers.has(n)) {
         usedNumbers.add(n);
         rest.push(n);
       }
     });
-  
-    // --- Fill remaining up to 75 with randoms ---
+
+    // --- Then fill remaining up to 75 with randoms ---
     while (first25.length + rest.length < 75) {
       const rand = Math.floor(Math.random() * 75) + 1;
       if (!usedNumbers.has(rand)) {
@@ -778,9 +781,12 @@ class GameManager {
         rest.push(rand);
       }
     }
-  
-    const finalRest = this.shuffleArray(rest);
+
+    // Shuffle the remaining numbers *after* the losers' missing ones
+    const finalRest = [...loserMissingNumbers, ...this.shuffleArray(rest)];
     const finalDrawn = [...first25, ...finalRest];
+
+      
   
     winners.push(winnerCard.id);
   

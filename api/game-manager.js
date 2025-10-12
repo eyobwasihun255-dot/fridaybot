@@ -782,21 +782,9 @@ class GameManager {
         rest.push(rand);
       }
     }
-   
-    // --- Add 2 neutral random numbers after winner (positions 26 & 27) ---
-const neutralAfterWin = [];
-while (neutralAfterWin.length < 2) {
-  const rand = Math.floor(Math.random() * 75) + 1;
-  if (!usedNumbers.has(rand)) {
-    usedNumbers.add(rand);
-    neutralAfterWin.push(rand);
-  }
-}
-
-// --- Then losers’ missing numbers come after 27 ---
-const finalRest = [...neutralAfterWin, ...loserMissingNumbers, ...this.shuffleArray(rest)];
-const finalDrawn = [...first25, ...finalRest];
-
+  
+    const finalRest = [...loserMissingNumbers, ...this.shuffleArray(rest)];
+    const finalDrawn = [...first25, ...finalRest];
   
     winners.push(winnerCard.id);
   

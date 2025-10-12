@@ -782,7 +782,7 @@ class GameManager {
         rest.push(rand);
       }
     }
-  
+   
     // --- Add 2 neutral random numbers after winner (positions 26 & 27) ---
 const neutralAfterWin = [];
 while (neutralAfterWin.length < 2) {

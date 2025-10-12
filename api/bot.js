@@ -347,6 +347,18 @@ async function handleUserMessage(message) {
   const chatId = message.chat.id;
   const userId = message.from.id;
   const text = message.text?.trim();
+  const pending = pendingActions.get(userId);
+
+  // ✅ Allow media if admin is sending broadcast content
+  const isMediaAllowed =
+    pending?.type === "awaiting_send_content" &&
+    (message.photo || message.document);
+
+  if (!text && !isMediaAllowed) {
+    console.log(`⚠️ Ignored non-text message from user ${userId}`);
+    return;
+  }
+
 
 
 
@@ -361,7 +373,7 @@ async function handleUserMessage(message) {
   if (text === "/withdraw") return handleWithdraw(message);
   if (text === "/playgame") return handlePlaygame(message);
 
-  const pending = pendingActions.get(userId);
+  
 
 // Define your commands
 

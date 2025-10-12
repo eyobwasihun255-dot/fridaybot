@@ -348,11 +348,7 @@ async function handleUserMessage(message) {
   const userId = message.from.id;
   const text = message.text?.trim();
 
-  // 🧱 Ignore non-text messages
-  if (!text) {
-    console.log(`⚠️ Ignored non-text message from user ${userId}`);
-    return;
-  }
+
 
   const userRef = ref(rtdb, "users/" + userId);
   const userSnap = await get(userRef);

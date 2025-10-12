@@ -486,38 +486,37 @@ class GameManager {
   }
 
   // Check bingo claim
-  async checkBingo(roomId, cardId, userId, pattern , room , player) {
+  async checkBingo(roomId, cardId, userId, pattern, room, player) {
     try {
-     
-
       if (!room || room.gameStatus !== "playing") {
         return { success: false, message: "Game not in playing state" };
       }
-
-      // Check if user already attempted bingo
- 
-
+  
       if (player?.attemptedBingo) {
         return { success: false, message: "Already attempted bingo" };
       }
+  
       const playerRef = ref(rtdb, `rooms/${roomId}/players/${userId}`);
+  
       // Validate bingo pattern
-      const isValidBingo = this.validateBingoPattern(cardId, room, pattern, room.calledNumbers);
-      
+      const isValidBingo = this.validateBingoPattern(
+        cardId,
+        room,
+        pattern,
+        room.calledNumbers
+      );
+  
       if (!isValidBingo) {
-        // Mark as attempted but failed
         await update(playerRef, { attemptedBingo: true });
         return { success: false, message: "Invalid bingo pattern" };
       }
-
-      // Valid bingo - write winner and notify immediately
+  
+      // ✅ Valid bingo
       const gameRef = ref(rtdb, `games/${room.gameId}`);
-     
-
       await update(gameRef, {
         winner: { winnerId: userId, winningPattern: pattern },
       });
-
+  
       if (this.io) {
         const eventData = {
           roomId,
@@ -526,22 +525,27 @@ class GameManager {
           cardId,
           patternIndices: pattern,
         };
-        console.log('🎉 Emitting winnerConfirmed event:', eventData);
-        this.io.to(roomId).emit('winnerConfirmed', eventData);
+        console.log("🎉 Emitting winnerConfirmed event:", eventData);
+        this.io.to(roomId).emit("winnerConfirmed", eventData);
       } else {
-        console.error('❌ Cannot emit winnerConfirmed event: Socket.IO instance not set!');
+        console.error("❌ Cannot emit winnerConfirmed event: Socket.IO instance not set!");
       }
-
-      // Calculate winner payout according to new formula
+  
+      // ✅ Calculate payout & revenue (with decimal precision)
       const playerCount = Object.keys(room.players || {}).length;
       const roomAmount = room.betAmount || 0;
-      const payoutAmount = Math.floor((playerCount - 1) * roomAmount * 0.85 + roomAmount);
+  
+      const totalBets = playerCount * roomAmount;
+      const payoutAmount = totalBets * 0.85;  // 85%
+      const revenueAmount = totalBets * 0.15; // 15%
+  
       const roomRef = ref(rtdb, `rooms/${roomId}`);
+  
       if (payoutAmount > 0) {
         const balanceRef = ref(rtdb, `users/${userId}/balance`);
         await runTransaction(balanceRef, (current) => (current || 0) + payoutAmount);
-
-        // Log winning history
+  
+        // ✅ Log winning history
         const winRef = ref(rtdb, `winningHistory/${uuidv4()}`);
         await set(winRef, {
           playerId: userId,
@@ -551,11 +555,8 @@ class GameManager {
           cardId,
           date: Date.now(),
         });
-
-        // Calculate and record revenue
-        const totalBets = playerCount * roomAmount;
-        const revenueAmount = totalBets - payoutAmount;
-        
+  
+        // ✅ Log revenue (15%)
         const revenueRef = ref(rtdb, `revenue/${room.gameId}`);
         await set(revenueRef, {
           gameId: room.gameId,
@@ -564,27 +565,26 @@ class GameManager {
           amount: revenueAmount,
           drawned: false,
         });
-
-        // Mark room payout metadata
+  
+        // ✅ Mark room payout metadata
         await update(roomRef, {
           winner: userId,
           payout: payoutAmount,
           payed: true,
         });
       }
-
-      // Prevent double payout by clearing auto winners list
+  
+      // ✅ Prevent double payout and end game
       await update(gameRef, { winners: [], winnersChecked: true });
-
-      // End game right after confirmation
       await this.endGame(roomId, room.gameId, "bingo");
-      
+  
       return { success: true, message: "Bingo confirmed!" };
     } catch (error) {
       console.error("Error checking bingo:", error);
       return { success: false, message: "Server error" };
     }
   }
+  
 
   // Validate bingo pattern
   validateBingoPattern(cardId, room, pattern, calledNumbers) {
@@ -691,18 +691,23 @@ class GameManager {
       return { drawnNumbers: [], winners: [] };
     }
   
-    // --- Pick random winner (different from last winner) ---
+    // --- Pick random winner (different from last *user*, not just card) ---
     let possibleWinners = [...cards];
-    if (this.lastWinnerId) {
-      possibleWinners = possibleWinners.filter(c => c.id !== this.lastWinnerId);
+  
+    if (this.lastWinnerUserId) {
+      // Exclude cards belonging to last winner’s userId
+      possibleWinners = possibleWinners.filter(
+        (c) => c.claimedBy !== this.lastWinnerUserId
+      );
     }
   
+    // If all belong to last winner (edge case), allow again
     if (possibleWinners.length === 0) {
       possibleWinners = [...cards];
     }
   
     const winnerCard = possibleWinners[Math.floor(Math.random() * possibleWinners.length)];
-    this.lastWinnerId = winnerCard.id;
+    this.lastWinnerUserId = winnerCard.claimedBy; // ✅ track last winner userId
   
     // --- Select winner pattern ---
     const patterns = this.pickPatternNumbers(winnerCard);
@@ -756,24 +761,20 @@ class GameManager {
     const first24 = this.shuffleArray(drawnNumbers.slice(0, 24));
   
     // --- Make 25th number = winner’s missing number ---
-    // --- Make 25th number = winner’s missing number ---
     const first25 = [...first24, winnerMissing];
     usedNumbers.add(winnerMissing);
-
-    // ✅ After 25 numbers → exactly one winner
-
-    // --- Losers’ missing numbers come right after ---
+  
+    // --- Losers’ missing numbers come next ---
     const rest = [];
-
-    // Ensure losers’ missing numbers appear first (ordered, not shuffled yet)
+  
     loserMissingNumbers.forEach((n) => {
       if (n > 0 && n <= 75 && !usedNumbers.has(n)) {
         usedNumbers.add(n);
         rest.push(n);
       }
     });
-
-    // --- Then fill remaining up to 75 with randoms ---
+  
+    // --- Fill remaining numbers up to 75 ---
     while (first25.length + rest.length < 75) {
       const rand = Math.floor(Math.random() * 75) + 1;
       if (!usedNumbers.has(rand)) {
@@ -781,17 +782,15 @@ class GameManager {
         rest.push(rand);
       }
     }
-
-    // Shuffle the remaining numbers *after* the losers' missing ones
+  
     const finalRest = [...loserMissingNumbers, ...this.shuffleArray(rest)];
     const finalDrawn = [...first25, ...finalRest];
-
-      
   
     winners.push(winnerCard.id);
   
     return { drawnNumbers: finalDrawn, winners };
   }
+  
   
 
   // Pick winning patterns from a card

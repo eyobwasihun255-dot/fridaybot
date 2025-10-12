@@ -629,15 +629,13 @@ const Room: React.FC = () => {
           {t('bet')}: {currentRoom.betAmount}
         </div>
         <div className="bg-white/10 rounded text-center py-1 border border-white/20">
-          {t('payout')}: {
-            Math.max(
-              0,
-              Math.floor(
-                ((Object.keys(currentRoom.players || {}).length || 0) * currentRoom.betAmount * 0.9)
+        {t('payout')}: {
+  Math.max(
+    0,
+    ((Object.keys(currentRoom.players || {}).length || 0) * currentRoom.betAmount * 0.85)
+  )
+}
 
-              )
-            )
-          }
         </div>
 
 

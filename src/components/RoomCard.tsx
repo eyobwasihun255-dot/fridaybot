@@ -147,7 +147,7 @@ useEffect(() => {
   <span
     className={`font-medium ${
       room.gameStatus === "playing"
-        ? "bg-red-400 text-black font-bold px-3 py-1 rounded-full shadow-lg animate-pulse // Red + optional pulsing effect
+        ? "bg-red-400 text-black font-bold px-3 py-1 rounded-full shadow-lg animate-pulse "
         : getStatusColor(room.gameStatus)
     }`}
   >

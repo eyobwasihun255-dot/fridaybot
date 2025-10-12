@@ -690,81 +690,120 @@ if (pending?.type === "awaiting_revenue_amount") {
   pendingActions.delete(userId);
   return;
 }
+// ====================== /SENDMESSAGE COMMAND ======================
 if (text === "/sendmessage") {
   if (!ADMIN_IDS.includes(userId)) {
     await sendMessage(chatId, "❌ You are not authorized to use this command.");
     return;
   }
 
-  await sendMessage(chatId, "📤 Enter the username (without @), Telegram ID, or type 'all' to message everyone:");
+  await sendMessage(
+    chatId,
+    "📤 Enter the username (without @), Telegram ID, or type 'all' to message everyone.\n\nYou can send text or media next."
+  );
   pendingActions.set(userId, { type: "awaiting_send_target" });
   return;
 }
 
 if (pending?.type === "awaiting_send_target") {
   const target = text.trim();
-  pendingActions.set(userId, { type: "awaiting_send_text", target });
-  await sendMessage(chatId, "💬 Now enter the message text to send:");
+  pendingActions.set(userId, { type: "awaiting_send_content", target });
+  await sendMessage(chatId, "💬 Now send the message — text, photo, or file:");
   return;
 }
 
-if (pending?.type === "awaiting_send_text") {
+if (pending?.type === "awaiting_send_content") {
   const { target } = pending;
-  const messageText = text;
+  let success = 0, failed = 0;
+
+  // Extract the content type (text/photo/document)
+  const content = message.photo
+    ? { type: "photo", file_id: message.photo.at(-1).file_id, caption: message.caption || "" }
+    : message.document
+    ? { type: "document", file_id: message.document.file_id, caption: message.caption || "" }
+    : message.text
+    ? { type: "text", text: message.text }
+    : null;
+
+  if (!content) {
+    await sendMessage(chatId, "⚠️ Unsupported content type. Send text, photo, or document.");
+    return;
+  }
 
   try {
     if (target.toLowerCase() === "all") {
-      const usersRef = ref(rtdb, "users");
-      const usersSnap = await get(usersRef);
-
+      const usersSnap = await get(ref(rtdb, "users"));
       if (!usersSnap.exists()) {
-        await sendMessage(chatId, "⚠️ No users found in database.");
+        await sendMessage(chatId, "⚠️ No users found.");
       } else {
         const users = usersSnap.val();
-        let success = 0, failed = 0;
-
-        for (const [uid, userData] of Object.entries(users)) {
+        for (const userData of Object.values(users)) {
           try {
-            await sendMessage(userData.telegramId, messageText);
+            if (content.type === "text") {
+              await sendMessage(userData.telegramId, content.text);
+            } else if (content.type === "photo") {
+              await telegram("sendPhoto", {
+                chat_id: userData.telegramId,
+                photo: content.file_id,
+                caption: content.caption,
+              });
+            } else if (content.type === "document") {
+              await telegram("sendDocument", {
+                chat_id: userData.telegramId,
+                document: content.file_id,
+                caption: content.caption,
+              });
+            }
             success++;
           } catch {
             failed++;
           }
         }
-
-        await sendMessage(chatId, `✅ Message sent to ${success} users. ❌ Failed: ${failed}`);
+        await sendMessage(chatId, `✅ Broadcast done.\nSent: ${success}\nFailed: ${failed}`);
       }
     } else {
       let targetId = target;
       if (isNaN(target)) {
-        // search by username
-        const usersRef = ref(rtdb, "users");
-        const usersSnap = await get(usersRef);
-        if (usersSnap.exists()) {
-          const users = usersSnap.val();
-          const user = Object.values(users).find(
-            u => (u.username || "").toLowerCase() === target.toLowerCase()
-          );
-          if (user) targetId = user.telegramId;
-          else {
-            await sendMessage(chatId, "❌ Username not found.");
-            pendingActions.delete(userId);
-            return;
-          }
+        const usersSnap = await get(ref(rtdb, "users"));
+        const users = usersSnap.exists() ? usersSnap.val() : {};
+        const user = Object.values(users).find(
+          u => (u.username || "").toLowerCase() === target.toLowerCase()
+        );
+        if (!user) {
+          await sendMessage(chatId, "❌ Username not found.");
+          pendingActions.delete(userId);
+          return;
         }
+        targetId = user.telegramId;
       }
 
-      await sendMessage(targetId, messageText);
-      await sendMessage(chatId, `✅ Message sent successfully to ${target}.`);
+      if (content.type === "text") {
+        await sendMessage(targetId, content.text);
+      } else if (content.type === "photo") {
+        await telegram("sendPhoto", {
+          chat_id: targetId,
+          photo: content.file_id,
+          caption: content.caption,
+        });
+      } else if (content.type === "document") {
+        await telegram("sendDocument", {
+          chat_id: targetId,
+          document: content.file_id,
+          caption: content.caption,
+        });
+      }
+
+      await sendMessage(chatId, `✅ Message sent to ${target}`);
     }
   } catch (err) {
-    console.error("Error sending message:", err);
+    console.error("Error sending broadcast:", err);
     await sendMessage(chatId, "❌ Failed to send message.");
   }
 
   pendingActions.delete(userId);
   return;
 }
+
 
 if (text === "/transaction") {
   if (!ADMIN_IDS.includes(userId)) {

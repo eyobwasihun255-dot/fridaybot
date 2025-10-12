@@ -574,8 +574,23 @@ class GameManager {
         });
       }
   
-      // ✅ Prevent double payout and end game
+  
       await update(gameRef, { winners: [], winnersChecked: true });
+
+      // 🔊 Final guaranteed broadcast before endGame
+      if (this.io) {
+        this.io.to(roomId).emit("bingoChecked", {
+          roomId,
+          gameId: room.gameId,
+          winnerId: userId,
+          message: "Bingo confirmed! Game ending soon...",
+        });
+      }
+
+      // Small delay to ensure all sockets receive events
+      await new Promise((res) => setTimeout(res, 500));
+
+
       await this.endGame(roomId, room.gameId, "bingo");
   
       return { success: true, message: "Bingo confirmed!" };
@@ -765,30 +780,49 @@ class GameManager {
     usedNumbers.add(winnerMissing);
   
     // --- Losers’ missing numbers come next ---
-    const rest = [];
-  
-    loserMissingNumbers.forEach((n) => {
-      if (n > 0 && n <= 75 && !usedNumbers.has(n)) {
-        usedNumbers.add(n);
-        rest.push(n);
-      }
-    });
-  
-    // --- Fill remaining numbers up to 75 ---
-    while (first25.length + rest.length < 75) {
-      const rand = Math.floor(Math.random() * 75) + 1;
-      if (!usedNumbers.has(rand)) {
-        usedNumbers.add(rand);
-        rest.push(rand);
-      }
-    }
-  
-    const finalRest = [...loserMissingNumbers, ...this.shuffleArray(rest)];
-    const finalDrawn = [...first25, ...finalRest];
-  
-    winners.push(winnerCard.id);
-  
-    return { drawnNumbers: finalDrawn, winners };
+       // --- Losers’ missing numbers come next, but only after draw 27 ---
+       const rest = [];
+
+       loserMissingNumbers.forEach((n) => {
+         if (n > 0 && n <= 75 && !usedNumbers.has(n)) {
+           usedNumbers.add(n);
+           rest.push(n);
+         }
+       });
+   
+       // --- Fill remaining numbers up to 75 ---
+       while (drawnNumbers.length + 1 + rest.length < 75) {
+         const rand = Math.floor(Math.random() * 75) + 1;
+         if (!usedNumbers.has(rand)) {
+           usedNumbers.add(rand);
+           rest.push(rand);
+         }
+       }
+   
+       // --- Insert 2 neutral random numbers after winner (positions 26 & 27) ---
+       const neutralAfterWinner = [];
+       while (neutralAfterWinner.length < 2) {
+         const rand = Math.floor(Math.random() * 75) + 1;
+         if (!usedNumbers.has(rand)) {
+           usedNumbers.add(rand);
+           neutralAfterWinner.push(rand);
+         }
+       }
+   
+       // --- Combine final sequence ---
+       // 1–24 = randoms, 25 = winnerMissing, 26–27 = neutral randoms, 28+ = losersMissing + rest
+       const finalRest = [
+         ...neutralAfterWinner,
+         ...loserMissingNumbers,
+         ...this.shuffleArray(rest),
+       ];
+   
+       const finalDrawn = [...first25, ...finalRest];
+   
+       winners.push(winnerCard.id);
+   
+       return { drawnNumbers: finalDrawn, winners };
+   
   }
   
   

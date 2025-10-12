@@ -206,18 +206,7 @@
       if (!currentRoom || data.roomId !== currentRoom.id) return;
         console.log('🔚 Game ended:', data);
        
-        if (data.winner) {
-          // Handle winner announcement
-          const { user } = useAuthStore.getState();
-          if (user?.telegramId === data.winner) {
-            get().setShowWinnerPopup(true);
-            
-            console.log('🔚 showing winner popup', data);
-          } else {
-            get().setShowLoserPopup(true);
-            console.log('🔚 showing loser popup', data);
-          }
-        }
+        
         // Keep live balance listener; it will reflect payout automatically
       });
 
@@ -254,7 +243,23 @@
           console.error('Failed to show loser winner card:', e);
         }
       });
-   
+      newSocket.on('bingoChecked', async (data: any) => {
+        const { currentRoom } = get();
+        if (!currentRoom || data.roomId !== currentRoom.id) return;
+      
+        try {
+          const { user } = useAuthStore.getState();
+      
+          // ✅ If winner popup hasn’t shown yet
+          if (user?.telegramId === data.winnerId) {
+            if (!get().showWinnerPopup) get().setShowWinnerPopup(true);
+          } else {
+            if (!get().showLoserPopup) get().setShowLoserPopup(true);
+          }
+        } catch (e) {
+          console.error('Error in bingoChecked fallback:', e);
+        }
+      });
       
       
       newSocket.on('roomReset', () => {

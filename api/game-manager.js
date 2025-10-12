@@ -9,6 +9,7 @@ class GameManager {
     this.numberDrawIntervals = new Map(); // roomId -> interval ID
     this.countdownTimers = new Map(); // roomId -> timeout ID
     this.resetRoomTimers = new Map(); // roomId -> timeout ID for scheduled reset
+    this.lastWinnerUserId = null;
     this.io = null; // Will be set when Socket.IO is initialized
   }
 

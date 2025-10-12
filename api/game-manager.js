@@ -153,7 +153,7 @@ class GameManager {
 
       // Generate drawn numbers and determine winners
       const cards = playerIds.map(pid => room.bingoCards[room.players[pid].cardId]);
-      const { drawnNumbers, winners } = this.generateDrawnNumbersMultiWinner(roomId,cards);
+      const { drawnNumbers, winners } = this.generateDrawnNumbersMultiWinner(roomId, cards);
 
       const gameData = {
         id: gameId,
@@ -698,45 +698,56 @@ class GameManager {
   }
 
   // Generate drawn numbers with predetermined winners
-  generateDrawnNumbersMultiWinner(roomId, cards) {
+  generateDrawnNumbersMultiWinner(roomId, cards = []) {
     const winners = [];
     const usedNumbers = new Set();
     const drawnNumbers = [];
   
-    if (!cards || cards.length === 0) {
+    if (!Array.isArray(cards) || cards.length === 0) {
+      console.warn(`⚠️ No cards found for room ${roomId}`);
       return { drawnNumbers: [], winners: [] };
     }
   
+    if (!this.lastWinnerUserByRoom) this.lastWinnerUserByRoom = new Map();
     const lastWinnerUserId = this.lastWinnerUserByRoom.get(roomId) || null;
   
-    // --- Filter out last winner’s user ---
-    let possibleWinners = cards.filter(
-      (c) => c.claimedBy && c.claimedBy !== lastWinnerUserId
-    );
-  
-    // --- Edge case: if all cards belong to the last winner ---
-    const allSameUser = cards.every(
-      (c) => c.claimedBy === lastWinnerUserId
-    );
-    if (possibleWinners.length === 0 || allSameUser) {
-      possibleWinners = [...cards];
+    // Filter valid cards
+    const validCards = cards.filter(c => c && Array.isArray(c.numbers) && c.claimedBy);
+    if (validCards.length === 0) {
+      console.warn(`⚠️ No valid cards for room ${roomId}`);
+      return { drawnNumbers: [], winners: [] };
     }
   
-    // --- Pick random winner card ---
-    const winnerCard =
-      possibleWinners[Math.floor(Math.random() * possibleWinners.length)];
+    // --- Filter out last winner’s user ---
+    let possibleWinners = validCards.filter(
+      c => c.claimedBy !== lastWinnerUserId
+    );
+  
+    // --- Edge case: all cards belong to last winner ---
+    const allSameUser = validCards.every(c => c.claimedBy === lastWinnerUserId);
+    if (possibleWinners.length === 0 || allSameUser) {
+      possibleWinners = [...validCards];
+    }
+  
+    const winnerCard = possibleWinners[Math.floor(Math.random() * possibleWinners.length)];
+    if (!winnerCard) {
+      console.error(`❌ Could not select a winner card for room ${roomId}`);
+      return { drawnNumbers: [], winners: [] };
+    }
+  
     const newWinnerUserId = winnerCard.claimedBy;
   
-    // --- Select winner pattern ---
-    const patterns = this.pickPatternNumbers(winnerCard);
-    const winnerPattern =
-      patterns[Math.floor(Math.random() * patterns.length)];
+    // --- Safe pattern selection ---
+    const patterns = this.pickPatternNumbers(winnerCard) || [];
+    const winnerPattern = patterns[Math.floor(Math.random() * patterns.length)] || [];
+    if (winnerPattern.length === 0) {
+      console.error(`❌ Invalid pattern for winnerCard in room ${roomId}`);
+      return { drawnNumbers: [], winners: [] };
+    }
   
-    // --- Pick missing number for the winner ---
     const winnerMissIndex = Math.floor(Math.random() * winnerPattern.length);
-    const winnerMissing = winnerPattern[winnerMissIndex];
+    const winnerMissing = winnerPattern[winnerMissIndex] || 0;
   
-    // --- Add all other numbers from winner pattern first ---
     winnerPattern.forEach((n, i) => {
       if (i !== winnerMissIndex && n > 0 && n <= 75 && !usedNumbers.has(n)) {
         usedNumbers.add(n);
@@ -744,16 +755,13 @@ class GameManager {
       }
     });
   
-    // --- Handle loser cards ---
     const loserMissingNumbers = [];
-    cards.forEach((card) => {
+    validCards.forEach(card => {
       if (card.id === winnerCard.id) return;
-  
-      const pats = this.pickPatternNumbers(card);
-      const chosen = pats[Math.floor(Math.random() * pats.length)];
-  
+      const pats = this.pickPatternNumbers(card) || [];
+      const chosen = pats[Math.floor(Math.random() * pats.length)] || [];
       const missIndex = Math.floor(Math.random() * chosen.length);
-      const missingNum = chosen[missIndex];
+      const missingNum = chosen[missIndex] || 0;
   
       chosen.forEach((n, i) => {
         if (i !== missIndex && n > 0 && n <= 75 && !usedNumbers.has(n)) {
@@ -767,7 +775,6 @@ class GameManager {
       }
     });
   
-    // --- Fill up until 24 numbers ---
     while (drawnNumbers.length < 24) {
       const rand = Math.floor(Math.random() * 75) + 1;
       if (!usedNumbers.has(rand)) {
@@ -776,14 +783,10 @@ class GameManager {
       }
     }
   
-    // --- Shuffle first 24 numbers ---
     const first24 = this.shuffleArray(drawnNumbers.slice(0, 24));
-  
-    // --- Make 25th number = winner’s missing number ---
     const first25 = [...first24, winnerMissing];
     usedNumbers.add(winnerMissing);
   
-    // --- Add 2 neutral random numbers after winner ---
     const neutralAfterWinner = [];
     while (neutralAfterWinner.length < 2) {
       const rand = Math.floor(Math.random() * 75) + 1;
@@ -793,9 +796,8 @@ class GameManager {
       }
     }
   
-    // --- Build rest ---
     const rest = [];
-    loserMissingNumbers.forEach((n) => {
+    loserMissingNumbers.forEach(n => {
       if (n > 0 && n <= 75 && !usedNumbers.has(n)) {
         usedNumbers.add(n);
         rest.push(n);
@@ -818,11 +820,10 @@ class GameManager {
   
     winners.push(winnerCard.id);
   
-    // ✅ Record last winner for this room
     this.lastWinnerUserByRoom.set(roomId, newWinnerUserId);
-  
     return { drawnNumbers: finalDrawn.slice(0, 75), winners };
   }
+  
   
   
   

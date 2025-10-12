@@ -78,7 +78,7 @@ const translations = {
     'waiting_for_players': 'ለተጫዋቾች በመጠበቅ...',
     'game_in_progress': 'ጨዋታ በሂደት ላይ ነው',
     'place_your_bet': 'ውርርድዎን ያድርጉ',
-    'playing' : 'በመጫዋታ ላይ',
+    'playing' : 'በጫዋታ ላይ',
      'ended' : 'ተጠናቋል',
      'enter_room' : 'ክፍል ግባ',
     // General

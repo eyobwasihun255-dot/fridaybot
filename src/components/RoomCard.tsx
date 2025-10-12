@@ -142,15 +142,22 @@ useEffect(() => {
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
-      <span className="text-white/80">{t("status")}:</span>
-      <span className={`font-medium ${getStatusColor(room.gameStatus)}`}>
-        {t(room.gameStatus)}
-        {room.gameStatus === "countdown" && timeLeft > 0 && (
-          <span className="ml-2 bg-red-400">{formatTime(timeLeft)}</span>
-        )}
-      </span>
-    </div>
+          <div className="flex items-center justify-between" id="gamestatus">
+  <span className="text-white/80">{t("status")}:</span>
+  <span
+    className={`font-medium ${
+      room.gameStatus === "playing"
+        ? "bg-red-400 text-black font-bold px-3 py-1 rounded-full shadow-lg animate-pulse // Red + optional pulsing effect
+        : getStatusColor(room.gameStatus)
+    }`}
+  >
+    {t(room.gameStatus)}
+    {room.gameStatus === "countdown" && timeLeft > 0 && (
+      <span className="ml-2 bg-red-400">{formatTime(timeLeft)}</span>
+    )}
+  </span>
+</div>
+
 
 
           {/* ✅ Payout Display */}

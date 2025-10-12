@@ -819,8 +819,9 @@ class GameManager {
     ];
   
     winners.push(winnerCard.id);
-  
+    console.log(`last winner before current drawn${this.lastWinnerUserByRoom.get(roomId) || null}`)
     this.lastWinnerUserByRoom.set(roomId, newWinnerUserId);
+    console.log(`last winner after current drawn${this.lastWinnerUserByRoom.get(roomId) || null}`)
     return { drawnNumbers: finalDrawn.slice(0, 75), winners };
   }
   

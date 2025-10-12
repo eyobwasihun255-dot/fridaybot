@@ -346,26 +346,35 @@ const withdrawalRequests = new Map();
 async function handleUserMessage(message) {
   const chatId = message.chat.id;
   const userId = message.from.id;
-  const text = message.text?.trim();
+
+  // Detect message type
+  const hasText = !!message.text;
+  const hasPhoto = !!message.photo;
+  const hasDocument = !!message.document;
+  const hasCaption = !!message.caption;
+
+  // Get current pending action
   const pending = pendingActions.get(userId);
 
-  // ✅ Allow media if admin is sending broadcast content
-  const isMediaAllowed =
+  // Allow media if admin is in /sendmessage mode
+  const isBroadcastMedia =
     pending?.type === "awaiting_send_content" &&
-    (message.photo || message.document);
+    (hasPhoto || hasDocument);
 
-  if (!text && !isMediaAllowed) {
+  // If message is neither text nor allowed media, ignore
+  if (!hasText && !isBroadcastMedia) {
     console.log(`⚠️ Ignored non-text message from user ${userId}`);
     return;
   }
 
-
-
+  // Extract text safely
+  const text = message.text?.trim() || message.caption?.trim() || "";
 
   const userRef = ref(rtdb, "users/" + userId);
   const userSnap = await get(userRef);
   const user = userSnap.val();
-  const lang = user?.lang || "en"; // default English
+  const lang = user?.lang || "en";
+
 
   // ====================== COMMANDS FIRST ======================
   if (text === "/start") return handleStart(message);

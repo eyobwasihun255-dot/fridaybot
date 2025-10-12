@@ -72,7 +72,7 @@ approved_deposit: (amt) => `✅ Deposit approved!\n+${amt} birr credited.\n\n�
 declined_deposit: "❌ Your deposit was declined.",
 approved_withdraw: (amt, acc) => `✅ Withdraw approved!\n-${amt} birr paid to account: ${acc}\n\n🎮 You can continue playing anytime:\n/playgame`,
 declined_withdraw: "❌ Your withdrawal was rejected.",
-fallback: "Send /playgame or/deposit or /withdraw to start.",
+fallback: "Send /playgame or /deposit or /withdraw to start.",
 send_deposit_sms: "📩 Please forward the payment SMS you received.",
 enter_telebirr : "Please Enter your Telebirr account Phone number :",
 withdraw_pending :"Withdraw pending ...",
@@ -144,7 +144,7 @@ approved_deposit: (amt) => `✅ ተቀብሏል!\n+${amt} ብር ተጨመረ።
 declined_deposit: "❌ ቅጽ አልተቀበለም።",
 approved_withdraw: (amt, acc) => `✅ መክፈያ ተከናውኗል!\n-${amt} ብር ተከፍሏል ወደ: ${acc}\n\n🎮 እንደገና መጫወት ትችላላችሁ:\n/playgame`,
 declined_withdraw: "❌ request declined",
-fallback: "Send /playgame or/deposit or /withdraw to start.",
+fallback: "Send /playgame or /deposit or /withdraw to start.",
 },
 };
  const value = texts[lang]?.[key];
@@ -238,7 +238,7 @@ const API = `https://api.telegram.org/bot${TOKEN}`;
 const commands = [
   { command: "playgame", description: t("am", "start_bingo") },
   { command: "deposit", description:  t("am", "deposit") },
-  { command: "withdrawn", description:  t("am", "withdraw") },
+  { command: "withdraw", description:  t("am", "withdraw") },
   { command: "help", description: t("am", "help") },
 ];
 
@@ -451,13 +451,20 @@ async function handleUserMessage(message) {
       await sendMessage(chatId, t(lang, "invalid_amount"));
       return;
     }
-
+  
+    // 🔒 Minimum withdrawal amount check
+    if (amount < 50) {
+      await sendMessage(chatId, "⚠️ Minimum withdrawal is 50 birr.");
+      pendingActions.delete(userId);
+      return;
+    }
+  
     if (amount > user.balance) {
       await sendMessage(chatId, t(lang, "insufficient_balance"));
       pendingActions.delete(userId);
       return;
     }
-
+  
     // ✅ Ask method next
     const keyboard = {
       inline_keyboard: [
@@ -465,11 +472,12 @@ async function handleUserMessage(message) {
         [{ text: "📱 Telebirr", callback_data: "withdraw_telebirr" }],
       ],
     };
-
+  
     await sendMessage(chatId, t(lang, "select_withdraw_method"), { reply_markup: keyboard });
     pendingActions.set(userId, { type: "awaiting_withdraw_method", amount });
     return;
   }
+  
 
   // ====================== WITHDRAW ACCOUNT STEP ======================
   if (pending?.type === "awaiting_withdraw_account") {
@@ -675,9 +683,82 @@ if (pending?.type === "awaiting_revenue_amount") {
   pendingActions.delete(userId);
   return;
 }
-// ====================== TRANSACTION COMMAND ======================
-// ====================== /TRANSACTION COMMAND ======================
-// ====================== /TRANSACTION COMMAND ======================
+if (text === "/sendmessage") {
+  if (!ADMIN_IDS.includes(userId)) {
+    await sendMessage(chatId, "❌ You are not authorized to use this command.");
+    return;
+  }
+
+  await sendMessage(chatId, "📤 Enter the username (without @), Telegram ID, or type 'all' to message everyone:");
+  pendingActions.set(userId, { type: "awaiting_send_target" });
+  return;
+}
+
+if (pending?.type === "awaiting_send_target") {
+  const target = text.trim();
+  pendingActions.set(userId, { type: "awaiting_send_text", target });
+  await sendMessage(chatId, "💬 Now enter the message text to send:");
+  return;
+}
+
+if (pending?.type === "awaiting_send_text") {
+  const { target } = pending;
+  const messageText = text;
+
+  try {
+    if (target.toLowerCase() === "all") {
+      const usersRef = ref(rtdb, "users");
+      const usersSnap = await get(usersRef);
+
+      if (!usersSnap.exists()) {
+        await sendMessage(chatId, "⚠️ No users found in database.");
+      } else {
+        const users = usersSnap.val();
+        let success = 0, failed = 0;
+
+        for (const [uid, userData] of Object.entries(users)) {
+          try {
+            await sendMessage(userData.telegramId, messageText);
+            success++;
+          } catch {
+            failed++;
+          }
+        }
+
+        await sendMessage(chatId, `✅ Message sent to ${success} users. ❌ Failed: ${failed}`);
+      }
+    } else {
+      let targetId = target;
+      if (isNaN(target)) {
+        // search by username
+        const usersRef = ref(rtdb, "users");
+        const usersSnap = await get(usersRef);
+        if (usersSnap.exists()) {
+          const users = usersSnap.val();
+          const user = Object.values(users).find(
+            u => (u.username || "").toLowerCase() === target.toLowerCase()
+          );
+          if (user) targetId = user.telegramId;
+          else {
+            await sendMessage(chatId, "❌ Username not found.");
+            pendingActions.delete(userId);
+            return;
+          }
+        }
+      }
+
+      await sendMessage(targetId, messageText);
+      await sendMessage(chatId, `✅ Message sent successfully to ${target}.`);
+    }
+  } catch (err) {
+    console.error("Error sending message:", err);
+    await sendMessage(chatId, "❌ Failed to send message.");
+  }
+
+  pendingActions.delete(userId);
+  return;
+}
+
 if (text === "/transaction") {
   if (!ADMIN_IDS.includes(userId)) {
     await sendMessage(chatId, "❌ You are not authorized to use this command.");

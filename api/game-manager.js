@@ -778,51 +778,52 @@ class GameManager {
     // --- Make 25th number = winner’s missing number ---
     const first25 = [...first24, winnerMissing];
     usedNumbers.add(winnerMissing);
+     
   
-    // --- Losers’ missing numbers come next ---
-       // --- Losers’ missing numbers come next, but only after draw 27 ---
-       const rest = [];
-
-       loserMissingNumbers.forEach((n) => {
-         if (n > 0 && n <= 75 && !usedNumbers.has(n)) {
-           usedNumbers.add(n);
-           rest.push(n);
-         }
-       });
-   
-       // --- Fill remaining numbers up to 75 ---
-       while (drawnNumbers.length + 1 + rest.length < 75) {
-         const rand = Math.floor(Math.random() * 75) + 1;
-         if (!usedNumbers.has(rand)) {
-           usedNumbers.add(rand);
-           rest.push(rand);
-         }
-       }
-   
-       // --- Insert 2 neutral random numbers after winner (positions 26 & 27) ---
-       const neutralAfterWinner = [];
-       while (neutralAfterWinner.length < 2) {
-         const rand = Math.floor(Math.random() * 75) + 1;
-         if (!usedNumbers.has(rand)) {
-           usedNumbers.add(rand);
-           neutralAfterWinner.push(rand);
-         }
-       }
-   
-       // --- Combine final sequence ---
-       // 1–24 = randoms, 25 = winnerMissing, 26–27 = neutral randoms, 28+ = losersMissing + rest
-       const finalRest = [
-         ...neutralAfterWinner,
-         ...loserMissingNumbers,
-         ...this.shuffleArray(rest),
-       ];
-   
-       const finalDrawn = [...first25, ...finalRest];
-   
-       winners.push(winnerCard.id);
-   
-       return { drawnNumbers: finalDrawn, winners };
-   
+      // --- Add 2 neutral random numbers after winner (positions 26 & 27) ---
+      const neutralAfterWinner = [];
+      while (neutralAfterWinner.length < 2) {
+        const rand = Math.floor(Math.random() * 75) + 1;
+        if (!usedNumbers.has(rand)) {
+          usedNumbers.add(rand);
+          neutralAfterWinner.push(rand);
+        }
+      }
+  
+      // --- Build rest (loser missing numbers + filler) ---
+      const rest = [];
+  
+      // First, losers' missing numbers — ensure no duplicates
+      loserMissingNumbers.forEach((n) => {
+        if (n > 0 && n <= 75 && !usedNumbers.has(n)) {
+          usedNumbers.add(n);
+          rest.push(n);
+        }
+      });
+  
+      // Then, fill the remaining numbers until total = 75
+      while (first25.length + neutralAfterWinner.length + rest.length < 75) {
+        const rand = Math.floor(Math.random() * 75) + 1;
+        if (!usedNumbers.has(rand)) {
+          usedNumbers.add(rand);
+          rest.push(rand);
+        }
+      }
+  
+      // --- Combine final sequence ---
+      // Draw 1–24 = randoms
+      // 25 = winner missing number
+      // 26–27 = neutral randoms
+      // 28+ = losers’ missing numbers + rest
+      const finalDrawn = [
+        ...first25,
+        ...neutralAfterWinner,
+        ...this.shuffleArray(rest),
+      ];
+  
+      winners.push(winnerCard.id);
+      return { drawnNumbers: finalDrawn.slice(0, 75), winners };
+  
   }
   
   

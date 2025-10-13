@@ -1,7 +1,6 @@
 import { ref, get, set, update, push , remove } from "firebase/database";
 import { rtdb } from "../bot/firebaseConfig.js"; 
 import fetch from "node-fetch";
-import { notifyInactiveClaimedPlayers } from "./notifyPlayersInActiveRooms.js";
 
 
 const ADMIN_PASSCODE = "19991999"; // Ideally move to process.env.ADMIN_PASSCODE
@@ -1047,13 +1046,7 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
   telegram("answerCallbackQuery", { callback_query_id: callbackQuery.id });
 }
 
-setInterval(async () => {
-  try {
-    await notifyInactiveClaimedPlayers();
-  } catch (e) {
-    console.error("Notifier check failed:", e);
-  }
-}, 60 * 1000); // check every 1 minute
+ // check every 1 minute
 
 
 // ====================== MAIN HANDLER ======================

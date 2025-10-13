@@ -23,7 +23,7 @@ class GameManager {
   setSocketIO(io) {
     this.io = io;
   }
-
+ 
   // Start countdown if conditions allow
   async startCountdown(room, roomId, players, durationMs = 29000, startedBy = "auto") {
     try {
@@ -52,7 +52,7 @@ class GameManager {
       const roomRef = ref(rtdb, `rooms/${roomId}`);
   
       // Save countdown state
-      await update(roomRef, {
+      update(roomRef, {
         gameStatus: "countdown",
         countdownEndAt,
         countdownStartedBy: startedBy,
@@ -74,7 +74,7 @@ class GameManager {
           // Only start if still in countdown
           if (latest?.gameStatus === "countdown") {
             console.log(`🎮 Countdown ended → Starting game for room ${roomId}`);
-            await this.startGame(roomId, room);
+            this.startGame(roomId, room);
             
           } else {
             console.log(`⚠️ Skipping startGame for room ${roomId}, state changed to ${latest?.gameStatus}`);
@@ -114,7 +114,7 @@ class GameManager {
         this.countdownTimers.delete(roomId);
       }
       const roomRef = ref(rtdb, `rooms/${roomId}`);
-      await update(roomRef, {
+      update(roomRef, {
         gameStatus: 'waiting',
         countdownEndAt: null,
         countdownStartedBy: null,
@@ -188,7 +188,7 @@ class GameManager {
       });
 
       // Deduct bets from players
-      await this.deductBets(roomId, gameData);
+      this.deductBets(roomId, gameData);
 
       // Save game data
       const gameRef = ref(rtdb, `games/${gameId}`);
@@ -234,7 +234,7 @@ class GameManager {
         
         if (currentNumberIndex >= drawnNumbers.length) {
           // All numbers drawn, end game
-          await this.endGame(roomId, gameId, "allNumbersDrawn");
+          this.endGame(roomId, gameId, "allNumbersDrawn");
           return;
         }
 
@@ -242,16 +242,13 @@ class GameManager {
         const newDrawnNumbers = drawnNumbers.slice(0, currentNumberIndex + 1);
 
         // Update game data
-        await update(gameRef, {
-          currentDrawnNumbers: newDrawnNumbers,
-          currentNumberIndex: currentNumberIndex + 1
-        });
-
-        // Update room called numbers
-        const roomRef = ref(rtdb, `rooms/${roomId}`);
-        await update(roomRef, {
-          calledNumbers: newDrawnNumbers
-        });
+        Promise.allSettled([
+          update(gameRef, {
+            currentDrawnNumbers: newDrawnNumbers,
+            currentNumberIndex: currentNumberIndex + 1,
+          }),
+          update(ref(rtdb, `rooms/${roomId}`), { calledNumbers: newDrawnNumbers }),
+        ]).catch(console.error);
 
         // Notify clients
         if (this.io) {
@@ -286,7 +283,7 @@ class GameManager {
             }
             if (winningPattern) {
               // Trigger server bingo
-              await this.checkBingo(roomId, cardId, card.claimedBy, winningPattern, room, room.players[card.claimedBy]);
+              this.checkBingo(roomId, cardId, card.claimedBy, winningPattern, room, room.players[card.claimedBy]);
               break; // stop loop after first auto-winner
             }
           }
@@ -337,7 +334,7 @@ class GameManager {
         }
         const rid = setTimeout(async () => {
           try {
-            await this.resetRoom(roomId);
+            this.resetRoom(roomId);
           } catch (e) {
             console.error('Error in scheduled resetRoom:', e);
           } finally {
@@ -355,7 +352,7 @@ class GameManager {
       if (!gameData) return;
 
       // Update game status
-      await update(gameRef, {
+      update(gameRef, {
         status: "ended",
         endedAt: Date.now(),
         endReason: reason,
@@ -363,7 +360,7 @@ class GameManager {
 
 
 
-      await update(roomRef, {
+      update(roomRef, {
         gameStatus: "ended",
         nextGameCountdownEndAt,
         countdownEndAt: null,
@@ -385,19 +382,19 @@ class GameManager {
           });
 
           // Mark room payout fields for record consistency
-          await update(roomRef, {
+          update(roomRef, {
             winner: null,
             payout: gameData.totalPayout || 0,
             payed: true,
           });
-          await this.resetRoom(roomId);
+          this.resetRoom(roomId);
         } catch (e) {
           console.error('Error recording revenue on no-winner case:', e);
         }
       } else {
         // Process winners and payouts when there is a winner list
         if (gameData.winners && gameData.winners.length > 0) {
-          await this.processWinners(roomId, gameData);
+          this.processWinners(roomId, gameData);
         }
       }
 
@@ -469,7 +466,7 @@ class GameManager {
       }
 
       // Update room with winner info
-      await update(roomRef, {
+      update(roomRef, {
         winner: winners[0]?.userId,
         payout: totalPayout,
         payed: true
@@ -503,13 +500,13 @@ class GameManager {
       );
   
       if (!isValidBingo) {
-        await update(playerRef, { attemptedBingo: true });
+        update(playerRef, { attemptedBingo: true });
         return { success: false, message: "Invalid bingo pattern" };
       }
   
       // ✅ Valid bingo
       const gameRef = ref(rtdb, `games/${room.gameId}`);
-      await update(gameRef, {
+      update(gameRef, {
         winner: { winnerId: userId, winningPattern: pattern },
       });
   
@@ -563,7 +560,7 @@ class GameManager {
         });
   
         // ✅ Mark room payout metadata
-        await update(roomRef, {
+        update(roomRef, {
           winner: userId,
           payout: payoutAmount,
           payed: true,
@@ -571,7 +568,7 @@ class GameManager {
       }
   
   
-      await update(gameRef, { winners: [], winnersChecked: true });
+      update(gameRef, { winners: [], winnersChecked: true });
 
       // 🔊 Final guaranteed broadcast before endGame
       if (this.io) {
@@ -587,7 +584,7 @@ class GameManager {
       await new Promise((res) => setTimeout(res, 500));
 
 
-      await this.endGame(roomId, room.gameId, "bingo");
+      this.endGame(roomId, room.gameId, "bingo");
   
       return { success: true, message: "Bingo confirmed!" };
     } catch (error) {
@@ -686,7 +683,7 @@ class GameManager {
         });
       }
 
-      await update(ref(rtdb, `games/${gameData.id}`), { betsDeducted: true });
+      update(ref(rtdb, `games/${gameData.id}`), { betsDeducted: true });
     } catch (error) {
       console.error("Error deducting bets:", error);
     }
@@ -918,7 +915,7 @@ class GameManager {
               rtdb,
               `rooms/${roomId}/players/${claimedBy}`
             );
-             await update(playerRef, { attemptedBingo: false });
+             update(playerRef, { attemptedBingo: false });
             keepClaimed = true;
             keepPlayers.add(claimedBy);
           }
@@ -926,7 +923,7 @@ class GameManager {
   
         if (!keepClaimed) {
           // Reset the card if not valid auto-bet
-          await update(ref(rtdb, `rooms/${roomId}/bingoCards/${cardId}`), {
+          update(ref(rtdb, `rooms/${roomId}/bingoCards/${cardId}`), {
             claimed: false,
             claimedBy: null,
             auto: false,
@@ -938,14 +935,14 @@ class GameManager {
       // Second pass: remove players not in keepPlayers
       for (const [playerId] of Object.entries(players)) {
         if (!keepPlayers.has(playerId)) {
-          await update(roomRef, {
+          update(roomRef, {
             [`players/${playerId}`]: null
           });
         }
       }
   
       // Reset room state
-      await update(roomRef, {
+      update(roomRef, {
         gameStatus: "waiting",
         gameId: null,
         calledNumbers: [],
@@ -961,7 +958,7 @@ class GameManager {
         updates[`players/${pid}/attemptedBingo`] = false;
       });
       if (Object.keys(updates).length > 0) {
-        await update(roomRef, updates);
+        update(roomRef, updates);
       }
   
       // Notify clients

@@ -69,8 +69,12 @@
     startCountdownTicker: () => void;
     // Server communication
     socket: Socket | null;
+    reconnectInterval: ReturnType<typeof setInterval> | null;
     serverUrl: string;
     connectToServer: () => void;
+    safeSetShowPopup: (type: 'winner' | 'loser') => void;
+    startAutoReconnectMonitor :() => void ;
+    autoReconnectToServer: () => void;
     disconnectFromServer: () => void;
     checkBingo: (pattern: number[]) => Promise<{ success: boolean; message: string }>;
   }
@@ -82,6 +86,7 @@
   export const useGameStore = create<GameState>((set, get) => ({
     rooms: [],
     drawIntervalId: null,
+    reconnectInterval :null,
     displayedCalledNumbers: {} as { [roomId: string]: number[] },
     winnerCard: null,
     remaining: 0,
@@ -103,7 +108,38 @@
     setWinnerCard: (card) => set({ winnerCard: card, showWinnerPopup: false }),
     setShowWinnerPopup: (show: boolean) => set({ showWinnerPopup: show }),
     closeWinnerPopup: () => set({ showWinnerPopup: false }),
-    
+    safeSetShowPopup: (type: 'winner' | 'loser') => {
+      set((state) => {
+        if (type === 'winner' && !state.showWinnerPopup) {
+          return { showWinnerPopup: true };
+        }
+        if (type === 'loser' && !state.showLoserPopup) {
+          return { showLoserPopup: true };
+        }
+        return state; // no change if already true
+      });
+    },
+    // inside useGameStore
+autoReconnectToServer: () => {
+  const { socket, connectToServer, currentRoom, syncRoomState } = get();
+
+  // if already connected, skip
+  if (socket && socket.connected) return;
+
+  console.warn('[autoReconnect] Socket disconnected. Retrying...');
+
+  // try reconnect
+  connectToServer();
+
+  // after short delay, re-sync current room if user was in one
+  setTimeout(async () => {
+    if (get().currentRoom?.id) {
+      console.log('[autoReconnect] Re-syncing room state:', get().currentRoom?.id);
+      await syncRoomState(get().currentRoom.id);
+    }
+  }, 3000);
+},
+
     startCountdownTicker: () => {
       const { remaining ,countdownInterval } = get();
       if (remaining <= 0) return;
@@ -213,7 +249,7 @@
       // Winner confirmed immediately after server validates bingo
       newSocket.on('winnerConfirmed', async (data: any) => {
         const { currentRoom } = get();
-
+      
       // ✅ Ignore events not from current room
       if (!currentRoom || data.roomId !== currentRoom.id) return;
         try {
@@ -222,7 +258,7 @@
 
           if (user?.telegramId === userId) {
             // Winner
-            get().setShowWinnerPopup(true);
+            get().safeSetShowPopup('winner');
             return;
           }
 
@@ -238,7 +274,7 @@
             numbers: card.numbers, // Keep original numbers
             winningPatternIndices: patternIndices // Store pattern indices separately
           });
-          get().setShowLoserPopup(true);
+          get().safeSetShowPopup('loser');
         } catch (e) {
           console.error('Failed to show loser winner card:', e);
         }
@@ -252,9 +288,9 @@
       
           // ✅ If winner popup hasn’t shown yet
           if (user?.telegramId === data.winnerId) {
-            if (!get().showWinnerPopup) get().setShowWinnerPopup(true);
+            if (!get().showWinnerPopup) get().safeSetShowPopup('winner');
           } else {
-            if (!get().showLoserPopup) get().setShowLoserPopup(true);
+            if (!get().showLoserPopup) get().safeSetShowPopup('loser');
           }
         } catch (e) {
           console.error('Error in bingoChecked fallback:', e);
@@ -275,14 +311,31 @@
     },
 
     disconnectFromServer: () => {
-      const { socket } = get();
+      const { socket, reconnectInterval } = get();
+    
       if (socket) {
         socket.disconnect();
-        set({ socket: null });
+        console.log('[Socket] Disconnected manually.');
+      }
+    
+      if (reconnectInterval) {
+        clearInterval(reconnectInterval);
+        set({ reconnectInterval: null });
+        console.log('[AutoReconnect] Monitor cleared.');
       }
     },
+    
 
-
+    startAutoReconnectMonitor: () => {
+      const interval = setInterval(() => {
+        const { socket, autoReconnectToServer } = get();
+        if (!socket || !socket.connected) {
+          autoReconnectToServer();
+        }
+      }, 10000); // every 10 seconds
+      set({ reconnectInterval: interval });
+    },
+    
     // Server-side bingo check
     checkBingo: async (pattern: number[]) => {
       try {
@@ -330,7 +383,7 @@
         if (result.success) {
           console.log('🏆 Bingo confirmed by server!');
           get().setWinnerCard(cardToUse as BingoCard);  
-          get().setShowWinnerPopup(true);
+          get().safeSetShowPopup('winner');
         } else {
           console.log('❌ Bingo rejected by server:', result.message);
         }
@@ -413,7 +466,8 @@
     
       // ✅ Remove any old listener on this room before re-attaching
       off(roomRef);
-    
+      get().startAutoReconnectMonitor();
+
       onValue(roomRef, (snapshot) => {
         if (!snapshot.exists()) {
           set({ currentRoom: null, isBetActive: false, selectedCard: null });

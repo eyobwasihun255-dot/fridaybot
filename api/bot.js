@@ -227,7 +227,7 @@ inline_keyboard: [
 };
 
 
-await sendMessage(chatId, t("en", "choose_lang"), { reply_markup: keyboard });
+ sendMessage(chatId, t("en", "choose_lang"), { reply_markup: keyboard });
 }
 
 
@@ -298,7 +298,7 @@ async function handlePlaygame(message) {
     ],
   };
 
-  await sendMessage(chatId, t("am", "play"), { reply_markup: keyboard });
+   sendMessage(chatId, t("am", "play"), { reply_markup: keyboard });
 }
 
 
@@ -317,7 +317,7 @@ inline_keyboard: [
 [{ text: "💳 Telebirr", callback_data: "deposit_telebirr" }],
 ],
 };
-await sendMessage(chatId, t(lang, "deposit_method"), { reply_markup: keyboard });
+sendMessage(chatId, t(lang, "deposit_method"), { reply_markup: keyboard });
 }
 
 
@@ -329,7 +329,7 @@ const user = userSnap.val();
 const lang = user?.lang || "en";
 
 
-await sendMessage(chatId, t(lang, "withdraw_amount"));
+sendMessage(chatId, t(lang, "withdraw_amount"));
 pendingActions.set(message.from.id, { type: "awaiting_withdraw_amount" });
 }
 
@@ -389,7 +389,7 @@ async function handleUserMessage(message) {
   if (pending?.type === "awaiting_deposit_amount") {
     const amount = parseFloat(text);
     if (isNaN(amount) || amount <= 0) {
-      await sendMessage(chatId, t(lang, "invalid_amount"));
+      sendMessage(chatId, t(lang, "invalid_amount"));
       return;
     }
 
@@ -399,7 +399,7 @@ async function handleUserMessage(message) {
       amount 
     });
 
-  await sendMessage(chatId, t(lang, "deposit_sms", pending.method));
+  sendMessage(chatId, t(lang, "deposit_sms", pending.method));
 
     return;
   }
@@ -408,7 +408,7 @@ async function handleUserMessage(message) {
   if (pending?.type === "awaiting_deposit_sms") {
     const url = extractUrlFromText(text);
     if (!url) {
-      await sendMessage(chatId, t(lang, "no_link"));
+      sendMessage(chatId, t(lang, "no_link"));
       return;
     }
 
@@ -419,7 +419,7 @@ async function handleUserMessage(message) {
       const deposits = snap.val();
       const alreadyUsed = Object.values(deposits).some(d => d.url === url);
       if (alreadyUsed) {
-        await sendMessage(chatId, t(lang, "receipt_used"));
+        sendMessage(chatId, t(lang, "receipt_used"));
         pendingActions.delete(userId);
         return;
       }
@@ -457,12 +457,12 @@ async function handleUserMessage(message) {
       );
     });
 
-    await sendMessage(chatId, t(lang, "deposit_pending"));
+    sendMessage(chatId, t(lang, "deposit_pending"));
     pendingActions.delete(userId);
     return;
   }
   if (text === "/help") {
-  await sendMessage(chatId, t(lang, "help_text"), { parse_mode: "Markdown" });
+  sendMessage(chatId, t(lang, "help_text"), { parse_mode: "Markdown" });
   return;
 }
 
@@ -470,19 +470,19 @@ async function handleUserMessage(message) {
   if (pending?.type === "awaiting_withdraw_amount") {
     const amount = parseFloat(text);
     if (isNaN(amount) || amount <= 0) {
-      await sendMessage(chatId, t(lang, "invalid_amount"));
+      sendMessage(chatId, t(lang, "invalid_amount"));
       return;
     }
   
     // 🔒 Minimum withdrawal amount check
     if (amount < 50) {
-      await sendMessage(chatId, "⚠️ Minimum withdrawal is 50 birr.");
+      sendMessage(chatId, "⚠️ Minimum withdrawal is 50 birr.");
       pendingActions.delete(userId);
       return;
     }
   
     if (amount > user.balance) {
-      await sendMessage(chatId, t(lang, "insufficient_balance"));
+      sendMessage(chatId, t(lang, "insufficient_balance"));
       pendingActions.delete(userId);
       return;
     }
@@ -495,7 +495,7 @@ async function handleUserMessage(message) {
       ],
     };
   
-    await sendMessage(chatId, t(lang, "select_withdraw_method"), { reply_markup: keyboard });
+    sendMessage(chatId, t(lang, "select_withdraw_method"), { reply_markup: keyboard });
     pendingActions.set(userId, { type: "awaiting_withdraw_method", amount });
     return;
   }
@@ -533,17 +533,17 @@ async function handleUserMessage(message) {
       );
     });
 
-    await sendMessage(chatId, t(lang, "withdraw_pending"));
+    sendMessage(chatId, t(lang, "withdraw_pending"));
     pendingActions.delete(userId);
     return;
   }
   if (text.startsWith("/player")) {
   if (!ADMIN_IDS.includes(userId)) {
-    await sendMessage(chatId, "❌ You are not authorized to use this command.");
+    sendMessage(chatId, "❌ You are not authorized to use this command.");
     return;
   }
 
-  await sendMessage(chatId, "🔎 Enter the Telegram ID or username of the player:");
+  sendMessage(chatId, "🔎 Enter the Telegram ID or username of the player:");
   pendingActions.set(userId, { type: "awaiting_player_lookup" });
   return;}
 if (pending?.type === "awaiting_player_lookup") {
@@ -557,7 +557,7 @@ if (pending?.type === "awaiting_player_lookup") {
     });
 
     if (!response.ok) {
-      await sendMessage(chatId, "❌ Player not found.");
+      sendMessage(chatId, "❌ Player not found.");
       pendingActions.delete(userId);
       return;
     }
@@ -577,10 +577,10 @@ if (pending?.type === "awaiting_player_lookup") {
 🗓 Updated At: ${playerData.updatedAt}
     `;
 
-    await sendMessage(chatId, info);
+    sendMessage(chatId, info);
   } catch (err) {
     console.error("Error fetching player:", err);
-    await sendMessage(chatId, "❌ Failed to fetch player data.");
+    sendMessage(chatId, "❌ Failed to fetch player data.");
   }
 
   pendingActions.delete(userId);
@@ -589,7 +589,7 @@ if (pending?.type === "awaiting_player_lookup") {
 
 if (text === "/revenue") {
   if (!ADMIN_IDS.includes(userId)) {
-    await sendMessage(chatId, "❌ You are not authorized to use this command.");
+    sendMessage(chatId, "❌ You are not authorized to use this command.");
     return;
   }
 
@@ -611,21 +611,21 @@ if (text === "/revenue") {
     // 2️⃣ Total Undrawned Revenue
     report += `\n⏳ Total Undrawned Revenue: $${data.undrawnedTotal}\n`;
 
-    await sendMessage(chatId, report);
+    sendMessage(chatId, report);
   } catch (err) {
     console.error("Error fetching revenue:", err);
-    await sendMessage(chatId, "❌ Failed to fetch revenue data.");
+    sendMessage(chatId, "❌ Failed to fetch revenue data.");
   }
 
   return;
 }
 if (text === "/profit") {
   if (!ADMIN_IDS.includes(userId)) {
-    await sendMessage(chatId, "❌ You are not authorized to use this command.");
+    sendMessage(chatId, "❌ You are not authorized to use this command.");
     return;
   }
 
-  await sendMessage(chatId, "🔐 Enter admin passcode to confirm revenue withdrawal:");
+  sendMessage(chatId, "🔐 Enter admin passcode to confirm revenue withdrawal:");
   pendingActions.set(userId, { type: "awaiting_revenue_passcode" });
   return;
 }
@@ -633,12 +633,12 @@ if (text === "/profit") {
 // Step 2: Verify passcode
 if (pending?.type === "awaiting_revenue_passcode") {
   if (text !== ADMIN_PASSCODE) {
-    await sendMessage(chatId, "❌ Incorrect passcode. Process cancelled.");
+    sendMessage(chatId, "❌ Incorrect passcode. Process cancelled.");
     pendingActions.delete(userId);
     return;
   }
 
-  await sendMessage(chatId, "💰 Passcode verified. Enter the amount to withdraw:");
+  sendMessage(chatId, "💰 Passcode verified. Enter the amount to withdraw:");
   pendingActions.set(userId, { type: "awaiting_revenue_amount" });
   return;
 }
@@ -647,7 +647,7 @@ if (pending?.type === "awaiting_revenue_passcode") {
 if (pending?.type === "awaiting_revenue_amount") {
   const amountToWithdraw = parseFloat(text);
   if (isNaN(amountToWithdraw) || amountToWithdraw <= 0) {
-    await sendMessage(chatId, "❌ Invalid amount. Process cancelled.");
+    sendMessage(chatId, "❌ Invalid amount. Process cancelled.");
     pendingActions.delete(userId);
     return;
   }
@@ -660,24 +660,30 @@ if (pending?.type === "awaiting_revenue_amount") {
     const data = await response.json();
 
     if (amountToWithdraw > data.undrawnedTotal) {
-      await sendMessage(chatId, `❌ Amount exceeds total undrawned revenue ($${data.undrawnedTotal})`);
+      sendMessage(chatId, `❌ Amount exceeds total undrawned revenue ($${data.undrawnedTotal})`);
       pendingActions.delete(userId);
       return;
     }
 
     let remaining = amountToWithdraw;
-    const updates = {};
+const updates = {};
 
-    for (const entry of data.undrawnedDetails) {
-      if (!entry.drawned && remaining > 0) {
-        const take = Math.min(remaining, entry.amount);
-        remaining -= take;
+for (const entry of data.undrawnedDetails) {
+  if (remaining <= 0) break;
+  if (entry.drawned) continue;
 
-        updates[`revenue/${entry.gameId}/drawned`] = true;
+  if (entry.amount <= remaining) {
+    // Draw full entry
+    updates[`revenue/${entry.gameId}/drawned`] = true;
+    remaining -= entry.amount;
+  } else {
+    // Partial draw: only part of this revenue is withdrawn
+    updates[`revenue/${entry.gameId}/partialDrawn`] = true;
+    updates[`revenue/${entry.gameId}/partialDrawnAmount`] = remaining;
+    remaining = 0;
+  }
+}
 
-        if (remaining <= 0) break;
-      }
-    }
 
     // Save withdrawal record
     const withdrawalRef = ref(rtdb, `revenueWithdrawals/${Date.now()}`);
@@ -694,12 +700,12 @@ if (pending?.type === "awaiting_revenue_amount") {
     // 🧹 Clean old transactions (>6 hours)
     await cleanupOldTransactions();
 
-    await sendMessage(chatId, `✅ Revenue withdrawal of $${amountToWithdraw} successful!`);
+    sendMessage(chatId, `✅ Revenue withdrawal of $${amountToWithdraw} successful!`);
     console.log(`💸 Admin ${userId} withdrew $${amountToWithdraw}`);
 
   } catch (err) {
     console.error("Error withdrawing revenue:", err);
-    await sendMessage(chatId, "❌ Failed to process revenue withdrawal.");
+    sendMessage(chatId, "❌ Failed to process revenue withdrawal.");
   }
 
   pendingActions.delete(userId);
@@ -708,11 +714,11 @@ if (pending?.type === "awaiting_revenue_amount") {
 // ====================== /SENDMESSAGE COMMAND ======================
 if (text === "/sendmessage") {
   if (!ADMIN_IDS.includes(userId)) {
-    await sendMessage(chatId, "❌ You are not authorized to use this command.");
+    sendMessage(chatId, "❌ You are not authorized to use this command.");
     return;
   }
 
-  await sendMessage(
+  sendMessage(
     chatId,
     "📤 Enter the username (without @), Telegram ID, or type 'all' to message everyone.\n\nYou can send text or media next."
   );
@@ -723,7 +729,7 @@ if (text === "/sendmessage") {
 if (pending?.type === "awaiting_send_target") {
   const target = text.trim();
   pendingActions.set(userId, { type: "awaiting_send_content", target });
-  await sendMessage(chatId, "💬 Now send the message — text, photo, or file:");
+  sendMessage(chatId, "💬 Now send the message — text, photo, or file:");
   return;
 }
 
@@ -741,7 +747,7 @@ if (pending?.type === "awaiting_send_content") {
     : null;
 
   if (!content) {
-    await sendMessage(chatId, "⚠️ Unsupported content type. Send text, photo, or document.");
+    sendMessage(chatId, "⚠️ Unsupported content type. Send text, photo, or document.");
     return;
   }
 
@@ -749,13 +755,13 @@ if (pending?.type === "awaiting_send_content") {
     if (target.toLowerCase() === "all") {
       const usersSnap = await get(ref(rtdb, "users"));
       if (!usersSnap.exists()) {
-        await sendMessage(chatId, "⚠️ No users found.");
+        sendMessage(chatId, "⚠️ No users found.");
       } else {
         const users = usersSnap.val();
         for (const userData of Object.values(users)) {
           try {
             if (content.type === "text") {
-              await sendMessage(userData.telegramId, content.text);
+              sendMessage(userData.telegramId, content.text);
             } else if (content.type === "photo") {
               await telegram("sendPhoto", {
                 chat_id: userData.telegramId,
@@ -774,7 +780,7 @@ if (pending?.type === "awaiting_send_content") {
             failed++;
           }
         }
-        await sendMessage(chatId, `✅ Broadcast done.\nSent: ${success}\nFailed: ${failed}`);
+        sendMessage(chatId, `✅ Broadcast done.\nSent: ${success}\nFailed: ${failed}`);
       }
     } else {
       let targetId = target;
@@ -785,7 +791,7 @@ if (pending?.type === "awaiting_send_content") {
           u => (u.username || "").toLowerCase() === target.toLowerCase()
         );
         if (!user) {
-          await sendMessage(chatId, "❌ Username not found.");
+          sendMessage(chatId, "❌ Username not found.");
           pendingActions.delete(userId);
           return;
         }
@@ -793,7 +799,7 @@ if (pending?.type === "awaiting_send_content") {
       }
 
       if (content.type === "text") {
-        await sendMessage(targetId, content.text);
+        sendMessage(targetId, content.text);
       } else if (content.type === "photo") {
         await telegram("sendPhoto", {
           chat_id: targetId,
@@ -808,11 +814,11 @@ if (pending?.type === "awaiting_send_content") {
         });
       }
 
-      await sendMessage(chatId, `✅ Message sent to ${target}`);
+      sendMessage(chatId, `✅ Message sent to ${target}`);
     }
   } catch (err) {
     console.error("Error sending broadcast:", err);
-    await sendMessage(chatId, "❌ Failed to send message.");
+    sendMessage(chatId, "❌ Failed to send message.");
   }
 
   pendingActions.delete(userId);
@@ -822,7 +828,7 @@ if (pending?.type === "awaiting_send_content") {
 
 if (text === "/transaction") {
   if (!ADMIN_IDS.includes(userId)) {
-    await sendMessage(chatId, "❌ You are not authorized to use this command.");
+    sendMessage(chatId, "❌ You are not authorized to use this command.");
     return;
   }
 
@@ -891,15 +897,15 @@ if (text === "/transaction") {
     summary += `💰 Revenue (Drawned): ${whole.revenueDrawned}\n`;
     summary += `💰 Revenue (Undrawned): ${whole.revenueUndrawned}\n`;
 
-    await sendMessage(chatId, summary);
+    sendMessage(chatId, summary);
   } catch (err) {
     console.error("Error fetching /transaction:", err);
-    await sendMessage(chatId, "❌ Failed to fetch transaction data.");
+    sendMessage(chatId, "❌ Failed to fetch transaction data.");
   }
 }
 
   // ====================== FALLBACK ======================
-  await sendMessage(chatId, t(lang, "fallback"));
+  sendMessage(chatId, t(lang, "fallback"));
 }
 
 // ====================== CALLBACKS ======================
@@ -916,7 +922,7 @@ async function handleCallback(callbackQuery) {
   if (data === "lang_en" || data === "lang_am") {
     const lang = data === "lang_en" ? "en" : "am";
     await update(userRef, { lang });
-    await sendMessage(chatId, t(lang, "welcome"));
+    sendMessage(chatId, t(lang, "welcome"));
     return;
   }
 if (data === "deposit_cbe" || data === "deposit_telebirr") {
@@ -938,7 +944,7 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
       ? `💳 *Deposit to CBE Account:*\n\`\`\`\n${escapeMD(accountDetails.accNumber)}\n\`\`\`\n*Account Holder:* ${escapeMD(accountDetails.accHolder)}\n\n💰 የሚጨምሩትን መጠን ያስገቡ:`
       : `📱 *Deposit via Telebirr:*\n\`\`\`\n${escapeMD(accountDetails.phone)}\n\`\`\`\n*የተቀባዩ ስም :* ${escapeMD(accountDetails.holder)}\n\n💰 የሚጨምሩትን መጠን ያስገቡ:`;
 
-  await sendMessage(chatId, infoText, { parse_mode: "MarkdownV2" });
+  sendMessage(chatId, infoText, { parse_mode: "MarkdownV2" });
   return;
 }
 
@@ -971,9 +977,9 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
       });
 
       // Notify player
-      await sendMessage(req.userId, t(lang, "approved_deposit", req.amount));
+      sendMessage(req.userId, t(lang, "approved_deposit", req.amount));
       // Notify admin
-      await sendMessage(chatId, t(lang, "admin_approved_deposit", `@${user.username || req.userId}`, req.amount));
+      sendMessage(chatId, t(lang, "admin_approved_deposit", `@${user.username || req.userId}`, req.amount));
     }
     depositRequests.delete(requestId);
     return;
@@ -984,8 +990,8 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
     const req = depositRequests.get(requestId);
     if (!req) return;
 
-    await sendMessage(req.userId, t(lang, "declined_deposit"));
-    await sendMessage(chatId, t(lang, "admin_declined_deposit", `@${req.userId}`, req.amount));
+    sendMessage(req.userId, t(lang, "declined_deposit"));
+    sendMessage(chatId, t(lang, "admin_declined_deposit", `@${req.userId}`, req.amount));
     depositRequests.delete(requestId);
     return;
   }
@@ -999,9 +1005,9 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
     pendingActions.set(userId, { type: "awaiting_withdraw_account", amount: pending.amount, method });
 
     if (method === "CBE") {
-      await sendMessage(chatId, t(lang, "enter_cbe"));
+      sendMessage(chatId, t(lang, "enter_cbe"));
     } else {
-      await sendMessage(chatId, t(lang, "enter_telebirr"));
+      sendMessage(chatId, t(lang, "enter_telebirr"));
     }
     return;
   }
@@ -1025,8 +1031,8 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
       date: new Date().toISOString(), // store date in ISO format
       status: "approved", // you can also track "pending", "rejected", etc.
     });
-      await sendMessage(req.userId, t(lang, "approved_withdraw", req.amount, req.account));
-      await sendMessage(chatId, t(lang, "admin_approved_withdraw", `@${user.username || req.userId}`, req.amount));
+      sendMessage(req.userId, t(lang, "approved_withdraw", req.amount, req.account));
+      sendMessage(chatId, t(lang, "admin_approved_withdraw", `@${user.username || req.userId}`, req.amount));
     }
     withdrawalRequests.delete(requestId);
     return;
@@ -1037,8 +1043,8 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
     const req = withdrawalRequests.get(requestId);
     if (!req) return;
 
-    await sendMessage(req.userId, t(lang, "declined_withdraw"));
-    await sendMessage(chatId, t(lang, "admin_declined_withdraw", `@${req.userId}`, req.amount));
+    sendMessage(req.userId, t(lang, "declined_withdraw"));
+    sendMessage(chatId, t(lang, "admin_declined_withdraw", `@${req.userId}`, req.amount));
     withdrawalRequests.delete(requestId);
     return;
   }

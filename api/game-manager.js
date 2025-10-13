@@ -218,7 +218,6 @@ class GameManager {
   // Start number drawing process
   startNumberDrawing(roomId, gameId, room) {
     const gameRef = ref(rtdb, `games/${gameId}`);
-    const numbers = [];
     if (this.numberDrawIntervals.has(roomId)) {
       
       if (room.gameStatus !== "playing") {
@@ -246,7 +245,7 @@ class GameManager {
 
         const currentNumber = drawnNumbers[currentNumberIndex];
         const newDrawnNumbers = drawnNumbers.slice(0, currentNumberIndex + 1);
-        numbers.add(newDrawnNumbers)
+
         // Update game data
         await update(gameRef, {
           currentDrawnNumbers: newDrawnNumbers,

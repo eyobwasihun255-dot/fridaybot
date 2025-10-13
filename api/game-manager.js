@@ -218,105 +218,97 @@ class GameManager {
   // Start number drawing process
   startNumberDrawing(roomId, gameId, room) {
     const gameRef = ref(rtdb, `games/${gameId}`);
-    const numbers = []; // store drawn numbers in memory
-  
+    const numbers = [];
     if (this.numberDrawIntervals.has(roomId)) {
+      
       if (room.gameStatus !== "playing") {
         this.stopNumberDrawing(roomId);
         return;
       }
     }
-  
     const drawInterval = setInterval(async () => {
       try {
         const gameSnap = await get(gameRef);
         const gameData = gameSnap.val();
-  
+
         if (!gameData || gameData.status !== "active") {
           this.stopNumberDrawing(roomId);
           return;
         }
-  
+
         const { drawnNumbers, currentNumberIndex } = gameData;
-  
-        // stop if all numbers are drawn
+        
         if (currentNumberIndex >= drawnNumbers.length) {
-          // update database once at the end
-          const roomRef = ref(rtdb, `rooms/${roomId}`);
-          await update(roomRef, {
-            calledNumbers: numbers
-          });
-  
+          // All numbers drawn, end game
           await this.endGame(roomId, gameId, "allNumbersDrawn");
-          this.stopNumberDrawing(roomId);
           return;
         }
-  
+
         const currentNumber = drawnNumbers[currentNumberIndex];
-        numbers.push(currentNumber); // ✅ push new number
-  
-        // Notify connected players via socket
+        const newDrawnNumbers = drawnNumbers.slice(0, currentNumberIndex + 1);
+        numbers.add(newDrawnNumbers)
+        // Update game data
+        await update(gameRef, {
+          currentDrawnNumbers: newDrawnNumbers,
+          currentNumberIndex: currentNumberIndex + 1
+        });
+
+        // Update room called numbers
+        const roomRef = ref(rtdb, `rooms/${roomId}`);
+        await update(roomRef, {
+          calledNumbers: newDrawnNumbers
+        });
+
+        // Notify clients
         if (this.io) {
-          this.io.to(roomId).emit("numberDrawn", {
+          this.io.to(roomId).emit('numberDrawn', {
             number: currentNumber,
-            drawnNumbers: [...numbers],
+            drawnNumbers: newDrawnNumbers,
             roomId
           });
         }
-  
-        // Auto-bingo logic
+
+        // Auto-bingo for auto players
         try {
           const roomSnap = await get(ref(rtdb, `rooms/${roomId}`));
           const room = roomSnap.val() || {};
           const bingoCards = room.bingoCards || {};
-          const calledSet = new Set(numbers);
+          const calledSet = new Set(newDrawnNumbers);
           const patterns = this.generateValidPatterns();
-  
+          
           for (const [cardId, card] of Object.entries(bingoCards)) {
             if (!card?.auto) continue;
             const autoUntil = card.autoUntil || 0;
             if (autoUntil <= Date.now()) continue;
             if (!card.claimed || !card.claimedBy) continue;
-  
+            
             const flat = card.numbers.flat();
-  
+         
+            // find first winning pattern
             let winningPattern = null;
             for (const pat of patterns) {
               const ok = pat.every((idx) => flat[idx] === 0 || calledSet.has(flat[idx]));
-              if (ok) {
-                winningPattern = pat;
-                break;
-              }
+              if (ok) { winningPattern = pat; break; }
             }
-  
             if (winningPattern) {
-              await this.checkBingo(
-                roomId,
-                cardId,
-                card.claimedBy,
-                winningPattern,
-                room,
-                room.players[card.claimedBy]
-              );
-              break; // stop after first auto-winner
+              // Trigger server bingo
+              await this.checkBingo(roomId, cardId, card.claimedBy, winningPattern, room, room.players[card.claimedBy]);
+              break; // stop loop after first auto-winner
             }
           }
         } catch (e) {
-          console.error("Auto-bingo error:", e);
+          console.error('Auto-bingo error:', e);
         }
-  
+
         console.log(`🎲 Room ${roomId}: Drew number ${currentNumber}`);
-  
       } catch (error) {
         console.error("Error in number drawing:", error);
         this.stopNumberDrawing(roomId);
       }
-    }, 3000);
-  
-    // store the interval for cleanup
+    }, 3000); // 5 second intervals
+
     this.numberDrawIntervals.set(roomId, drawInterval);
   }
-  
 
   // Stop number drawing
   stopNumberDrawing(roomId) {

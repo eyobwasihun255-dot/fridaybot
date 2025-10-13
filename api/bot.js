@@ -36,7 +36,6 @@ async function cleanupOldTransactions() {
     }
   };
 
-  await deleteIfOld("deposits");
   await deleteIfOld("withdrawals");
 }
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;

@@ -35,7 +35,7 @@ async function cleanupOldTransactions() {
       console.error(`❌ Cleanup error in ${nodePath}:`, err);
     }
   };
-
+  await deleteIfOld("winningHistory");
   await deleteIfOld("withdrawals");
 }
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;

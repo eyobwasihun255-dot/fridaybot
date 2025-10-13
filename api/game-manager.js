@@ -218,112 +218,96 @@ class GameManager {
   // Start number drawing process
   startNumberDrawing(roomId, gameId, room) {
     const gameRef = ref(rtdb, `games/${gameId}`);
-  
     if (this.numberDrawIntervals.has(roomId)) {
+      
       if (room.gameStatus !== "playing") {
         this.stopNumberDrawing(roomId);
         return;
       }
     }
-  
-    const localDrawnNumbers = []; // store numbers locally
     const drawInterval = setInterval(async () => {
       try {
         const gameSnap = await get(gameRef);
         const gameData = gameSnap.val();
-  
+
         if (!gameData || gameData.status !== "active") {
           this.stopNumberDrawing(roomId);
           return;
         }
-  
+
         const { drawnNumbers, currentNumberIndex } = gameData;
-  
+        
         if (currentNumberIndex >= drawnNumbers.length) {
-          // All numbers drawn, update once at end
-          await update(gameRef, {
-            currentDrawnNumbers: drawnNumbers,
-            currentNumberIndex: drawnNumbers.length
-          });
-          await update(ref(rtdb, `rooms/${roomId}`), {
-            calledNumbers: drawnNumbers
-          });
-  
+          // All numbers drawn, end game
           await this.endGame(roomId, gameId, "allNumbersDrawn");
           return;
         }
-  
+
         const currentNumber = drawnNumbers[currentNumberIndex];
-        localDrawnNumbers.push(currentNumber);
-  
-        // Notify clients live (no DB write)
+        const newDrawnNumbers = drawnNumbers.slice(0, currentNumberIndex + 1);
+
+        // Update game data
+        await update(gameRef, {
+          currentDrawnNumbers: newDrawnNumbers,
+          currentNumberIndex: currentNumberIndex + 1
+        });
+
+        // Update room called numbers
+        const roomRef = ref(rtdb, `rooms/${roomId}`);
+        await update(roomRef, {
+          calledNumbers: newDrawnNumbers
+        });
+
+        // Notify clients
         if (this.io) {
           this.io.to(roomId).emit('numberDrawn', {
             number: currentNumber,
-            drawnNumbers: [...localDrawnNumbers],
+            drawnNumbers: newDrawnNumbers,
             roomId
           });
         }
-  
-        // Auto-bingo logic (unchanged)
+
+        // Auto-bingo for auto players
         try {
           const roomSnap = await get(ref(rtdb, `rooms/${roomId}`));
           const room = roomSnap.val() || {};
           const bingoCards = room.bingoCards || {};
-          const calledSet = new Set([...localDrawnNumbers]);
+          const calledSet = new Set(newDrawnNumbers);
           const patterns = this.generateValidPatterns();
-  
+          
           for (const [cardId, card] of Object.entries(bingoCards)) {
             if (!card?.auto) continue;
             const autoUntil = card.autoUntil || 0;
             if (autoUntil <= Date.now()) continue;
             if (!card.claimed || !card.claimedBy) continue;
-  
+            
             const flat = card.numbers.flat();
-  
+         
+            // find first winning pattern
             let winningPattern = null;
             for (const pat of patterns) {
               const ok = pat.every((idx) => flat[idx] === 0 || calledSet.has(flat[idx]));
               if (ok) { winningPattern = pat; break; }
             }
             if (winningPattern) {
-              await this.checkBingo(
-                roomId,
-                cardId,
-                card.claimedBy,
-                winningPattern,
-                room,
-                room.players[card.claimedBy]
-              );
-              break;
+              // Trigger server bingo
+              await this.checkBingo(roomId, cardId, card.claimedBy, winningPattern, room, room.players[card.claimedBy]);
+              break; // stop loop after first auto-winner
             }
           }
         } catch (e) {
           console.error('Auto-bingo error:', e);
         }
-  
+
         console.log(`🎲 Room ${roomId}: Drew number ${currentNumber}`);
-  
-        // Optional: batch write every 10 numbers instead of every number
-        if (localDrawnNumbers.length % 10 === 0) {
-          await update(gameRef, {
-            currentDrawnNumbers: [...localDrawnNumbers],
-            currentNumberIndex: currentNumberIndex + localDrawnNumbers.length
-          });
-          await update(ref(rtdb, `rooms/${roomId}`), {
-            calledNumbers: [...localDrawnNumbers]
-          });
-        }
-  
       } catch (error) {
         console.error("Error in number drawing:", error);
         this.stopNumberDrawing(roomId);
       }
-    }, 3000);
-  
+    }, 3000); // 5 second intervals
+
     this.numberDrawIntervals.set(roomId, drawInterval);
   }
-  
 
   // Stop number drawing
   stopNumberDrawing(roomId) {

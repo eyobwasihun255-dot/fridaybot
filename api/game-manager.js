@@ -218,6 +218,7 @@ class GameManager {
   // Start number drawing process
   startNumberDrawing(roomId, gameId, room) {
     const gameRef = ref(rtdb, `games/${gameId}`);
+    const numbers = [];
     if (this.numberDrawIntervals.has(roomId)) {
       
       if (room.gameStatus !== "playing") {
@@ -245,18 +246,9 @@ class GameManager {
 
         const currentNumber = drawnNumbers[currentNumberIndex];
         const newDrawnNumbers = drawnNumbers.slice(0, currentNumberIndex + 1);
-
+        numbers.add(newDrawnNumbers)
         // Update game data
-        await update(gameRef, {
-          currentDrawnNumbers: newDrawnNumbers,
-          currentNumberIndex: currentNumberIndex + 1
-        });
-
-        // Update room called numbers
-        const roomRef = ref(rtdb, `rooms/${roomId}`);
-        await update(roomRef, {
-          calledNumbers: newDrawnNumbers
-        });
+        
 
         // Notify clients
         if (this.io) {
@@ -305,7 +297,13 @@ class GameManager {
         this.stopNumberDrawing(roomId);
       }
     }, 3000); // 5 second intervals
+    
 
+    // Update room called numbers
+    const roomRef = ref(rtdb, `rooms/${roomId}`);
+     update(roomRef, {
+      calledNumbers:numbers
+    });
     this.numberDrawIntervals.set(roomId, drawInterval);
   }
 

@@ -2,7 +2,6 @@ import { rtdb } from "../bot/firebaseConfig.js";
 import { ref, get, set, update, runTransaction, onValue } from "firebase/database";
 import { platform } from "os";
 import { v4 as uuidv4 } from "uuid";
-import { notifyInactiveClaimedPlayers } from "./notifyPlayersInActiveRooms.js";
 class GameManager {
   constructor() {
     this.activeGames = new Map(); // roomId -> game data
@@ -76,11 +75,7 @@ class GameManager {
           if (latest?.gameStatus === "countdown") {
             console.log(`🎮 Countdown ended → Starting game for room ${roomId}`);
             await this.startGame(roomId, room);
-            try {
-              await notifyInactiveClaimedPlayers();
-            } catch (e) {
-              console.error("Notifier check failed:", e);
-            }
+            
           } else {
             console.log(`⚠️ Skipping startGame for room ${roomId}, state changed to ${latest?.gameStatus}`);
           }

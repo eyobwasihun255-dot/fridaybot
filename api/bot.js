@@ -645,7 +645,7 @@ if (pending?.type === "awaiting_revenue_passcode") {
 
 // Step 3: Process withdrawal
 if (pending?.type === "awaiting_revenue_amount") {
-  const amountToWithdraw = parseFloat(text);
+  let amountToWithdraw = parseFloat(text);
   if (isNaN(amountToWithdraw) || amountToWithdraw <= 0) {
     sendMessage(chatId, "❌ Invalid amount. Process cancelled.");
     pendingActions.delete(userId);
@@ -653,7 +653,6 @@ if (pending?.type === "awaiting_revenue_amount") {
   }
 
   try {
-    // Fetch revenue data
     const response = await fetch(`${process.env.WEBAPP_URL}/api/revenue`);
     if (!response.ok) throw new Error("Failed to fetch revenue");
 
@@ -666,42 +665,37 @@ if (pending?.type === "awaiting_revenue_amount") {
     }
 
     let remaining = amountToWithdraw;
-const updates = {};
+    let actualWithdrawn = 0; // <-- Track actual amount withdrawn
+    const updates = {};
 
-for (const entry of data.undrawnedDetails) {
-  if (remaining <= 0) break;
-  if (entry.drawned) continue;
+    for (const entry of data.undrawnedDetails) {
+      if (remaining <= 0) break;
+      if (entry.drawned) continue;
 
-  if (entry.amount <= remaining) {
-    // Draw full entry
-    updates[`revenue/${entry.gameId}/drawned`] = true;
-    remaining -= entry.amount;
-  } else {
-    // Partial draw: only part of this revenue is withdrawn
-    updates[`revenue/${entry.gameId}/partialDrawn`] = true;
-    updates[`revenue/${entry.gameId}/partialDrawnAmount`] = remaining;
-    remaining = 0;
-  }
-}
+      if (entry.amount <= remaining) {
+        // Draw full entry
+        updates[`revenue/${entry.gameId}/drawned`] = true;
+        remaining -= entry.amount;
+        actualWithdrawn += entry.amount;
+      } else {
+        // Partial draw
+        updates[`revenue/${entry.gameId}/partialDrawn`] = true;
+        updates[`revenue/${entry.gameId}/partialDrawnAmount`] = remaining;
+        actualWithdrawn += remaining;
+        remaining = 0;
+      }
+    }
 
-
-    // Save withdrawal record
-    const withdrawalRef = ref(rtdb, `revenueWithdrawals/${Date.now()}`);
-    await set(withdrawalRef, {
-      adminId: userId,
-      amount: amountToWithdraw,
-      date: Date.now(),
-    });
-
-    // Update entries
+    // Save withdrawal record with actual withdrawn amount
+    
+    // Update revenue entries
     const revenueRef = ref(rtdb);
     await update(revenueRef, updates);
 
-    // 🧹 Clean old transactions (>6 hours)
-    await cleanupOldTransactions();
+    cleanupOldTransactions();
 
-    sendMessage(chatId, `✅ Revenue withdrawal of $${amountToWithdraw} successful!`);
-    console.log(`💸 Admin ${userId} withdrew $${amountToWithdraw}`);
+    sendMessage(chatId, `✅ Revenue withdrawal of $${actualWithdrawn} successful!`);
+    console.log(`💸 Admin ${userId} withdrew $${actualWithdrawn}`);
 
   } catch (err) {
     console.error("Error withdrawing revenue:", err);
@@ -711,6 +705,7 @@ for (const entry of data.undrawnedDetails) {
   pendingActions.delete(userId);
   return;
 }
+
 // ====================== /SENDMESSAGE COMMAND ======================
 if (text === "/sendmessage") {
   if (!ADMIN_IDS.includes(userId)) {

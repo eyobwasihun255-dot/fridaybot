@@ -155,12 +155,31 @@ fallback: "Send /playgame or /deposit or /withdraw to start.",
 // ====================== TELEGRAM HELPERS ======================
 async function telegram(method, payload) {
   const url = `https://api.telegram.org/bot${TOKEN}/${method}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  return res.json();
+  
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000); // 5-second timeout
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.warn(`⚠️ Telegram API error: ${res.status} - ${text}`);
+      return { ok: false, error: text };
+    }
+
+    return await res.json();
+  } catch (err) {
+    console.error(`❌ Telegram send error:`, err.message);
+    return { ok: false, error: err.message }; // Never throw!
+  }
 }
 function homeKeyboard(lang) {
   return {
@@ -173,7 +192,15 @@ function homeKeyboard(lang) {
 
 
 async function sendMessage(chatId, text, extra = {}) {
-  return telegram("sendMessage", { chat_id: chatId, text, ...extra });
+  try {
+    const result = await telegram("sendMessage", { chat_id: chatId, text, ...extra });
+    if (!result.ok) {
+      console.warn(`⚠️ Failed to send Telegram message to ${chatId}:`, result.error);
+    }
+  } catch (err) {
+    console.error(`❌ sendMessage exception:`, err.message);
+    // Do nothing — game logic continues unaffected
+  }
 }
 
 // ====================== USER MANAGEMENT ======================
@@ -598,7 +625,7 @@ if (text === "/revenue") {
     if (!response.ok) throw new Error("Failed to fetch revenue");
 
     const data = await response.json();
-
+ 
     // Prepare readable report
     let report = "💰 Revenue Report 💰\n\n";
 

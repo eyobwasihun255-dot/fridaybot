@@ -133,7 +133,7 @@ class GameManager {
     try {
       const roomRef = ref(rtdb, `rooms/${roomId}`);
     const snap = await get(roomRef);
-    const currentRoom = roomSnap.val();
+    const currentRoom = snap.val();
 
    
     if (!currentRoom || currentRoom.gameStatus !== "countdown") {

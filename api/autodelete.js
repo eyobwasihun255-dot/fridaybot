@@ -37,13 +37,16 @@ const cleanEvery30Minutes = async () => {
  */
 const cleanEvery6Hours = async () => {
   console.log('⏰ [Auto-Delete] Running 6-hour cleanup...');
-  await deleteNode('deposits');
   await deleteNode('withdrawals');
-  await deleteNode('games');
 };
 
 // --- Schedule intervals ---
+setInterval(cleanEvery30Minutes, CLEAN_30MIN_MS);
+setInterval(cleanEvery6Hours, CLEAN_6HOURS_MS);
 
+// --- Optional immediate first run ---
+cleanEvery30Minutes();
+cleanEvery6Hours();
 
 console.log('🧩 Auto-delete service initialized.');
 export default {};

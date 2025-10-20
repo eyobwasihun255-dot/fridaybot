@@ -761,9 +761,12 @@ for (const pid of playerIds) {
     const loserMissingNumbers = [];
     validCards.forEach(card => {
       if (card.id === winnerCard.id) return;
-      const pats = this.pickPatternNumbers(card) || [];
-      const chosen = pats[Math.floor(Math.random() * pats.length)] || [];
-      const missIndex = Math.floor(Math.random() * chosen.length);
+      const pats = this.pickPatternNumbers(card);
+if (!Array.isArray(pats) || pats.length === 0) return;
+const chosen = pats[Math.floor(Math.random() * pats.length)];
+if (!Array.isArray(chosen) || chosen.length === 0) return;
+const missIndex = Math.floor(Math.random() * chosen.length);
+
       const missingNum = chosen[missIndex] || 0;
   
       chosen.forEach((n, i) => {
@@ -807,13 +810,19 @@ for (const pid of playerIds) {
       }
     });
   
-    while (first25.length + neutralAfterWinner.length + rest.length < 75) {
-      const rand = Math.floor(Math.random() * 75) + 1;
-      if (!usedNumbers.has(rand)) {
-        usedNumbers.add(rand);
-        rest.push(rand);
-      }
-    }
+    const totalNeeded = 75 - (first25.length + neutralAfterWinner.length + rest.length);
+const availableNumbers = [];
+for (let i = 1; i <= 75; i++) {
+  if (!usedNumbers.has(i)) availableNumbers.push(i);
+}
+
+while (rest.length < totalNeeded && availableNumbers.length > 0) {
+  const randIndex = Math.floor(Math.random() * availableNumbers.length);
+  const randNum = availableNumbers.splice(randIndex, 1)[0];
+  rest.push(randNum);
+  usedNumbers.add(randNum);
+}
+
   
     const finalDrawn = [
       ...first25,

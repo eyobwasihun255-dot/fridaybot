@@ -133,11 +133,9 @@ class GameManager {
     try {
       const roomRef = ref(rtdb, `rooms/${roomId}`);
       const roomSnap = await get(roomRef);
-      const room = roomSnap.val();
+      const liveRoom = roomSnap.val();
+if (!liveRoom || liveRoom.gameStatus !== "countdown") throw new Error("Room not in countdown state");
 
-      if (!room || room.gameStatus !== "countdown") {
-        throw new Error("Room not in countdown state");
-      }
 
       const gameId = uuidv4();
       const playerIds = Object.keys(room.players || {});

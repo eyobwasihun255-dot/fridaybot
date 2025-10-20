@@ -138,14 +138,27 @@ if (!liveRoom || liveRoom.gameStatus !== "countdown") throw new Error("Room not 
 
 
       const gameId = uuidv4();
-      const playerIds = Object.keys(room.players || {});
+      const playerIds = Object.keys(room.players || {}).filter(pid => {
+        const player = room.players[pid];
+        return player && player.cardId && room.bingoCards[player.cardId];
+      });
       
       if (playerIds.length < 2) {
-        throw new Error("Not enough players to start game");
+        console.log(`❌ Not enough valid players to start game in ${roomId}`);
+        update(roomRef, { gameStatus: "waiting" });
+        return;
       }
-
+      
       // Generate drawn numbers and determine winners
       const cards = playerIds.map(pid => room.bingoCards[room.players[pid].cardId]);
+      console.log("🧩 Checking players and cards for room", roomId);
+for (const pid of playerIds) {
+  const player = room.players[pid];
+  if (!player) console.log("❌ Missing player entry for", pid);
+  else if (!player.cardId) console.log("❌ Player", pid, "has no cardId");
+  else if (!room.bingoCards[player.cardId]) console.log("❌ Card not found:", player.cardId);
+}
+
       const { drawnNumbers, winners } = this.generateDrawnNumbersMultiWinner(roomId, cards);
 
       const gameData = {

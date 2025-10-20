@@ -132,9 +132,10 @@ class GameManager {
   async startGame(roomId, room) {
     try {
       const roomRef = ref(rtdb, `rooms/${roomId}`);
-      const roomSnap = await get(roomRef);
-      const room = roomSnap.val();
+    const snap = await get(roomRef);
+    const  room = snap.val() || roomData;
 
+   
       if (!room || room.gameStatus !== "countdown") {
         throw new Error("Room not in countdown state");
       }

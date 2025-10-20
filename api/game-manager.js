@@ -129,28 +129,39 @@ class GameManager {
   }
 
   // Start a new game
-  async startGame(roomId, room) {
+  async startGame(roomId) {
     try {
+      console.log(`🚀 Entered startGame for room ${roomId}`);
       const roomRef = ref(rtdb, `rooms/${roomId}`);
-    const snap = await get(roomRef);
-    const currentRoom = snap.val();
-
-   
-    if (!currentRoom || currentRoom.gameStatus !== "countdown") {
-        throw new Error("Room not in countdown state");
+      const snap = await get(roomRef);
+      const room = snap.val();
+  
+      if (!room) {
+        console.error(`❌ No room found in RTDB for ${roomId}`);
+        return;
       }
-
-      const gameId = uuidv4();
-      const playerIds = Object.keys(currentRoom.players || {});
-      
+  
+      console.log(`▶️ Room ${roomId} current status: ${room.gameStatus}`);
+  
+      if (room.gameStatus !== "countdown") {
+        console.warn(`⚠️ Room ${roomId} not in countdown state (found ${room.gameStatus})`);
+        return;
+      }
+  
+      const playerIds = Object.keys(room.players || {});
       if (playerIds.length < 2) {
-        throw new Error("Not enough players to start game");
+        console.warn(`❌ Not enough players (${playerIds.length}) in ${roomId}`);
+        return;
       }
-
-      // Generate drawn numbers and determine winners
-      const cards = playerIds.map(pid => room.bingoCards[room.players[pid].cardId]);
+  
+      const gameId = uuidv4();
+      const cards = playerIds.map(pid => {
+        const cardId = room.players?.[pid]?.cardId;
+        return cardId ? room.bingoCards?.[cardId] : null;
+      }).filter(Boolean);
+  
       const { drawnNumbers, winners } = this.generateDrawnNumbersMultiWinner(roomId, cards);
-
+  
       const gameData = {
         id: gameId,
         roomId,
@@ -159,24 +170,24 @@ class GameManager {
         currentNumberIndex: 0,
         createdAt: Date.now(),
         startedAt: Date.now(),
-        drawIntervalMs: 5000,
+        drawIntervalMs: 3000,
         status: "active",
         totalPayout: Math.floor((playerIds.length - 1) * (room.betAmount || 0) * 0.85 + (room.betAmount || 0)),
         betsDeducted: false,
         winners: winners.map(cardId => ({
           id: uuidv4(),
           cardId,
-          userId: room.bingoCards[cardId]?.claimedBy,
-          username: room.players[room.bingoCards[cardId]?.claimedBy]?.username || "Unknown",
+          userId: room.bingoCards[cardId]?.claimedBy || null,
+          username: room.players?.[room.bingoCards[cardId]?.claimedBy]?.username || "Unknown",
           checked: false
         })),
         gameStatus: "playing"
       };
-
-      // Update room status
+  
+      console.log(`🎯 Generated gameData for ${roomId}:`, gameId);
+  
       await runTransaction(roomRef, (currentRoom) => {
         if (!currentRoom || currentRoom.gameStatus !== "countdown") return currentRoom;
-        
         currentRoom.gameStatus = "playing";
         currentRoom.gameId = gameId;
         currentRoom.calledNumbers = [];
@@ -184,32 +195,20 @@ class GameManager {
         currentRoom.countdownStartedBy = null;
         currentRoom.currentWinner = null;
         currentRoom.payed = false;
-        
         return currentRoom;
       });
-
-      // Deduct bets from players
+  
+      await set(ref(rtdb, `games/${gameId}`), gameData);
       this.deductBets(roomId, gameData);
-
-      // Save game data
-      const gameRef = ref(rtdb, `games/${gameId}`);
-      await set(gameRef, gameData);
-      if (this.io) {
-        this.io.to(roomId).emit('gameStarted', { roomId, gameId });
-      }
-     
-      // Start number drawing
-      this.startNumberDrawing(roomId, gameId, room);
-
-      // Notify clients
-      
-
-      return { success: true, gameId, drawnNumbers, winners: gameData.winners };
+  
+      if (this.io) this.io.to(roomId).emit('gameStarted', { roomId, gameId });
+      this.startNumberDrawing(roomId, gameId);
+      console.log(`✅ Game ${gameId} successfully started in room ${roomId}`);
     } catch (error) {
-      console.error("Error starting game:", error);
-      throw error;
+      console.error("💥 Error starting game:", error);
     }
   }
+  
 
   // Start number drawing process
   startNumberDrawing(roomId, gameId, room) {

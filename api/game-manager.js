@@ -25,7 +25,87 @@ class GameManager {
   }
  
   // Start countdown if conditions allow
- 
+  async startCountdown(room, roomId, players, durationMs = 29000, startedBy = "auto") {
+    try {
+      console.log(`🎮 Room ${roomId} snapshot received for countdown`);
+  
+      // Prevent double countdowns
+      if (room.gameStatus === "countdown") {
+        console.log(`⚠️ Countdown already active for room ${roomId}`);
+        return { success: false, message: "Countdown already active" };
+      }
+  
+      // Require at least 2 players
+      if (players.length < 2) {
+        console.log(`❌ Not enough players for room ${roomId}: ${players.length}`);
+        return { success: false, message: "Not enough players" };
+      }
+  
+      // Must be waiting
+      if (room.gameStatus !== "waiting") {
+        console.log(`⚠️ Room ${roomId} not in waiting state: ${room.gameStatus}`);
+        return { success: false, message: "Room not in waiting state" };
+      }
+  
+      // Calculate countdown end
+      const countdownEndAt = Date.now() + durationMs;
+      const roomRef = ref(rtdb, `rooms/${roomId}`);
+  
+      // Save countdown state
+      update(roomRef, {
+        gameStatus: "countdown",
+        countdownEndAt,
+        countdownStartedBy: startedBy,
+      });
+  
+      console.log(`⏳ Countdown started for room ${roomId} (${durationMs / 1000}s)`);
+  
+      // Cancel old timer if exists
+      if (this.countdownTimers.has(roomId)) {
+        clearTimeout(this.countdownTimers.get(roomId));
+      }
+  
+      // --- ⏰ Schedule automatic game start
+      const tid = setTimeout(async () => {
+        try {
+          const snap = await get(roomRef);
+          const latest = snap.val();
+  
+          // Only start if still in countdown
+          if (latest?.gameStatus === "countdown") {
+            console.log(`🎮 Countdown ended → Starting game for room ${roomId}`);
+            this.startGame(roomId, room);
+            
+          } else {
+            console.log(`⚠️ Skipping startGame for room ${roomId}, state changed to ${latest?.gameStatus}`);
+          }
+        } catch (err) {
+          console.error(`❌ Auto startGame error for room ${roomId}:`, err);
+        } finally {
+          this.countdownTimers.delete(roomId);
+        }
+      }, durationMs);
+      this.countdownTimers.set(roomId, tid);
+  
+      // --- 🔊 Notify all players
+      if (this.io) {
+        this.io.to(roomId).emit("countdownStarted", { roomId, countdownEndAt });
+      }
+      const roomSnap = (await get(ref(rtdb, `rooms/${roomId}`))).val();
+      if (this.io) this.io.to(roomId).emit('roomUpdated', { roomId, room: roomSnap });
+
+      // Optional: Notify via bot
+      if (this.notifier) {
+        this.notifier.send(`🕒 Countdown started for room ${roomId} (${durationMs / 1000}s)`);
+      }
+  
+      return { success: true, countdownEndAt };
+    } catch (err) {
+      console.error(`❌ Error starting countdown for room ${roomId}:`, err);
+      return { success: false, message: "Server error" };
+    }
+  }
+  
   
   async cancelCountdown(roomId) {
     try {
@@ -48,130 +128,88 @@ class GameManager {
     }
   }
 
-  // --- inside GameManager ---
-
-async startCountdown(room, roomId, players, durationMs = 29000, startedBy = "auto") {
-  try {
-    console.log(`🎮 startCountdown() called for ${roomId} with ${players.length} players`);
-
-    if (room.gameStatus === "countdown") return console.log(`⏳ already counting down ${roomId}`);
-    if (players.length < 2) return console.log(`❌ not enough players ${roomId}`);
-    if (room.gameStatus !== "waiting") return console.log(`⚠️ room ${roomId} not waiting (${room.gameStatus})`);
-
-    const countdownEndAt = Date.now() + durationMs;
-    const roomRef = ref(rtdb, `rooms/${roomId}`);
-
-    await update(roomRef, {
-      gameStatus: "countdown",
-      countdownEndAt,
-      countdownStartedBy: startedBy,
-    });
-
-    console.log(`✅ countdown saved to RTDB for ${roomId}`);
-
-    if (this.countdownTimers.has(roomId)) clearTimeout(this.countdownTimers.get(roomId));
-
-    const tid = setTimeout(async () => {
-      console.log(`🕒 Countdown timer fired for ${roomId}`);
-      try {
-        const snap = await get(roomRef);
-        const latest = snap.val();
-        console.log(`📡 latest RTDB state for ${roomId}:`, latest?.gameStatus);
-
-        if (latest?.gameStatus === "countdown") {
-          console.log(`➡️ calling startGame(${roomId})`);
-          await this.startGame(roomId);
-        } else {
-          console.log(`🚫 Skipping startGame, state=${latest?.gameStatus}`);
-        }
-      } catch (err) {
-        console.error(`💥 error in countdown timeout for ${roomId}:`, err);
-      } finally {
-        this.countdownTimers.delete(roomId);
-      }
-    }, durationMs);
-
-    this.countdownTimers.set(roomId, tid);
-
-  } catch (err) {
-    console.error(`❌ startCountdown() fatal for ${roomId}:`, err);
-  }
-}
-
-
-async startGame(roomId) {
-  console.log(`🚀 startGame() entered for ${roomId}`);
-  try {
-    const roomRef = ref(rtdb, `rooms/${roomId}`);
+  // Start a new game
+  async startGame(roomId, room) {
+    try {
+      const roomRef = ref(rtdb, `rooms/${roomId}`);
     const snap = await get(roomRef);
-    const room = snap.val();
+    const currentRoom = snap.val();
 
-    console.log(`📡 fetched room ${roomId}:`, room ? `status=${room.gameStatus}` : "❌ no room");
+   
+    if (!currentRoom || currentRoom.gameStatus !== "countdown") {
+        throw new Error("Room not in countdown state");
+      }
 
-    if (!room) return console.error(`❌ no room data for ${roomId}`);
-    if (room.gameStatus !== "countdown") return console.warn(`⚠️ room ${roomId} state=${room.gameStatus}, aborting startGame`);
+      const gameId = uuidv4();
+      const playerIds = Object.keys(currentRoom.players || {});
+      
+      if (playerIds.length < 2) {
+        throw new Error("Not enough players to start game");
+      }
 
-    const playerIds = Object.keys(room.players || {});
-    console.log(`👥 ${playerIds.length} players in ${roomId}`);
+      // Generate drawn numbers and determine winners
+      const cards = playerIds.map(pid => room.bingoCards[room.players[pid].cardId]);
+      const { drawnNumbers, winners } = this.generateDrawnNumbersMultiWinner(roomId, cards);
 
-    if (playerIds.length < 2) return console.warn(`🚫 not enough players`);
+      const gameData = {
+        id: gameId,
+        roomId,
+        drawnNumbers,
+        currentDrawnNumbers: [],
+        currentNumberIndex: 0,
+        createdAt: Date.now(),
+        startedAt: Date.now(),
+        drawIntervalMs: 5000,
+        status: "active",
+        totalPayout: Math.floor((playerIds.length - 1) * (room.betAmount || 0) * 0.85 + (room.betAmount || 0)),
+        betsDeducted: false,
+        winners: winners.map(cardId => ({
+          id: uuidv4(),
+          cardId,
+          userId: room.bingoCards[cardId]?.claimedBy,
+          username: room.players[room.bingoCards[cardId]?.claimedBy]?.username || "Unknown",
+          checked: false
+        })),
+        gameStatus: "playing"
+      };
 
-    const gameId = uuidv4();
-    const cards = playerIds
-      .map(pid => room.bingoCards?.[room.players?.[pid]?.cardId])
-      .filter(Boolean);
-    console.log(`🃏 ${cards.length} valid cards`);
+      // Update room status
+      await runTransaction(roomRef, (currentRoom) => {
+        if (!currentRoom || currentRoom.gameStatus !== "countdown") return currentRoom;
+        
+        currentRoom.gameStatus = "playing";
+        currentRoom.gameId = gameId;
+        currentRoom.calledNumbers = [];
+        currentRoom.countdownEndAt = null;
+        currentRoom.countdownStartedBy = null;
+        currentRoom.currentWinner = null;
+        currentRoom.payed = false;
+        
+        return currentRoom;
+      });
 
-    const { drawnNumbers, winners } = this.generateDrawnNumbersMultiWinner(roomId, cards);
-    console.log(`🎯 drawnNumbers=${drawnNumbers.length}, winners=${winners.length}`);
+      // Deduct bets from players
+      this.deductBets(roomId, gameData);
 
-    const gameData = {
-      id: gameId,
-      roomId,
-      drawnNumbers,
-      currentDrawnNumbers: [],
-      currentNumberIndex: 0,
-      createdAt: Date.now(),
-      startedAt: Date.now(),
-      drawIntervalMs: 3000,
-      status: "active",
-      totalPayout: Math.floor((playerIds.length - 1) * (room.betAmount || 0) * 0.85 + (room.betAmount || 0)),
-      betsDeducted: false,
-      winners: winners.map(cid => ({
-        id: uuidv4(),
-        cardId: cid,
-        userId: room.bingoCards[cid]?.claimedBy || null,
-        username: room.players?.[room.bingoCards[cid]?.claimedBy]?.username || "Unknown",
-        checked: false
-      })),
-      gameStatus: "playing"
-    };
+      // Save game data
+      const gameRef = ref(rtdb, `games/${gameId}`);
+      await set(gameRef, gameData);
+      if (this.io) {
+        this.io.to(roomId).emit('gameStarted', { roomId, gameId });
+      }
+     
+      // Start number drawing
+      this.startNumberDrawing(roomId, gameId, room);
 
-    console.log(`🧾 built gameData for ${roomId}`);
+      // Notify clients
+      
 
-    await runTransaction(roomRef, cr => {
-      if (!cr || cr.gameStatus !== "countdown") return cr;
-      cr.gameStatus = "playing";
-      cr.gameId = gameId;
-      cr.calledNumbers = [];
-      cr.countdownEndAt = null;
-      return cr;
-    });
-
-    console.log(`💾 room ${roomId} set to playing`);
-
-    await set(ref(rtdb, `games/${gameId}`), gameData);
-    console.log(`💾 game ${gameId} saved`);
-
-    this.deductBets(roomId, gameData);
-    this.startNumberDrawing(roomId, gameId);
-    if (this.io) this.io.to(roomId).emit("gameStarted", { roomId, gameId });
-
-    console.log(`✅ game ${gameId} started successfully for ${roomId}`);
-  } catch (e) {
-    console.error(`💥 startGame() failed for ${roomId}:`, e);
+      return { success: true, gameId, drawnNumbers, winners: gameData.winners };
+    } catch (error) {
+      console.error("Error starting game:", error);
+      throw error;
+    }
   }
-}
 
   // Start number drawing process
   startNumberDrawing(roomId, gameId, room) {
@@ -652,6 +690,7 @@ async startGame(roomId) {
     }
   }
 
+  // Generate drawn numbers with predetermined winners
   generateDrawnNumbersMultiWinner(roomId, cards = []) {
     const winners = [];
     const usedNumbers = new Set();
@@ -665,54 +704,43 @@ async startGame(roomId) {
     if (!this.lastWinnerUserByRoom) this.lastWinnerUserByRoom = new Map();
     const lastWinnerUserId = this.lastWinnerUserByRoom.get(roomId) || null;
   
-    // Filter valid cards (must be claimedBy and have numbers)
+    // Filter valid cards
     const validCards = cards.filter(c => c && Array.isArray(c.numbers) && c.claimedBy);
     if (validCards.length === 0) {
       console.warn(`⚠️ No valid cards for room ${roomId}`);
       return { drawnNumbers: [], winners: [] };
     }
   
-    // Exclude last winner if possible
-    let possibleWinners = validCards.filter(c => c.claimedBy !== lastWinnerUserId);
+    // --- Filter out last winner’s user ---
+    let possibleWinners = validCards.filter(
+      c => c.claimedBy !== lastWinnerUserId
+    );
+  
+    // --- Edge case: all cards belong to last winner ---
     const allSameUser = validCards.every(c => c.claimedBy === lastWinnerUserId);
-    if (possibleWinners.length === 0 || allSameUser) possibleWinners = [...validCards];
+    if (possibleWinners.length === 0 || allSameUser) {
+      possibleWinners = [...validCards];
+    }
   
     const winnerCard = possibleWinners[Math.floor(Math.random() * possibleWinners.length)];
     if (!winnerCard) {
       console.error(`❌ Could not select a winner card for room ${roomId}`);
       return { drawnNumbers: [], winners: [] };
     }
+  
     const newWinnerUserId = winnerCard.claimedBy;
   
-    // Pick a winning pattern from the winner card
+    // --- Safe pattern selection ---
     const patterns = this.pickPatternNumbers(winnerCard) || [];
     const winnerPattern = patterns[Math.floor(Math.random() * patterns.length)] || [];
-    if (!Array.isArray(winnerPattern) || winnerPattern.length === 0) {
+    if (winnerPattern.length === 0) {
       console.error(`❌ Invalid pattern for winnerCard in room ${roomId}`);
       return { drawnNumbers: [], winners: [] };
     }
   
-    // Choose a non-zero missing number from the pattern if possible
-    let winnerMissIndex = Math.floor(Math.random() * winnerPattern.length);
-    let winnerMissing = winnerPattern[winnerMissIndex] || 0;
+    const winnerMissIndex = Math.floor(Math.random() * winnerPattern.length);
+    const winnerMissing = winnerPattern[winnerMissIndex] || 0;
   
-    // If the chosen missing number is 0 (free center), try to pick another index that has a real number.
-    if (winnerMissing === 0) {
-      const nonZeroIndices = winnerPattern
-        .map((n, i) => ({ n, i }))
-        .filter(x => x.n && x.n > 0)
-        .map(x => x.i);
-  
-      if (nonZeroIndices.length > 0) {
-        winnerMissIndex = nonZeroIndices[Math.floor(Math.random() * nonZeroIndices.length)];
-        winnerMissing = winnerPattern[winnerMissIndex];
-      } else {
-        // Edge case: pattern is all zeros? fallback to a random number 1..75
-        winnerMissing = Math.floor(Math.random() * 75) + 1;
-      }
-    }
-  
-    // Add all other pattern numbers to drawnNumbers
     winnerPattern.forEach((n, i) => {
       if (i !== winnerMissIndex && n > 0 && n <= 75 && !usedNumbers.has(n)) {
         usedNumbers.add(n);
@@ -720,14 +748,11 @@ async startGame(roomId) {
       }
     });
   
-    // For other cards, choose patterns and collect their non-miss numbers
     const loserMissingNumbers = [];
     validCards.forEach(card => {
       if (card.id === winnerCard.id) return;
       const pats = this.pickPatternNumbers(card) || [];
       const chosen = pats[Math.floor(Math.random() * pats.length)] || [];
-      if (!Array.isArray(chosen) || chosen.length === 0) return;
-  
       const missIndex = Math.floor(Math.random() * chosen.length);
       const missingNum = chosen[missIndex] || 0;
   
@@ -738,12 +763,11 @@ async startGame(roomId) {
         }
       });
   
-      if (missingNum > 0 && missingNum <= 75 && !loserMissingNumbers.includes(missingNum)) {
+      if (missingNum > 0 && missingNum <= 75) {
         loserMissingNumbers.push(missingNum);
       }
     });
   
-    // Ensure we have at least 24 numbers before assembling first25
     while (drawnNumbers.length < 24) {
       const rand = Math.floor(Math.random() * 75) + 1;
       if (!usedNumbers.has(rand)) {
@@ -753,17 +777,9 @@ async startGame(roomId) {
     }
   
     const first24 = this.shuffleArray(drawnNumbers.slice(0, 24));
-    // Ensure winnerMissing is in range 1..75
-    if (!(winnerMissing > 0 && winnerMissing <= 75)) {
-      // pick a safe winnerMissing not already used
-      let candidate;
-      do { candidate = Math.floor(Math.random() * 75) + 1; } while (usedNumbers.has(candidate));
-      winnerMissing = candidate;
-    }
     const first25 = [...first24, winnerMissing];
     usedNumbers.add(winnerMissing);
   
-    // Add 2 neutral numbers after winner
     const neutralAfterWinner = [];
     while (neutralAfterWinner.length < 2) {
       const rand = Math.floor(Math.random() * 75) + 1;
@@ -773,7 +789,6 @@ async startGame(roomId) {
       }
     }
   
-    // Add loser missing numbers to rest (skip zeros and already used)
     const rest = [];
     loserMissingNumbers.forEach(n => {
       if (n > 0 && n <= 75 && !usedNumbers.has(n)) {
@@ -782,7 +797,6 @@ async startGame(roomId) {
       }
     });
   
-    // Fill the rest until we reach 75 unique numbers total
     while (first25.length + neutralAfterWinner.length + rest.length < 75) {
       const rand = Math.floor(Math.random() * 75) + 1;
       if (!usedNumbers.has(rand)) {
@@ -797,28 +811,13 @@ async startGame(roomId) {
       ...this.shuffleArray(rest),
     ];
   
-    // Final validation: ensure 75 numbers, all 1..75, unique
-    const uniqueCheck = new Set(finalDrawn);
-    const invalid = finalDrawn.some(n => typeof n !== 'number' || n < 1 || n > 75);
-    if (finalDrawn.length !== 75 || uniqueCheck.size !== 75 || invalid) {
-      console.error(`❌ finalDrawn invalid for room ${roomId}`, {
-        length: finalDrawn.length,
-        unique: uniqueCheck.size,
-        invalid,
-        sample: finalDrawn.slice(0, 30)
-      });
-      // Fallback: build canonical 1..75 shuffle
-      const fallback = this.shuffleArray(Array.from({ length: 75 }, (_, i) => i + 1));
-      winners.push(winnerCard.id);
-      this.lastWinnerUserByRoom.set(roomId, newWinnerUserId);
-      return { drawnNumbers: fallback, winners };
-    }
-  
     winners.push(winnerCard.id);
-    console.log(`selected winner card ${winnerCard.id} (user ${newWinnerUserId}), winnerMissing=${winnerMissing}`);
+    console.log(`last winner before current drawn${this.lastWinnerUserByRoom.get(roomId) || null}`)
     this.lastWinnerUserByRoom.set(roomId, newWinnerUserId);
+    console.log(`last winner after current drawn${this.lastWinnerUserByRoom.get(roomId) || null}`)
     return { drawnNumbers: finalDrawn.slice(0, 75), winners };
   }
+  
   
   
   

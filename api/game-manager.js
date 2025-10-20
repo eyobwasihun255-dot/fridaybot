@@ -128,87 +128,130 @@ class GameManager {
     }
   }
 
-  // Start a new game
-  async startGame(roomId) {
-    try {
-      console.log(`🚀 Entered startGame for room ${roomId}`);
-      const roomRef = ref(rtdb, `rooms/${roomId}`);
-      const snap = await get(roomRef);
-      const room = snap.val();
-  
-      if (!room) {
-        console.error(`❌ No room found in RTDB for ${roomId}`);
-        return;
+  // --- inside GameManager ---
+
+async startCountdown(room, roomId, players, durationMs = 29000, startedBy = "auto") {
+  try {
+    console.log(`🎮 startCountdown() called for ${roomId} with ${players.length} players`);
+
+    if (room.gameStatus === "countdown") return console.log(`⏳ already counting down ${roomId}`);
+    if (players.length < 2) return console.log(`❌ not enough players ${roomId}`);
+    if (room.gameStatus !== "waiting") return console.log(`⚠️ room ${roomId} not waiting (${room.gameStatus})`);
+
+    const countdownEndAt = Date.now() + durationMs;
+    const roomRef = ref(rtdb, `rooms/${roomId}`);
+
+    await update(roomRef, {
+      gameStatus: "countdown",
+      countdownEndAt,
+      countdownStartedBy: startedBy,
+    });
+
+    console.log(`✅ countdown saved to RTDB for ${roomId}`);
+
+    if (this.countdownTimers.has(roomId)) clearTimeout(this.countdownTimers.get(roomId));
+
+    const tid = setTimeout(async () => {
+      console.log(`🕒 Countdown timer fired for ${roomId}`);
+      try {
+        const snap = await get(roomRef);
+        const latest = snap.val();
+        console.log(`📡 latest RTDB state for ${roomId}:`, latest?.gameStatus);
+
+        if (latest?.gameStatus === "countdown") {
+          console.log(`➡️ calling startGame(${roomId})`);
+          await this.startGame(roomId);
+        } else {
+          console.log(`🚫 Skipping startGame, state=${latest?.gameStatus}`);
+        }
+      } catch (err) {
+        console.error(`💥 error in countdown timeout for ${roomId}:`, err);
+      } finally {
+        this.countdownTimers.delete(roomId);
       }
-  
-      console.log(`▶️ Room ${roomId} current status: ${room.gameStatus}`);
-  
-      if (room.gameStatus !== "countdown") {
-        console.warn(`⚠️ Room ${roomId} not in countdown state (found ${room.gameStatus})`);
-        return;
-      }
-  
-      const playerIds = Object.keys(room.players || {});
-      if (playerIds.length < 2) {
-        console.warn(`❌ Not enough players (${playerIds.length}) in ${roomId}`);
-        return;
-      }
-  
-      const gameId = uuidv4();
-      const cards = playerIds.map(pid => {
-        const cardId = room.players?.[pid]?.cardId;
-        return cardId ? room.bingoCards?.[cardId] : null;
-      }).filter(Boolean);
-  
-      const { drawnNumbers, winners } = this.generateDrawnNumbersMultiWinner(roomId, cards);
-  
-      const gameData = {
-        id: gameId,
-        roomId,
-        drawnNumbers,
-        currentDrawnNumbers: [],
-        currentNumberIndex: 0,
-        createdAt: Date.now(),
-        startedAt: Date.now(),
-        drawIntervalMs: 3000,
-        status: "active",
-        totalPayout: Math.floor((playerIds.length - 1) * (room.betAmount || 0) * 0.85 + (room.betAmount || 0)),
-        betsDeducted: false,
-        winners: winners.map(cardId => ({
-          id: uuidv4(),
-          cardId,
-          userId: room.bingoCards[cardId]?.claimedBy || null,
-          username: room.players?.[room.bingoCards[cardId]?.claimedBy]?.username || "Unknown",
-          checked: false
-        })),
-        gameStatus: "playing"
-      };
-  
-      console.log(`🎯 Generated gameData for ${roomId}:`, gameId);
-  
-      await runTransaction(roomRef, (currentRoom) => {
-        if (!currentRoom || currentRoom.gameStatus !== "countdown") return currentRoom;
-        currentRoom.gameStatus = "playing";
-        currentRoom.gameId = gameId;
-        currentRoom.calledNumbers = [];
-        currentRoom.countdownEndAt = null;
-        currentRoom.countdownStartedBy = null;
-        currentRoom.currentWinner = null;
-        currentRoom.payed = false;
-        return currentRoom;
-      });
-  
-      await set(ref(rtdb, `games/${gameId}`), gameData);
-      this.deductBets(roomId, gameData);
-  
-      if (this.io) this.io.to(roomId).emit('gameStarted', { roomId, gameId });
-      this.startNumberDrawing(roomId, gameId);
-      console.log(`✅ Game ${gameId} successfully started in room ${roomId}`);
-    } catch (error) {
-      console.error("💥 Error starting game:", error);
-    }
+    }, durationMs);
+
+    this.countdownTimers.set(roomId, tid);
+
+  } catch (err) {
+    console.error(`❌ startCountdown() fatal for ${roomId}:`, err);
   }
-  
+}
+
+
+async startGame(roomId) {
+  console.log(`🚀 startGame() entered for ${roomId}`);
+  try {
+    const roomRef = ref(rtdb, `rooms/${roomId}`);
+    const snap = await get(roomRef);
+    const room = snap.val();
+
+    console.log(`📡 fetched room ${roomId}:`, room ? `status=${room.gameStatus}` : "❌ no room");
+
+    if (!room) return console.error(`❌ no room data for ${roomId}`);
+    if (room.gameStatus !== "countdown") return console.warn(`⚠️ room ${roomId} state=${room.gameStatus}, aborting startGame`);
+
+    const playerIds = Object.keys(room.players || {});
+    console.log(`👥 ${playerIds.length} players in ${roomId}`);
+
+    if (playerIds.length < 2) return console.warn(`🚫 not enough players`);
+
+    const gameId = uuidv4();
+    const cards = playerIds
+      .map(pid => room.bingoCards?.[room.players?.[pid]?.cardId])
+      .filter(Boolean);
+    console.log(`🃏 ${cards.length} valid cards`);
+
+    const { drawnNumbers, winners } = this.generateDrawnNumbersMultiWinner(roomId, cards);
+    console.log(`🎯 drawnNumbers=${drawnNumbers.length}, winners=${winners.length}`);
+
+    const gameData = {
+      id: gameId,
+      roomId,
+      drawnNumbers,
+      currentDrawnNumbers: [],
+      currentNumberIndex: 0,
+      createdAt: Date.now(),
+      startedAt: Date.now(),
+      drawIntervalMs: 3000,
+      status: "active",
+      totalPayout: Math.floor((playerIds.length - 1) * (room.betAmount || 0) * 0.85 + (room.betAmount || 0)),
+      betsDeducted: false,
+      winners: winners.map(cid => ({
+        id: uuidv4(),
+        cardId: cid,
+        userId: room.bingoCards[cid]?.claimedBy || null,
+        username: room.players?.[room.bingoCards[cid]?.claimedBy]?.username || "Unknown",
+        checked: false
+      })),
+      gameStatus: "playing"
+    };
+
+    console.log(`🧾 built gameData for ${roomId}`);
+
+    await runTransaction(roomRef, cr => {
+      if (!cr || cr.gameStatus !== "countdown") return cr;
+      cr.gameStatus = "playing";
+      cr.gameId = gameId;
+      cr.calledNumbers = [];
+      cr.countdownEndAt = null;
+      return cr;
+    });
+
+    console.log(`💾 room ${roomId} set to playing`);
+
+    await set(ref(rtdb, `games/${gameId}`), gameData);
+    console.log(`💾 game ${gameId} saved`);
+
+    this.deductBets(roomId, gameData);
+    this.startNumberDrawing(roomId, gameId);
+    if (this.io) this.io.to(roomId).emit("gameStarted", { roomId, gameId });
+
+    console.log(`✅ game ${gameId} started successfully for ${roomId}`);
+  } catch (e) {
+    console.error(`💥 startGame() failed for ${roomId}:`, e);
+  }
+}
 
   // Start number drawing process
   startNumberDrawing(roomId, gameId, room) {

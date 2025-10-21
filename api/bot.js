@@ -846,6 +846,117 @@ if (pending?.type === "awaiting_send_content") {
   pendingActions.delete(userId);
   return;
 }
+// ====================== /RANDOM COMMAND ======================
+if (text === "/random") {
+  if (!ADMIN_IDS.includes(userId)) {
+    sendMessage(chatId, "❌ You are not authorized to use this command.");
+    return;
+  }
+
+  sendMessage(chatId, "🎯 Enter the Room ID where random demo players will be added:");
+  pendingActions.set(userId, { type: "awaiting_random_room" });
+  return;
+}
+
+// Step 2: Get Room ID
+if (pending?.type === "awaiting_random_room") {
+  const roomId = text.trim();
+  sendMessage(chatId, "🔢 Enter how many random demo players to add:");
+  pendingActions.set(userId, { type: "awaiting_random_count", roomId });
+  return;
+}
+
+// Step 3: Get quantity
+if (pending?.type === "awaiting_random_count") {
+  const count = parseInt(text.trim());
+  if (isNaN(count) || count <= 0) {
+    sendMessage(chatId, "❌ Invalid number. Please enter a positive number.");
+    return;
+  }
+
+  sendMessage(chatId, "⚙️ Should the players be auto? (true / false):");
+  pendingActions.set(userId, { 
+    type: "awaiting_random_auto", 
+    roomId: pending.roomId, 
+    count 
+  });
+  return;
+}
+
+// Step 4: Get auto option and add players
+if (pending?.type === "awaiting_random_auto") {
+  const auto = text.trim().toLowerCase() === "true";
+  const { roomId, count } = pending;
+
+  try {
+    const roomRef = ref(rtdb, `rooms/${roomId}`);
+    const roomSnap = await get(roomRef);
+
+    if (!roomSnap.exists()) {
+      sendMessage(chatId, "❌ Room not found.");
+      pendingActions.delete(userId);
+      return;
+    }
+
+    const room = roomSnap.val();
+    const playersRef = ref(rtdb, `rooms/${roomId}/players`);
+    const cardsRef = ref(rtdb, `bingocards/${roomId}`);
+
+    const cardsSnap = await get(cardsRef);
+    if (!cardsSnap.exists()) {
+      sendMessage(chatId, "⚠️ No bingo cards found for this room.");
+      pendingActions.delete(userId);
+      return;
+    }
+
+    const cards = cardsSnap.val();
+    const unclaimed = Object.entries(cards).filter(([_, c]) => !c.claimed);
+    if (unclaimed.length < count) {
+      sendMessage(chatId, `⚠️ Not enough unclaimed cards (${unclaimed.length} available).`);
+      pendingActions.delete(userId);
+      return;
+    }
+
+    const randomUsernames = [
+      "LuckyLynx", "BingoBeast", "DemoWarrior", "CardCrusher", "SpinMaster",
+      "FastFingers", "QuickBingo", "DemoNinja", "PatternKing", "BingoQueen"
+    ];
+
+    const now = Date.now();
+    const updates = {};
+    for (let i = 0; i < count; i++) {
+      const cardId = unclaimed[i][0];
+      const demoId = `demo${i + 1}`;
+      const username = randomUsernames[Math.floor(Math.random() * randomUsernames.length)];
+
+      updates[`rooms/${roomId}/players/${demoId}`] = {
+        attemptedBingo: false,
+        betAmount: room.betAmount || 0,
+        cardId,
+        telegramId: demoId,
+        username,
+      };
+
+      updates[`bingocards/${roomId}/${cardId}/claimed`] = true;
+      updates[`bingocards/${roomId}/${cardId}/claimedBy`] = demoId;
+
+      if (auto) {
+        updates[`bingocards/${roomId}/${cardId}/auto`] = true;
+        updates[`bingocards/${roomId}/${cardId}/autoUntil`] = now;
+      }
+    }
+
+    await update(ref(rtdb), updates);
+    sendMessage(chatId, `✅ Added ${count} demo players to room ${roomId} (auto: ${auto}).`);
+
+  } catch (err) {
+    console.error("Error adding random players:", err);
+    sendMessage(chatId, "❌ Failed to add random players. Check logs for details.");
+  }
+
+  pendingActions.delete(userId);
+  return;
+}
 
 // ====================== /RESET COMMAND ======================
 if (text === "/reset") {

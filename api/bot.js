@@ -873,7 +873,7 @@ if (pending?.type === "awaiting_room_reset") {
     }
 
     const roomData = roomSnap.val();
-    const previousState = roomData.state || "unknown";
+    const previousState = roomData.gameStatus || "unknown";
     const betAmount = parseFloat(roomData.betAmount || 0);
     const players = Object.values(roomData.players || {});
 
@@ -894,7 +894,7 @@ if (pending?.type === "awaiting_room_reset") {
     }
 
     // Change room state to "waiting"
-    await update(roomRef, { state: "waiting" });
+    await update(roomRef, { gameStatus: "waiting" });
     sendMessage(chatId, `♻️ Room '${roomId}' has been reset to 'waiting' state.`);
 
   } catch (err) {

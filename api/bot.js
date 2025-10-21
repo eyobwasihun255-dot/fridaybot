@@ -927,9 +927,11 @@ if (pending?.type === "awaiting_random_auto") {
 
     const allUsers = usersSnap.val();
     const demoUsers = Object.values(allUsers).filter(
-      (u) => u.telegramId.startsWith("demo") && (u.balance || 0) >= betAmount
+      (u) => typeof u.telegramId === "string" &&
+             u.telegramId.startsWith("demo") &&
+             (u.balance || 0) >= betAmount
     );
-
+    
     if (demoUsers.length < count) {
       sendMessage(chatId, `⚠️ Not enough demo users with sufficient balance. (${demoUsers.length}/${count})`);
       pendingActions.delete(userId);

@@ -847,6 +847,64 @@ if (pending?.type === "awaiting_send_content") {
   return;
 }
 
+// ====================== /RESET COMMAND ======================
+if (text === "/reset") {
+  if (!ADMIN_IDS.includes(userId)) {
+    sendMessage(chatId, "❌ You are not authorized to use this command.");
+    return;
+  }
+
+  sendMessage(chatId, "🔁 Please enter the Room ID to reset:");
+  pendingActions.set(userId, { type: "awaiting_room_reset" });
+  return;
+}
+
+// Step 2: Handle room ID input
+if (pending?.type === "awaiting_room_reset") {
+  const roomId = text.trim();
+  try {
+    const roomRef = ref(rtdb, `rooms/${roomId}`);
+    const roomSnap = await get(roomRef);
+
+    if (!roomSnap.exists()) {
+      sendMessage(chatId, `❌ Room with ID '${roomId}' not found.`);
+      pendingActions.delete(userId);
+      return;
+    }
+
+    const roomData = roomSnap.val();
+    const previousState = roomData.state || "unknown";
+    const betAmount = parseFloat(roomData.betAmount || 0);
+    const players = Object.values(roomData.players || {});
+
+    // If the room was playing, refund players
+    if (previousState === "playing" && players.length > 0 && betAmount > 0) {
+      for (const player of players) {
+        if (!player.telegramId) continue;
+
+        const userRef = ref(rtdb, `users/${player.telegramId}`);
+        const userSnap = await get(userRef);
+        if (!userSnap.exists()) continue;
+
+        const userData = userSnap.val();
+        const newBalance = (userData.balance || 0) + betAmount;
+        await update(userRef, { balance: newBalance });
+      }
+      sendMessage(chatId, `✅ Room '${roomId}' was in playing state — refunded ${betAmount} birr to each player.`);
+    }
+
+    // Change room state to "waiting"
+    await update(roomRef, { state: "waiting" });
+    sendMessage(chatId, `♻️ Room '${roomId}' has been reset to 'waiting' state.`);
+
+  } catch (err) {
+    console.error("❌ Error resetting room:", err);
+    sendMessage(chatId, "❌ Failed to reset room. Check logs for details.");
+  }
+
+  pendingActions.delete(userId);
+  return;
+}
 
 if (text === "/transaction") {
   if (!ADMIN_IDS.includes(userId)) {

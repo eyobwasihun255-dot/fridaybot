@@ -901,7 +901,7 @@ if (pending?.type === "awaiting_random_auto") {
     const room = roomSnap.val();
     const betAmount = room.betAmount || 0;
 
-    const cardsRef = ref(rtdb, `bingocards/${roomId}`);
+    const cardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
     const cardsSnap = await get(cardsRef);
     if (!cardsSnap.exists()) {
       sendMessage(chatId, "⚠️ No bingo cards found for this room.");

@@ -846,6 +846,126 @@ if (pending?.type === "awaiting_send_content") {
   pendingActions.delete(userId);
   return;
 }
+// ====================== /REFILL COMMAND ======================
+if (text === "/refill") {
+  if (!ADMIN_IDS.includes(userId)) {
+    sendMessage(chatId, "❌ You are not authorized to use this command.");
+    return;
+  }
+
+  sendMessage(chatId, "💳 Enter the Telegram ID to refill, or type 'all' to refill demo accounts:");
+  pendingActions.set(userId, { type: "awaiting_refill_target" });
+  return;
+}
+
+// Step 2: Get target ID or "all"
+if (pending?.type === "awaiting_refill_target") {
+  const target = text.trim();
+
+  if (target.toLowerCase() === "all") {
+    sendMessage(chatId, "🔢 Enter how many demo accounts to refill:");
+    pendingActions.set(userId, { type: "awaiting_refill_demo_count" });
+  } else {
+    sendMessage(chatId, "💰 Enter the amount to add to this user's balance:");
+    pendingActions.set(userId, { type: "awaiting_refill_amount_single", target });
+  }
+  return;
+}
+
+// Step 3a: If target was 'all', get number of demo accounts
+if (pending?.type === "awaiting_refill_demo_count") {
+  const demoCount = parseInt(text.trim());
+  if (isNaN(demoCount) || demoCount <= 0) {
+    sendMessage(chatId, "❌ Invalid number. Please enter a positive number.");
+    return;
+  }
+
+  sendMessage(chatId, "💰 Enter the refill amount for each demo account:");
+  pendingActions.set(userId, { type: "awaiting_refill_demo_amount", demoCount });
+  return;
+}
+
+// Step 3b: If target was single user, get amount
+if (pending?.type === "awaiting_refill_amount_single") {
+  const amount = parseFloat(text.trim());
+  if (isNaN(amount) || amount <= 0) {
+    sendMessage(chatId, "❌ Invalid amount. Please enter a positive number.");
+    return;
+  }
+
+  const targetId = pending.target.trim();
+
+  try {
+    const userRef = ref(rtdb, `users/${targetId}`);
+    const userSnap = await get(userRef);
+
+    if (!userSnap.exists()) {
+      sendMessage(chatId, "❌ User not found.");
+      pendingActions.delete(userId);
+      return;
+    }
+
+    const user = userSnap.val();
+    const newBalance = (user.balance || 0) + amount;
+
+    await update(userRef, { balance: newBalance, updatedAt: new Date().toISOString() });
+    sendMessage(chatId, `✅ Refilled ${amount} birr for user @${user.username || targetId}.`);
+  } catch (err) {
+    console.error("Error during single refill:", err);
+    sendMessage(chatId, "❌ Failed to refill balance. Check logs for details.");
+  }
+
+  pendingActions.delete(userId);
+  return;
+}
+
+// Step 4: Process "all" refill
+if (pending?.type === "awaiting_refill_demo_amount") {
+  const amount = parseFloat(text.trim());
+  if (isNaN(amount) || amount <= 0) {
+    sendMessage(chatId, "❌ Invalid amount. Please enter a positive number.");
+    return;
+  }
+
+  const { demoCount } = pending;
+
+  try {
+    const usersSnap = await get(ref(rtdb, "users"));
+    if (!usersSnap.exists()) {
+      sendMessage(chatId, "❌ No users found in database.");
+      pendingActions.delete(userId);
+      return;
+    }
+
+    const allUsers = usersSnap.val();
+    const demoUsers = Object.values(allUsers)
+      .filter((u) => typeof u.telegramId === "string" && u.telegramId.startsWith("demo"))
+      .slice(0, demoCount);
+
+    if (demoUsers.length === 0) {
+      sendMessage(chatId, "⚠️ No demo users found.");
+      pendingActions.delete(userId);
+      return;
+    }
+
+    const updates = {};
+    for (const demo of demoUsers) {
+      const newBalance = (demo.balance || 0) + amount;
+      updates[`users/${demo.telegramId}/balance`] = newBalance;
+      updates[`users/${demo.telegramId}/updatedAt`] = new Date().toISOString();
+    }
+
+    await update(ref(rtdb), updates);
+    sendMessage(chatId, `✅ Refilled ${amount} birr to ${demoUsers.length} demo accounts.`);
+  } catch (err) {
+    console.error("Error during demo refill:", err);
+    sendMessage(chatId, "❌ Failed to refill demo accounts. Check logs for details.");
+  }
+
+  pendingActions.delete(userId);
+  return;
+}
+
 // ====================== /RANDOM COMMAND ======================
 if (text === "/random") {
   if (!ADMIN_IDS.includes(userId)) {

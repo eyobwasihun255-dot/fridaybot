@@ -75,34 +75,48 @@ class GameManager {
   
       let availableIdx = 0;
   
-      for (const [telegramId, player] of Object.entries(currentPlayers)) {
-        // Target only demo players
-        if (telegramId.startsWith("demo")) {
-          const oldCardId = player.cardId;
-  
-          // ✅ Unclaim old card
-          if (oldCardId && cards[oldCardId]) {
-            updates[`rooms/${roomId}/bingoCards/${oldCardId}/claimed`] = false;
-            updates[`rooms/${roomId}/bingoCards/${oldCardId}/claimedBy`] = null;
-            updates[`rooms/${roomId}/bingoCards/${oldCardId}/auto`] = null;
-            updates[`rooms/${roomId}/bingoCards/${oldCardId}/autoUntil`] = null;
-          }
-  
-          // ✅ Assign new card (if available)
-          const newPair = shuffledCards[availableIdx++];
-          if (newPair) {
-            const [newCardId] = newPair;
-  
-            updates[`rooms/${roomId}/players/${telegramId}/cardId`] = newCardId;
-            updates[`rooms/${roomId}/players/${telegramId}/attemptedBingo`] = false;
-  
-            updates[`rooms/${roomId}/bingoCards/${newCardId}/claimed`] = true;
-            updates[`rooms/${roomId}/bingoCards/${newCardId}/claimedBy`] = telegramId;
-            updates[`rooms/${roomId}/bingoCards/${newCardId}/auto`] = true;
-            updates[`rooms/${roomId}/bingoCards/${newCardId}/autoUntil`] = now + 24 * 60 * 60 * 1000;
-          }
-        }
-      }
+      // --- Sequential demo refresh with 0.5s delay ---
+const demoPlayers = Object.entries(currentPlayers).filter(([id]) => id.startsWith("demo"));
+
+for (let i = 0; i < demoPlayers.length; i++) {
+  const [telegramId, player] = demoPlayers[i];
+  const updates = {};
+
+  const oldCardId = player.cardId;
+
+  // 🧹 Unclaim old card
+  if (oldCardId && cards[oldCardId]) {
+    updates[`rooms/${roomId}/bingoCards/${oldCardId}/claimed`] = false;
+    updates[`rooms/${roomId}/bingoCards/${oldCardId}/claimedBy`] = null;
+    updates[`rooms/${roomId}/bingoCards/${oldCardId}/auto`] = null;
+    updates[`rooms/${roomId}/bingoCards/${oldCardId}/autoUntil`] = null;
+  }
+
+  // 🎯 Assign new card
+  const newPair = shuffledCards[availableIdx++];
+  if (newPair) {
+    const [newCardId] = newPair;
+
+    updates[`rooms/${roomId}/players/${telegramId}/cardId`] = newCardId;
+    updates[`rooms/${roomId}/players/${telegramId}/attemptedBingo`] = false;
+
+    updates[`rooms/${roomId}/bingoCards/${newCardId}/claimed`] = true;
+    updates[`rooms/${roomId}/bingoCards/${newCardId}/claimedBy`] = telegramId;
+    updates[`rooms/${roomId}/bingoCards/${newCardId}/auto`] = true;
+    updates[`rooms/${roomId}/bingoCards/${newCardId}/autoUntil`] = now + 24 * 60 * 60 * 1000;
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await update(ref(rtdb), updates);
+    console.log(`♻️ Updated demo player ${telegramId} with new card in room ${roomId}`);
+  }
+
+  // ⏱️ 0.5s gap between each player update
+  await new Promise((resolve) => setTimeout(resolve, 500));
+}
+
+console.log(`✅ Completed demo player card reshuffle for room ${roomId}`);
+
   
       if (Object.keys(updates).length > 0) {
         await update(ref(rtdb), updates);

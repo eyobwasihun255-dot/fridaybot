@@ -1005,6 +1005,7 @@ if (pending?.type === "awaiting_random_count") {
 }
 
 // Step 4: Get auto option and add players
+// Step 4: Get auto option and add players
 if (pending?.type === "awaiting_random_auto") {
   const auto = text.trim().toLowerCase() === "true";
   const { roomId, count } = pending;
@@ -1030,7 +1031,7 @@ if (pending?.type === "awaiting_random_auto") {
 
     const betAmount = room.betAmount || 0;
 
-    // ✅ Bingo cards (ensure path is correct)
+    // ✅ Bingo cards
     const cardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
     const cardsSnap = await get(cardsRef);
     if (!cardsSnap.exists()) {
@@ -1049,7 +1050,7 @@ if (pending?.type === "awaiting_random_auto") {
       return;
     }
 
-    const shuffledCards = unclaimed.sort(() => 0.5 - Math.random()); // random card assignment
+    const shuffledCards = unclaimed.sort(() => 0.5 - Math.random());
 
     // ✅ Get demo users from Firebase
     const usersSnap = await get(ref(rtdb, "users"));
@@ -1080,10 +1081,16 @@ if (pending?.type === "awaiting_random_auto") {
     const shuffledUsers = demoUsers.sort(() => 0.5 - Math.random());
     const selectedUsers = shuffledUsers.slice(0, count);
 
-    const randomUsernames = [
-      "LuckyLynx", "BingoBeast", "DemoWarrior", "CardCrusher", "SpinMaster",
-      "FastFingers", "QuickBingo", "DemoNinja", "PatternKing", "BingoQueen"
+    // ✅ Unique random usernames (no repetition)
+    const availableNames = [
+      "Abiti213", "Bubu_24", "temesgen2507", "bk52_2000", "blackii",
+      "ዘላለም", "kala11", "አንዱ00", "Teda_xx1", "Abeni_20",
+      "nattii1122", "Jonas_row", "Shmew_GG", "Abebe_123", "Sultan_great",
+      "Rene_41", "mativiva", "Debeli_2023", "ሲሳይ_23", "Dereyew49"
     ];
+
+    // Shuffle usernames and take only what’s needed
+    const uniqueNames = availableNames.sort(() => 0.5 - Math.random()).slice(0, count);
 
     const now = Date.now();
     const updates = {};
@@ -1091,7 +1098,7 @@ if (pending?.type === "awaiting_random_auto") {
     for (let i = 0; i < selectedUsers.length; i++) {
       const user = selectedUsers[i];
       const [cardId] = shuffledCards[i];
-      const username = randomUsernames[Math.floor(Math.random() * randomUsernames.length)];
+      const username = uniqueNames[i]; // ✅ Unique name per user
 
       updates[`rooms/${roomId}/players/${user.telegramId}`] = {
         attemptedBingo: false,
@@ -1120,6 +1127,7 @@ if (pending?.type === "awaiting_random_auto") {
   pendingActions.delete(userId);
   return;
 }
+
 
 
 // ====================== /RESET COMMAND ======================

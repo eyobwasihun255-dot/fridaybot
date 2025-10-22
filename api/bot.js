@@ -1207,6 +1207,143 @@ if (pending?.type === "awaiting_room_reset") {
   pendingActions.delete(userId);
   return;
 }
+if (text === "/stop") {
+  if (!ADMIN_IDS.includes(userId)) {
+    sendMessage(chatId, "❌ You are not authorized to use this command.");
+    return;
+  }
+
+  sendMessage(chatId, "🔁 Please enter the Room ID to reset:");
+  pendingActions.set(userId, { type: "awaiting_room_restart" });
+  return;
+}
+
+// Step 2: Handle room ID input
+if (pending?.type === "awaiting_room_restart") {
+  const roomId = text.trim();
+  try {
+    const roomRef = ref(rtdb, `rooms/${roomId}`);
+    const roomSnap = await get(roomRef);
+
+    if (!roomSnap.exists()) {
+      sendMessage(chatId, `❌ Room with ID '${roomId}' not found.`);
+      pendingActions.delete(userId);
+      return;
+    }
+
+    const roomData = roomSnap.val();
+    const previousState = roomData.gameStatus || "unknown";
+    const betAmount = parseFloat(roomData.betAmount || 0);
+    const players = Object.values(roomData.players || {});
+
+    // If the room was playing, refund players
+    if (previousState === "playing" && players.length > 0 && betAmount > 0) {
+      for (const player of players) {
+        if (!player.telegramId) continue;
+
+        const userRef = ref(rtdb, `users/${player.telegramId}`);
+        const userSnap = await get(userRef);
+        if (!userSnap.exists()) continue;
+
+        const userData = userSnap.val();
+        const newBalance = (userData.balance || 0) + betAmount;
+        await update(userRef, { balance: newBalance });
+      }
+      sendMessage(chatId, `✅ Room '${roomId}' was in playing state — refunded ${betAmount} birr to each player.`);
+    }
+
+    // Change room state to "waiting"
+    await update(roomRef, { gameStatus: "stopped" });
+    sendMessage(chatId, `♻️ Room '${roomId}' has been reset to 'waiting' state.`);
+
+  } catch (err) {
+    console.error("❌ Error resetting room:", err);
+    sendMessage(chatId, "❌ Failed to reset room. Check logs for details.");
+  }
+
+  pendingActions.delete(userId);
+  return;
+}
+// 🧩 /stopdemo Command
+if (text === "/stopdemo") {
+  if (!ADMIN_IDS.includes(userId)) {
+    sendMessage(chatId, "❌ You are not authorized to use this command.");
+    return;
+  }
+
+  sendMessage(chatId, "🛑 Enter the Room ID where demo players should be removed:");
+  pendingActions.set(userId, { type: "awaiting_stopdemo_room" });
+  return;
+}
+
+// Step 2: Handle room ID input
+if (pending?.type === "awaiting_stopdemo_room") {
+  const roomId = text.trim();
+
+  try {
+    const roomRef = ref(rtdb, `rooms/${roomId}`);
+    const roomSnap = await get(roomRef);
+
+    if (!roomSnap.exists()) {
+      sendMessage(chatId, "❌ Room not found.");
+      pendingActions.delete(userId);
+      return;
+    }
+
+    const room = roomSnap.val();
+
+    // ✅ Ensure room is not currently playing
+    if (room.gameStatus && room.gameStatus.toLowerCase() === "playing") {
+      sendMessage(chatId, "⚠️ You cannot remove demo players while the game is playing.");
+      pendingActions.delete(userId);
+      return;
+    }
+
+    const playersSnap = await get(ref(rtdb, `rooms/${roomId}/players`));
+    if (!playersSnap.exists()) {
+      sendMessage(chatId, "⚠️ No players found in this room.");
+      pendingActions.delete(userId);
+      return;
+    }
+
+    const players = playersSnap.val();
+    const cardsSnap = await get(ref(rtdb, `rooms/${roomId}/bingoCards`));
+    const cards = cardsSnap.exists() ? cardsSnap.val() : {};
+
+    const updates = {};
+    let removedCount = 0;
+
+    for (const [telegramId, player] of Object.entries(players)) {
+      if (telegramId.startsWith("demo")) {
+        removedCount++;
+
+        // Unclaim their card
+        if (player.cardId && cards[player.cardId]) {
+          updates[`rooms/${roomId}/bingoCards/${player.cardId}/claimed`] = false;
+          updates[`rooms/${roomId}/bingoCards/${player.cardId}/claimedBy`] = null;
+          updates[`rooms/${roomId}/bingoCards/${player.cardId}/auto`] = null;
+          updates[`rooms/${roomId}/bingoCards/${player.cardId}/autoUntil`] = null;
+        }
+
+        // Remove demo player
+        updates[`rooms/${roomId}/players/${telegramId}`] = null;
+      }
+    }
+
+    if (removedCount > 0) {
+      await update(ref(rtdb), updates);
+      sendMessage(chatId, `✅ Removed ${removedCount} demo players from room ${roomId}.`);
+    } else {
+      sendMessage(chatId, `ℹ️ No demo players found in room ${roomId}.`);
+    }
+  } catch (err) {
+    console.error("❌ Error while removing demo players:", err);
+    sendMessage(chatId, "❌ Failed to remove demo players. Check logs for details.");
+  }
+
+  pendingActions.delete(userId);
+  return;
+}
 
 if (text === "/transaction") {
   if (!ADMIN_IDS.includes(userId)) {

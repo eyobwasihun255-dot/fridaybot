@@ -47,12 +47,11 @@ class GameManager {
         return { success: false, message: "Room not in waiting state" };
       }
   
-      // Calculate countdown end
       const countdownEndAt = Date.now() + durationMs;
       const roomRef = ref(rtdb, `rooms/${roomId}`);
   
-      // Save countdown state
-      update(roomRef, {
+      // ✅ Update room to countdown
+      await update(roomRef, {
         gameStatus: "countdown",
         countdownEndAt,
         countdownStartedBy: startedBy,
@@ -60,22 +59,71 @@ class GameManager {
   
       console.log(`⏳ Countdown started for room ${roomId} (${durationMs / 1000}s)`);
   
-      // Cancel old timer if exists
-      if (this.countdownTimers.has(roomId)) {
-        clearTimeout(this.countdownTimers.get(roomId));
+      // --- 🔁 DEMO CARD REFRESH LOGIC ---
+      const cardsSnap = await get(ref(rtdb, `rooms/${roomId}/bingoCards`));
+      const cards = cardsSnap.exists() ? cardsSnap.val() : {};
+  
+      const currentPlayersSnap = await get(ref(rtdb, `rooms/${roomId}/players`));
+      const currentPlayers = currentPlayersSnap.exists() ? currentPlayersSnap.val() : {};
+  
+      const allUnclaimed = Object.entries(cards).filter(([_, c]) => !c.claimed);
+      const updates = {};
+      const now = Date.now();
+  
+      // Shuffle available cards
+      const shuffledCards = allUnclaimed.sort(() => 0.5 - Math.random());
+  
+      let availableIdx = 0;
+  
+      for (const [telegramId, player] of Object.entries(currentPlayers)) {
+        // Target only demo players
+        if (telegramId.startsWith("demo")) {
+          const oldCardId = player.cardId;
+  
+          // ✅ Unclaim old card
+          if (oldCardId && cards[oldCardId]) {
+            updates[`rooms/${roomId}/bingoCards/${oldCardId}/claimed`] = false;
+            updates[`rooms/${roomId}/bingoCards/${oldCardId}/claimedBy`] = null;
+            updates[`rooms/${roomId}/bingoCards/${oldCardId}/auto`] = null;
+            updates[`rooms/${roomId}/bingoCards/${oldCardId}/autoUntil`] = null;
+          }
+  
+          // ✅ Assign new card (if available)
+          const newPair = shuffledCards[availableIdx++];
+          if (newPair) {
+            const [newCardId] = newPair;
+  
+            updates[`rooms/${roomId}/players/${telegramId}/cardId`] = newCardId;
+            updates[`rooms/${roomId}/players/${telegramId}/attemptedBingo`] = false;
+  
+            updates[`rooms/${roomId}/bingoCards/${newCardId}/claimed`] = true;
+            updates[`rooms/${roomId}/bingoCards/${newCardId}/claimedBy`] = telegramId;
+            updates[`rooms/${roomId}/bingoCards/${newCardId}/auto`] = true;
+            updates[`rooms/${roomId}/bingoCards/${newCardId}/autoUntil`] = now + 24 * 60 * 60 * 1000;
+          }
+        }
       }
   
-      // --- ⏰ Schedule automatic game start
+      if (Object.keys(updates).length > 0) {
+        await update(ref(rtdb), updates);
+        console.log(`♻️ Demo players’ cards reshuffled for room ${roomId}`);
+      } else {
+        console.log(`ℹ️ No demo players found in room ${roomId}`);
+      }
+      // --- END DEMO REFRESH LOGIC ---
+  
+      // Cancel any previous countdown timer
+      if (this.countdownTimers.has(roomId)) clearTimeout(this.countdownTimers.get(roomId));
+  
+      // --- Schedule game start ---
       const tid = setTimeout(async () => {
         try {
           const snap = await get(roomRef);
           const latest = snap.val();
   
-          // Only start if still in countdown
           if (latest?.gameStatus === "countdown") {
             console.log(`🎮 Countdown ended → Starting game for room ${roomId}`);
-            this.startGame(roomId, room);
-            
+            this.startGame(roomId, latest);
           } else {
             console.log(`⚠️ Skipping startGame for room ${roomId}, state changed to ${latest?.gameStatus}`);
           }
@@ -85,16 +133,15 @@ class GameManager {
           this.countdownTimers.delete(roomId);
         }
       }, durationMs);
+  
       this.countdownTimers.set(roomId, tid);
   
-      // --- 🔊 Notify all players
-      if (this.io) {
-        this.io.to(roomId).emit("countdownStarted", { roomId, countdownEndAt });
-      }
+      // --- Notify sockets & bot ---
+      if (this.io) this.io.to(roomId).emit("countdownStarted", { roomId, countdownEndAt });
+  
       const roomSnap = (await get(ref(rtdb, `rooms/${roomId}`))).val();
-      if (this.io) this.io.to(roomId).emit('roomUpdated', { roomId, room: roomSnap });
-
-      // Optional: Notify via bot
+      if (this.io) this.io.to(roomId).emit("roomUpdated", { roomId, room: roomSnap });
+  
       if (this.notifier) {
         this.notifier.send(`🕒 Countdown started for room ${roomId} (${durationMs / 1000}s)`);
       }
@@ -105,6 +152,7 @@ class GameManager {
       return { success: false, message: "Server error" };
     }
   }
+  
   
   
   async cancelCountdown(roomId) {

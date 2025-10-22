@@ -112,7 +112,7 @@ for (let i = 0; i < demoPlayers.length; i++) {
   }
 
   // ⏱️ 0.5s gap between each player update
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  await new Promise((resolve) => setTimeout(resolve, 1000));
 }
 
 console.log(`✅ Completed demo player card reshuffle for room ${roomId}`);

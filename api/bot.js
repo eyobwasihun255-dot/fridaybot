@@ -1113,7 +1113,8 @@ if (pending?.type === "awaiting_random_auto") {
 
       if (auto) {
         updates[`rooms/${roomId}/bingoCards/${cardId}/auto`] = true;
-        updates[`rooms/${roomId}/bingoCards/${cardId}/autoUntil`] = now;
+        updates[`rooms/${roomId}/bingoCards/${cardId}/autoUntil`] = now + 24 * 60 * 60 * 1000;
+
       }
     }
 

@@ -1006,6 +1006,7 @@ if (pending?.type === "awaiting_random_count") {
 
 // Step 4: Get auto option and add players
 // Step 4: Get auto option and add players
+// Step 4: Get auto option and add players
 if (pending?.type === "awaiting_random_auto") {
   const auto = text.trim().toLowerCase() === "true";
   const { roomId, count } = pending;
@@ -1039,8 +1040,11 @@ if (pending?.type === "awaiting_random_auto") {
       pendingActions.delete(userId);
       return;
     }
-
     const cards = cardsSnap.val();
+
+    // ✅ Current players in room
+    const playersSnap = await get(ref(rtdb, `rooms/${roomId}/players`));
+    const currentPlayers = playersSnap.exists() ? playersSnap.val() : {};
 
     // ✅ Filter and randomize unclaimed cards
     const unclaimed = Object.entries(cards).filter(([_, c]) => !c.claimed);
@@ -1049,7 +1053,6 @@ if (pending?.type === "awaiting_random_auto") {
       pendingActions.delete(userId);
       return;
     }
-
     const shuffledCards = unclaimed.sort(() => 0.5 - Math.random());
 
     // ✅ Get demo users from Firebase
@@ -1088,8 +1091,6 @@ if (pending?.type === "awaiting_random_auto") {
       "nattii1122", "Jonas_row", "Shmew_GG", "Abebe_123", "Sultan_great",
       "Rene_41", "mativiva", "Debeli_2023", "ሲሳይ_23", "Dereyew49"
     ];
-
-    // Shuffle usernames and take only what’s needed
     const uniqueNames = availableNames.sort(() => 0.5 - Math.random()).slice(0, count);
 
     const now = Date.now();
@@ -1097,29 +1098,45 @@ if (pending?.type === "awaiting_random_auto") {
 
     for (let i = 0; i < selectedUsers.length; i++) {
       const user = selectedUsers[i];
-      const [cardId] = shuffledCards[i];
-      const username = uniqueNames[i]; // ✅ Unique name per user
+      const username = uniqueNames[i];
+      const [newCardId] = shuffledCards[i];
 
+      // ✅ If demo already exists in the room
+      if (currentPlayers[user.telegramId]) {
+        const oldCardId = currentPlayers[user.telegramId].cardId;
+
+        // Unclaim their old card if it exists
+        if (oldCardId && cards[oldCardId]) {
+          updates[`rooms/${roomId}/bingoCards/${oldCardId}/claimed`] = false;
+          updates[`rooms/${roomId}/bingoCards/${oldCardId}/claimedBy`] = null;
+          updates[`rooms/${roomId}/bingoCards/${oldCardId}/auto`] = null;
+          updates[`rooms/${roomId}/bingoCards/${oldCardId}/autoUntil`] = null;
+        }
+      }
+
+      // ✅ Assign new card
       updates[`rooms/${roomId}/players/${user.telegramId}`] = {
         attemptedBingo: false,
         betAmount,
-        cardId,
+        cardId: newCardId,
         telegramId: user.telegramId,
         username,
       };
 
-      updates[`rooms/${roomId}/bingoCards/${cardId}/claimed`] = true;
-      updates[`rooms/${roomId}/bingoCards/${cardId}/claimedBy`] = user.telegramId;
+      updates[`rooms/${roomId}/bingoCards/${newCardId}/claimed`] = true;
+      updates[`rooms/${roomId}/bingoCards/${newCardId}/claimedBy`] = user.telegramId;
 
       if (auto) {
-        updates[`rooms/${roomId}/bingoCards/${cardId}/auto`] = true;
-        updates[`rooms/${roomId}/bingoCards/${cardId}/autoUntil`] = now + 24 * 60 * 60 * 1000;
-
+        updates[`rooms/${roomId}/bingoCards/${newCardId}/auto`] = true;
+        updates[`rooms/${roomId}/bingoCards/${newCardId}/autoUntil`] = now + 24 * 60 * 60 * 1000;
       }
     }
 
     await update(ref(rtdb), updates);
-    sendMessage(chatId, `✅ Added ${count} random demo players (auto: ${auto}) to room ${roomId}.`);
+    sendMessage(
+      chatId,
+      `✅ Added or updated ${count} demo players (auto: ${auto}) in room ${roomId}.`
+    );
   } catch (err) {
     console.error("Error adding random players:", err);
     sendMessage(chatId, "❌ Failed to add random players. Check logs for details.");
@@ -1128,6 +1145,7 @@ if (pending?.type === "awaiting_random_auto") {
   pendingActions.delete(userId);
   return;
 }
+
 
 
 

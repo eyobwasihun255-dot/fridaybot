@@ -16,7 +16,6 @@ export default function createSocketServer(app) {
   gameManager.setSocketIO(io);
 
   io.on("connection", (socket) => {
-    console.log("🔌 Client connected:", socket.id);
 
     // ✅ Safely handle joining a room
     socket.on("joinRoom", (roomId) => {

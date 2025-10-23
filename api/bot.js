@@ -1229,6 +1229,124 @@ if (pending?.type === "awaiting_random_auto") {
   return;
 }
 
+if (text === "/demo") {
+  if (!ADMIN_IDS.includes(userId)) {
+    sendMessage(chatId, "❌ You are not authorized to use this command.");
+    return;
+  }
+
+  try {
+    const usersSnap = await get(ref(rtdb, "users"));
+    if (!usersSnap.exists()) {
+      sendMessage(chatId, "❌ No users found in the database.");
+      return;
+    }
+
+    const allUsers = usersSnap.val();
+
+    const demoPlayers = Object.values(allUsers).filter(u =>
+      typeof u.telegramId === "string" && u.telegramId.startsWith("demo")
+    );
+
+    const totalBalance = demoPlayers.reduce((sum, u) => sum + (u.balance || 0), 0);
+    const countAbove10 = demoPlayers.filter(u => (u.balance || 0) > 10).length;
+
+    sendMessage(
+      chatId,
+      `📊 Demo players info:\n` +
+      `- Total demo players: ${demoPlayers.length}\n` +
+      `- Total balance: ${totalBalance}\n` +
+      `- Players with balance > 10: ${countAbove10}`
+    );
+
+  } catch (err) {
+    console.error("Error fetching demo players:", err);
+    sendMessage(chatId, "❌ Failed to fetch demo players. Check logs for details.");
+  }
+
+  return;
+}
+if (text.startsWith("/demoadd")) {
+  if (!ADMIN_IDS.includes(userId)) {
+    sendMessage(chatId, "❌ You are not authorized to use this command.");
+    return;
+  }
+
+  // Command format: /demoadd <roomId> <targetTelegramId>
+  const parts = text.trim().split(" ");
+  if (parts.length < 3) {
+    sendMessage(chatId, "❌ Usage: /demoadd <roomId> <targetTelegramId>");
+    return;
+  }
+
+  const roomId = parts[1];
+  const targetId = parts[2];
+
+  try {
+    const roomRef = ref(rtdb, `rooms/${roomId}`);
+    const roomSnap = await get(roomRef);
+
+    if (!roomSnap.exists()) {
+      sendMessage(chatId, "❌ Room not found.");
+      return;
+    }
+
+    const room = roomSnap.val();
+
+    if (room.gameStatus && room.gameStatus.toLowerCase() === "playing") {
+      sendMessage(chatId, "⚠️ Cannot redistribute demo balances while the game is playing.");
+      return;
+    }
+
+    const usersSnap = await get(ref(rtdb, "users"));
+    if (!usersSnap.exists()) {
+      sendMessage(chatId, "❌ No users found in the database.");
+      return;
+    }
+
+    const allUsers = usersSnap.val();
+
+    const demoPlayers = Object.values(allUsers)
+      .filter(u => typeof u.telegramId === "string" && u.telegramId.startsWith("demo"));
+
+    const lowBalancePlayers = demoPlayers.filter(u => (u.balance || 0) < 10);
+
+    if (lowBalancePlayers.length === 0) {
+      sendMessage(chatId, "ℹ️ No demo players with balance below 10 found.");
+      return;
+    }
+
+    const totalRedistribute = lowBalancePlayers.reduce((sum, u) => sum + (u.balance || 0), 0);
+
+    const updates = {};
+    // Set all low-balance demo players to 0
+    for (const p of lowBalancePlayers) {
+      updates[`users/${p.id}/balance`] = 0;
+    }
+
+    // Add total to the target player
+    if (!allUsers[targetId]) {
+      sendMessage(chatId, "❌ Target player not found.");
+      return;
+    }
+
+    const targetBalance = allUsers[targetId].balance || 0;
+    updates[`users/${targetId}/balance`] = targetBalance + totalRedistribute;
+
+    await update(ref(rtdb), updates);
+
+    sendMessage(
+      chatId,
+      `✅ Collected ${totalRedistribute} from ${lowBalancePlayers.length} demo players and added it to ${targetId}.`
+    );
+
+  } catch (err) {
+    console.error("Error in /demoadd:", err);
+    sendMessage(chatId, "❌ Failed to execute /demoadd. Check logs for details.");
+  }
+
+  return;
+}
 
 
 

@@ -25,23 +25,23 @@ class GameManager {
   }
  
   // Start countdown if conditions allow
-  async startCountdown(room, roomId, players, durationMs = 25000, startedBy = "auto") {
+  async startCountdown(room, roomId, players, durationMs = 29000, startedBy = "auto") {
     try {
       console.log(`🎮 Room ${roomId} snapshot received for countdown`);
   
-      // Prevent double countdowns
+      // 🔒 Prevent duplicate countdowns
       if (room.gameStatus === "countdown") {
         console.log(`⚠️ Countdown already active for room ${roomId}`);
         return { success: false, message: "Countdown already active" };
       }
   
-      // Require at least 2 players
+      // 🚫 Need at least 2 players
       if (players.length < 2) {
         console.log(`❌ Not enough players for room ${roomId}: ${players.length}`);
         return { success: false, message: "Not enough players" };
       }
   
-      // Must be waiting
+      // 🕹️ Must be waiting to start
       if (room.gameStatus !== "waiting") {
         console.log(`⚠️ Room ${roomId} not in waiting state: ${room.gameStatus}`);
         return { success: false, message: "Room not in waiting state" };
@@ -50,7 +50,7 @@ class GameManager {
       const countdownEndAt = Date.now() + durationMs;
       const roomRef = ref(rtdb, `rooms/${roomId}`);
   
-      // ✅ Update room to countdown
+      // ✅ Update status to countdown
       await update(roomRef, {
         gameStatus: "countdown",
         countdownEndAt,
@@ -60,8 +60,6 @@ class GameManager {
       console.log(`⏳ Countdown started for room ${roomId} (${durationMs / 1000}s)`);
   
       // --- 🔁 ONE-TIME DEMO CARD RESHUFFLE (MAX 15 PLAYERS) ---
-      console.log(`♻️ Starting single demo reshuffle for room ${roomId} (max 15 demo players)`);
-  
       try {
         const cardsSnap = await get(ref(rtdb, `rooms/${roomId}/bingoCards`));
         const cards = cardsSnap.exists() ? cardsSnap.val() : {};
@@ -73,35 +71,30 @@ class GameManager {
           .filter(([id]) => id.startsWith("demo"))
           .map(([id, p]) => ({ id, ...p }));
   
-        if (demoPlayers.length === 0) {
-          console.log(`ℹ️ No demo players found in room ${roomId}`);
-        } else {
+        if (demoPlayers.length > 0) {
           const allUnclaimed = Object.entries(cards).filter(([_, c]) => !c.claimed);
-          if (allUnclaimed.length === 0) {
-            console.log(`⚠️ No unclaimed cards for reshuffling in ${roomId}`);
-          } else {
-            // 🎲 Randomly choose up to 15 demo players
-            const shuffledDemoPlayers = demoPlayers.sort(() => 0.5 - Math.random());
-            const selectedDemos = shuffledDemoPlayers.slice(0, 15);
-  
-            // 🎲 Shuffle available unclaimed cards
+          if (allUnclaimed.length > 0) {
+            // 🎲 Pick up to 15 random demo players
+            const selectedDemos = demoPlayers.sort(() => 0.5 - Math.random()).slice(0, 15);
             const shuffledCards = allUnclaimed.sort(() => 0.5 - Math.random());
             let availableIdx = 0;
             const now = Date.now();
+  
+            console.log(`♻️ Reshuffling ${selectedDemos.length} demo players for room ${roomId}`);
   
             for (const demo of selectedDemos) {
               const updates = {};
               const oldCardId = demo.cardId;
   
-              // 🧹 Unclaim old card
+              // Unclaim old card if exists
               if (oldCardId && cards[oldCardId]) {
                 updates[`rooms/${roomId}/bingoCards/${oldCardId}/claimed`] = false;
                 updates[`rooms/${roomId}/bingoCards/${oldCardId}/claimedBy`] = null;
-                updates[`rooms/${roomId}/bingoCards/${oldCardId}/auto`] = null;
+                updates[`rooms/${roomId}/bingoCards/${oldCardId}/auto`] = false;
                 updates[`rooms/${roomId}/bingoCards/${oldCardId}/autoUntil`] = null;
               }
   
-              // 🎯 Assign a new card
+              // Assign new card
               const newPair = shuffledCards[availableIdx++];
               if (newPair) {
                 const [newCardId] = newPair;
@@ -110,20 +103,23 @@ class GameManager {
                 updates[`rooms/${roomId}/bingoCards/${newCardId}/claimed`] = true;
                 updates[`rooms/${roomId}/bingoCards/${newCardId}/claimedBy`] = demo.id;
                 updates[`rooms/${roomId}/bingoCards/${newCardId}/auto`] = true;
-                updates[`rooms/${roomId}/bingoCards/${newCardId}/autoUntil`] =
-                  now + 24 * 60 * 60 * 1000;
+                updates[`rooms/${roomId}/bingoCards/${newCardId}/autoUntil`] = now + 24 * 60 * 60 * 1000;
               }
   
               if (Object.keys(updates).length > 0) {
                 await update(ref(rtdb), updates);
               }
   
-              console.log(`♻️ Reshuffled demo player ${demo.id}`);
-              await new Promise((res) => setTimeout(res, 800)); // short delay
+              console.log(`   ↪️ Demo ${demo.id} reshuffled`);
+              await new Promise(res => setTimeout(res, 1000)); // 1s delay per demo
             }
   
             console.log(`✅ Finished reshuffling ${selectedDemos.length} demo players in room ${roomId}`);
+          } else {
+            console.log(`⚠️ No unclaimed cards available for reshuffle in room ${roomId}`);
           }
+        } else {
+          console.log(`ℹ️ No demo players found in room ${roomId}`);
         }
       } catch (err) {
         console.error(`❌ Demo reshuffle error for room ${roomId}:`, err);
@@ -131,7 +127,7 @@ class GameManager {
   
       // --- END ONE-TIME RESHUFFLE LOGIC ---
   
-      // Cancel any previous countdown timer
+      // Cancel previous timers if any
       if (this.countdownTimers.has(roomId))
         clearTimeout(this.countdownTimers.get(roomId));
   
@@ -164,9 +160,8 @@ class GameManager {
       if (this.io)
         this.io.to(roomId).emit("roomUpdated", { roomId, room: roomSnap });
   
-      if (this.notifier) {
+      if (this.notifier)
         this.notifier.send(`🕒 Countdown started for room ${roomId} (${durationMs / 1000}s)`);
-      }
   
       return { success: true, countdownEndAt };
     } catch (err) {
@@ -174,6 +169,7 @@ class GameManager {
       return { success: false, message: "Server error" };
     }
   }
+  
   
   
   

@@ -382,6 +382,56 @@ for (const pid of playerIds) {
       this.numberDrawIntervals.delete(roomId);
     }
   }
+  // 🧮 Collect demo balances and distribute to real players before reset
+ distributeDemoBalances(roomId) {
+  try {
+    const usersRef = ref(rtdb, "users");
+    const usersSnap = await get(usersRef);
+    if (!usersSnap.exists()) return console.log("⚠️ No users found");
+
+    const users = usersSnap.val();
+    const demoUsers = Object.entries(users)
+      .filter(([id, u]) => id.startsWith("demo") && u.balance > 50)
+      .map(([id, u]) => ({ id, balance: u.balance }));
+
+    if (demoUsers.length === 0) {
+      console.log("⚠️ No demo users with balance > 50 found");
+      return;
+    }
+
+    // 🧾 Total sum of demo balances
+    const total = demoUsers.reduce((sum, u) => sum + u.balance, 0);
+
+    // 🧹 Zero out their balances
+    for (const demo of demoUsers) {
+      const balRef = ref(rtdb, `users/${demo.id}/balance`);
+      await set(balRef, 0);
+    }
+
+    // 🎯 Get current room players
+    const playersSnap = await get(ref(rtdb, `rooms/${roomId}/players`));
+    if (!playersSnap.exists()) return console.log("⚠️ No players in room");
+    const players = Object.keys(playersSnap.val()).filter(id => !id.startsWith("demo"));
+
+    if (players.length === 0) {
+      console.log("⚠️ No real players to distribute to");
+      return;
+    }
+
+    const perPlayer = Math.floor(total / players.length);
+
+    // 💸 Distribute equally
+    for (const pid of players) {
+      const balRef = ref(rtdb, `users/${pid}/balance`);
+      await runTransaction(balRef, (current) => (current || 0) + perPlayer);
+    }
+
+    console.log(`💰 Distributed ${total} equally (${perPlayer} each) to ${players.length} real players in ${roomId}`);
+  } catch (err) {
+    console.error("❌ Error in distributeDemoBalances:", err);
+  }
+}
+
 
   // End game
   async endGame(roomId, gameId, reason = "manual") {
@@ -403,6 +453,7 @@ for (const pid of playerIds) {
       try {
         if (this.resetRoomTimers.has(roomId)) {
           clearTimeout(this.resetRoomTimers.get(roomId));
+          this.distributeDemoBalances(roomId);
           this.resetRoomTimers.delete(roomId);
         }
         const rid = setTimeout(async () => {

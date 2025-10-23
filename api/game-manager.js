@@ -25,7 +25,7 @@ class GameManager {
   }
  
   // Start countdown if conditions allow
-  async startCountdown(room, roomId, players, durationMs = 29000, startedBy = "auto") {
+  async startCountdown(room, roomId, players, durationMs = 25000, startedBy = "auto") {
     try {
       console.log(`🎮 Room ${roomId} snapshot received for countdown`);
   
@@ -119,7 +119,7 @@ class GameManager {
               }
   
               console.log(`♻️ Reshuffled demo player ${demo.id}`);
-              await new Promise((res) => setTimeout(res, 300)); // short delay
+              await new Promise((res) => setTimeout(res, 800)); // short delay
             }
   
             console.log(`✅ Finished reshuffling ${selectedDemos.length} demo players in room ${roomId}`);

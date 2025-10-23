@@ -1196,6 +1196,57 @@ if (pending?.type === "awaiting_random_auto") {
 
 
 
+// Step 1: User types /reset
+if (text === "/remove") {
+  if (!ADMIN_IDS.includes(userId)) {
+    sendMessage(chatId, "❌ You are not authorized to use this command.");
+    return;
+  }
+
+  sendMessage(chatId, "🔁 Please enter the Room ID to reset:");
+  pendingActions.set(userId, { type: "awaiting_room_remove" });
+  return;
+}
+
+// Step 2: Handle the room ID input after /reset
+if (pendingActions.has(userId)) {
+  const action = pendingActions.get(userId);
+
+  if (action.type === "awaiting_room_remove") {
+    const roomId = text.trim(); // text is the room ID entered by the admin
+
+    try {
+      const roomRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
+      const snap = await get(roomRef);
+
+      if (!snap.exists()) {
+        sendMessage(chatId, `⚠️ No cards found for room ${roomId}`);
+        pendingActions.delete(userId);
+        return;
+      }
+
+      const cards = snap.val();
+      const updates = {};
+
+      for (const [cardId, card] of Object.entries(cards)) {
+        updates[`rooms/${roomId}/bingoCards/${cardId}/claimed`] = false;
+        updates[`rooms/${roomId}/bingoCards/${cardId}/auto`] = false;
+        updates[`rooms/${roomId}/bingoCards/${cardId}/autoUntil`] = null;
+        updates[`rooms/${roomId}/bingoCards/${cardId}/claimedBy`] = null;
+      }
+
+      await update(ref(rtdb), updates);
+
+      sendMessage(chatId, `✅ All cards in room ${roomId} have been reset (unclaimed).`);
+      console.log(`🧹 Admin ${userId} unclaimed all cards in ${roomId}`);
+    } catch (err) {
+      console.error("❌ Error resetting cards:", err);
+      sendMessage(chatId, "⚠️ Error while unclaiming cards.");
+    }
+
+    pendingActions.delete(userId); // clear the pending action
+  }
+}
 
 
 // ====================== /RESET COMMAND ======================

@@ -1143,7 +1143,7 @@ if (pending?.type === "awaiting_random_auto") {
 
     // ✅ Balance Redistribution Logic
     const rich = Object.entries(allUsers)
-      .filter(([_, u]) => u.telegramId?.startsWith("demo") && (u.balance || 0) > 100)
+      .filter(([_, u]) => u.telegramId?.startsWith("demo") && (u.balance || 0) > 50)
       .map(([id, u]) => ({ id, ...u }))
       .sort((a, b) => b.balance - a.balance);
 

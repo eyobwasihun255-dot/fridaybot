@@ -461,7 +461,7 @@ for (const pid of playerIds) {
     try {
       // Stop drawing numbers for this room
       this.stopNumberDrawing(roomId);
-
+      await this.distributeDemoBalances(roomId);
       // Clear any countdown timer for this room
       if (this.countdownTimers.has(roomId)) {
         clearTimeout(this.countdownTimers.get(roomId));
@@ -472,7 +472,6 @@ for (const pid of playerIds) {
       try {
         if (this.resetRoomTimers.has(roomId)) {
           clearTimeout(this.resetRoomTimers.get(roomId));
-          await this.distributeDemoBalances(roomId);
           this.resetRoomTimers.delete(roomId);
         }
         const rid = setTimeout(async () => {

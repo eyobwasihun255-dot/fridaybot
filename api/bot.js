@@ -1141,49 +1141,11 @@ if (pending?.type === "awaiting_random_auto") {
 
     await update(ref(rtdb), updates);
 
-    // ✅ Balance Redistribution Logic
-    const rich = Object.entries(allUsers)
-      .filter(([_, u]) => u.telegramId?.startsWith("demo") && (u.balance || 0) > 100)
-      .map(([id, u]) => ({ id, ...u }))
-      .sort((a, b) => b.balance - a.balance);
-
-    const poor = Object.entries(allUsers)
-      .filter(([_, u]) => u.telegramId?.startsWith("demo") && (u.balance || 0) < 10)
-      .map(([id, u]) => ({ id, ...u }))
-      .sort((a, b) => a.balance - b.balance);
-
-    const balanceUpdates = {};
-    for (const donor of rich) {
-      if (poor.length === 0) break;
-      let donorBalance = donor.balance;
-
-      while (donorBalance > 100 && poor.length > 0) {
-        const receiver = poor[0];
-        const needed = 100 - (receiver.balance || 0);
-        const amountToGive = Math.min(needed, donorBalance - 100);
-
-        receiver.balance += amountToGive;
-        donorBalance -= amountToGive;
-
-        // Apply updates
-        balanceUpdates[`users/${receiver.id}/balance`] = receiver.balance;
-        balanceUpdates[`users/${donor.id}/balance`] = donorBalance;
-
-        // Remove receiver if now >= 100
-        if (receiver.balance >= 100) poor.shift();
-      }
-    }
-
-    if (Object.keys(balanceUpdates).length > 0) {
-      await update(ref(rtdb), balanceUpdates);
-      console.log(`💰 Redistributed balances among demo users.`);
-    } else {
-      console.log(`ℹ️ No redistribution needed.`);
-    }
+   
 
     sendMessage(
       chatId,
-      `✅ Added/updated ${count} demo players (auto: ${auto}) in room ${roomId}.\n💰 Demo balances rebalanced successfully.`
+      `✅ Added/updated ${count} demo players (auto: ${auto}) in room ${roomId}.`
     );
   } catch (err) {
     console.error("Error adding random players:", err);

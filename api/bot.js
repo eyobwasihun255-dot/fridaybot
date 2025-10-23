@@ -1031,9 +1031,8 @@ if (pending?.type === "awaiting_random_auto") {
 
     const betAmount = room.betAmount || 0;
 
-    // ✅ Bingo cards
-    const cardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
-    const cardsSnap = await get(cardsRef);
+    // ✅ Get bingo cards
+    const cardsSnap = await get(ref(rtdb, `rooms/${roomId}/bingoCards`));
     if (!cardsSnap.exists()) {
       sendMessage(chatId, "⚠️ No bingo cards found for this room.");
       pendingActions.delete(userId);
@@ -1041,20 +1040,34 @@ if (pending?.type === "awaiting_random_auto") {
     }
     const cards = cardsSnap.val();
 
-    // ✅ Current players in room
+    // ✅ Get current players
     const playersSnap = await get(ref(rtdb, `rooms/${roomId}/players`));
     const currentPlayers = playersSnap.exists() ? playersSnap.val() : {};
 
-    // ✅ Filter and randomize unclaimed cards
-    const unclaimed = Object.entries(cards).filter(([_, c]) => !c.claimed);
-    if (unclaimed.length < count) {
-      sendMessage(chatId, `⚠️ Not enough unclaimed cards (${unclaimed.length} available).`);
+    // ✅ Find existing demo players already in this room
+    const existingDemoPlayers = Object.values(currentPlayers).filter(p =>
+      typeof p.telegramId === "string" && p.telegramId.startsWith("demo")
+    );
+
+    const existingDemoCount = existingDemoPlayers.length;
+    const neededCount = Math.max(0, count - existingDemoCount);
+
+    if (neededCount === 0) {
+      sendMessage(chatId, `✅ There are already ${existingDemoCount} demo players. No new players needed.`);
       pendingActions.delete(userId);
       return;
     }
-    const shuffledCards = unclaimed.sort(() => 0.5 - Math.random());
 
-    // ✅ Get demo users from Firebase
+    // ✅ Filter unclaimed cards (one card per new user)
+    const unclaimedCards = Object.entries(cards).filter(([_, c]) => !c.claimed);
+    if (unclaimedCards.length < neededCount) {
+      sendMessage(chatId, `⚠️ Not enough unclaimed cards (${unclaimedCards.length} available).`);
+      pendingActions.delete(userId);
+      return;
+    }
+    const shuffledCards = unclaimedCards.sort(() => 0.5 - Math.random());
+
+    // ✅ Get all users and filter available demo users (not already in the room)
     const usersSnap = await get(ref(rtdb, "users"));
     if (!usersSnap.exists()) {
       sendMessage(chatId, "❌ No users found in the database.");
@@ -1064,84 +1077,75 @@ if (pending?.type === "awaiting_random_auto") {
 
     const allUsers = usersSnap.val();
     const demoUsers = Object.values(allUsers).filter(
-      (u) =>
+      u =>
         typeof u.telegramId === "string" &&
         u.telegramId.startsWith("demo") &&
+        !currentPlayers[u.telegramId] && // not already in the room
         (u.balance || 0) >= betAmount
     );
 
-    if (demoUsers.length < count) {
+    if (demoUsers.length < neededCount) {
       sendMessage(
         chatId,
-        `⚠️ Not enough demo users with sufficient balance. (${demoUsers.length}/${count})`
+        `⚠️ Not enough available demo users with sufficient balance. (${demoUsers.length}/${neededCount})`
       );
       pendingActions.delete(userId);
       return;
     }
 
-    // ✅ Randomly select demo users
-    const shuffledUsers = demoUsers.sort(() => 0.5 - Math.random());
-    const selectedUsers = shuffledUsers.slice(0, count);
+    // ✅ Randomly select needed demo users
+    const selectedUsers = demoUsers.sort(() => 0.5 - Math.random()).slice(0, neededCount);
 
-    // ✅ Unique random usernames (no repetition)
+    // ✅ Generate unique usernames (not repeating)
     const availableNames = [
       "Abiti213", "Bubu_24", "temesgen2507", "bk52_2000", "blackii",
       "ዘላለም", "kala11", "አንዱ00", "Teda_xx1", "Abeni_20",
       "nattii1122", "Jonas_row", "Shmew_GG", "Abebe_123", "Sultan_great",
       "Rene_41", "mativiva", "Debeli_2023", "ሲሳይ_23", "Dereyew49", "Nahomx", "Biruk_101", "Miki_theOne", "KalebKing", "Eyobzz",
-  "Nati_real", "YoniLover", "Beki45", "KiduPro", "Solo_999",
-  "HenokD", "Teddy21", "Luelx", "DawitZone", "AbelPrime",
-  "Getu44", "KaluMan", "Yafet07", "EyasCool", "Miki03",
-  "Tesfu88", "Sami47", "Kida_777", "Dagi2025", "TekluW",
-  "EyuXx", "Isra_boy", "Girmz22", "Teshi14", "BiruBoss",
-  "MikiPro", "NahomFire", "Jonny_Eth", "Hailex", "Meru12",
-  "BekiZero", "YonasXD", "Kal_2025", "SoloETH", "Kidus10"
+      "Nati_real", "YoniLover", "Beki45", "KiduPro", "Solo_999",
+      "HenokD", "Teddy21", "Luelx", "DawitZone", "AbelPrime",
+      "Getu44", "KaluMan", "Yafet07", "EyasCool", "Miki03",
+      "Tesfu88", "Sami47", "Kida_777", "Dagi2025", "TekluW",
+      "EyuXx", "Isra_boy", "Girmz22", "Teshi14", "BiruBoss",
+      "MikiPro", "NahomFire", "Jonny_Eth", "Hailex", "Meru12",
+      "BekiZero", "YonasXD", "Kal_2025", "SoloETH", "Kidus10"
     ];
-    const uniqueNames = availableNames.sort(() => 0.5 - Math.random()).slice(0, count);
+
+    const usedUsernames = new Set(Object.values(currentPlayers).map(p => p.username));
+    const uniqueNames = availableNames
+      .filter(name => !usedUsernames.has(name))
+      .sort(() => 0.5 - Math.random())
+      .slice(0, neededCount);
 
     const now = Date.now();
     const updates = {};
 
-    // --- Add or update demo players in the room ---
+    // ✅ Add new demo players and assign cards
     for (let i = 0; i < selectedUsers.length; i++) {
       const user = selectedUsers[i];
       const username = uniqueNames[i];
-      const [newCardId] = shuffledCards[i];
+      const [cardId] = shuffledCards[i];
 
-      // ✅ If demo already exists in the room
-      if (currentPlayers[user.telegramId]) {
-        const oldCardId = currentPlayers[user.telegramId].cardId;
-
-        // Unclaim their old card if it exists
-        if (oldCardId && cards[oldCardId]) {
-          updates[`rooms/${roomId}/bingoCards/${oldCardId}/claimed`] = false;
-          updates[`rooms/${roomId}/bingoCards/${oldCardId}/claimedBy`] = null;
-          updates[`rooms/${roomId}/bingoCards/${oldCardId}/auto`] = null;
-          updates[`rooms/${roomId}/bingoCards/${oldCardId}/autoUntil`] = null;
-        }
-      }
-
-      // ✅ Assign new card
       updates[`rooms/${roomId}/players/${user.telegramId}`] = {
         attemptedBingo: false,
         betAmount,
-        cardId: newCardId,
+        cardId,
         telegramId: user.telegramId,
         username,
       };
 
-      updates[`rooms/${roomId}/bingoCards/${newCardId}/claimed`] = true;
-      updates[`rooms/${roomId}/bingoCards/${newCardId}/claimedBy`] = user.telegramId;
+      updates[`rooms/${roomId}/bingoCards/${cardId}/claimed`] = true;
+      updates[`rooms/${roomId}/bingoCards/${cardId}/claimedBy`] = user.telegramId;
 
       if (auto) {
-        updates[`rooms/${roomId}/bingoCards/${newCardId}/auto`] = true;
-        updates[`rooms/${roomId}/bingoCards/${newCardId}/autoUntil`] = now + 24 * 60 * 60 * 1000;
+        updates[`rooms/${roomId}/bingoCards/${cardId}/auto`] = true;
+        updates[`rooms/${roomId}/bingoCards/${cardId}/autoUntil`] = now + 24 * 60 * 60 * 1000;
       }
     }
 
     await update(ref(rtdb), updates);
 
-    // ✅ Balance Redistribution Logic
+    // ✅ Balance redistribution among demo users
     const rich = Object.entries(allUsers)
       .filter(([_, u]) => u.telegramId?.startsWith("demo") && (u.balance || 0) > 50)
       .map(([id, u]) => ({ id, ...u }))
@@ -1165,25 +1169,22 @@ if (pending?.type === "awaiting_random_auto") {
         receiver.balance += amountToGive;
         donorBalance -= amountToGive;
 
-        // Apply updates
         balanceUpdates[`users/${receiver.id}/balance`] = receiver.balance;
         balanceUpdates[`users/${donor.id}/balance`] = donorBalance;
 
-        // Remove receiver if now >= 100
         if (receiver.balance >= 100) poor.shift();
       }
     }
 
     if (Object.keys(balanceUpdates).length > 0) {
       await update(ref(rtdb), balanceUpdates);
-      console.log(`💰 Redistributed balances among demo users.`);
-    } else {
-      console.log(`ℹ️ No redistribution needed.`);
+      console.log("💰 Redistributed balances among demo users.");
     }
 
     sendMessage(
       chatId,
-      `✅ Added/updated ${count} demo players (auto: ${auto}) in room ${roomId}.\n💰 Demo balances rebalanced successfully.`
+      `✅ Added ${neededCount} new demo players (auto: ${auto}) to room ${roomId}.\n` +
+      `💰 Demo balances rebalanced successfully.`
     );
   } catch (err) {
     console.error("Error adding random players:", err);
@@ -1193,6 +1194,7 @@ if (pending?.type === "awaiting_random_auto") {
   pendingActions.delete(userId);
   return;
 }
+
 
 
 

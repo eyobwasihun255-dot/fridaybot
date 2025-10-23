@@ -383,7 +383,7 @@ for (const pid of playerIds) {
     }
   }
   // 🧮 Collect demo balances and distribute to real players before reset
- distributeDemoBalances(roomId) {
+ async distributeDemoBalances(roomId) {
   try {
     const usersRef = ref(rtdb, "users");
     const usersSnap = await get(usersRef);
@@ -453,7 +453,7 @@ for (const pid of playerIds) {
       try {
         if (this.resetRoomTimers.has(roomId)) {
           clearTimeout(this.resetRoomTimers.get(roomId));
-          this.distributeDemoBalances(roomId);
+          await this.distributeDemoBalances(roomId);
           this.resetRoomTimers.delete(roomId);
         }
         const rid = setTimeout(async () => {

@@ -979,13 +979,47 @@ if (text === "/random") {
   return;
 }
 
+
 // Step 2: Get Room ID
 if (pending?.type === "awaiting_random_room") {
   const roomId = text.trim();
-  sendMessage(chatId, "🔢 Enter how many random demo players to add:");
+
+  // ✅ Get room info
+  const roomRef = ref(rtdb, `rooms/${roomId}`);
+  const roomSnap = await get(roomRef);
+
+  if (!roomSnap.exists()) {
+    sendMessage(chatId, "❌ Room not found. Please enter a valid Room ID:");
+    return;
+  }
+
+  const room = roomSnap.val();
+  const betAmount = room.betAmount || 0;
+
+  // ✅ Get current players
+  const playersSnap = await get(ref(rtdb, `rooms/${roomId}/players`));
+  const currentPlayers = playersSnap.exists() ? playersSnap.val() : {};
+
+  // ✅ Get all users to filter demo players
+  const usersSnap = await get(ref(rtdb, "users"));
+  const allUsers = usersSnap.exists() ? usersSnap.val() : {};
+
+  const eligibleDemoPlayers = Object.values(allUsers).filter(u =>
+    typeof u.telegramId === "string" &&
+    u.telegramId.startsWith("demo") &&
+    (u.balance || 0) >= betAmount
+  );
+
+  sendMessage(
+    chatId,
+    `🔢 Room ${roomId} info: There are ${eligibleDemoPlayers.length} demo players with balance >= ${betAmount}.\n` +
+    `Please enter how many new demo players to add:`
+  );
+
   pendingActions.set(userId, { type: "awaiting_random_count", roomId });
   return;
 }
+
 
 // Step 3: Get quantity
 if (pending?.type === "awaiting_random_count") {

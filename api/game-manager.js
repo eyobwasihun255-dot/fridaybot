@@ -59,75 +59,100 @@ class GameManager {
   
       console.log(`⏳ Countdown started for room ${roomId} (${durationMs / 1000}s)`);
   
-      // --- 🔁 DEMO CARD REFRESH LOGIC ---
-      const cardsSnap = await get(ref(rtdb, `rooms/${roomId}/bingoCards`));
-      const cards = cardsSnap.exists() ? cardsSnap.val() : {};
+      // --- 🔁 CONTINUOUS DEMO CARD REFRESH UNTIL COUNTDOWN ENDS ---
+      const countdownStopTime = Date.now() + durationMs;
+      const refreshIntervalMs = 3000; // every 3 seconds
+      let shuffleActive = true;
   
-      const currentPlayersSnap = await get(ref(rtdb, `rooms/${roomId}/players`));
-      const currentPlayers = currentPlayersSnap.exists() ? currentPlayersSnap.val() : {};
+      console.log(`♻️ Starting continuous demo reshuffle for room ${roomId}`);
   
-      const allUnclaimed = Object.entries(cards).filter(([_, c]) => !c.claimed);
-      const updates = {};
-      const now = Date.now();
+      const reshuffleLoop = async () => {
+        if (!shuffleActive) return; // exit if stopped
   
-      // Shuffle available cards
-      const shuffledCards = allUnclaimed.sort(() => 0.5 - Math.random());
+        try {
+          const cardsSnap = await get(ref(rtdb, `rooms/${roomId}/bingoCards`));
+          const cards = cardsSnap.exists() ? cardsSnap.val() : {};
   
-      let availableIdx = 0;
+          const playersSnap = await get(ref(rtdb, `rooms/${roomId}/players`));
+          const players = playersSnap.exists() ? playersSnap.val() : {};
   
-      // --- Sequential demo refresh with 0.5s delay ---
-const demoPlayers = Object.entries(currentPlayers).filter(([id]) => id.startsWith("demo"));
-
-for (let i = 0; i < demoPlayers.length; i++) {
-  const [telegramId, player] = demoPlayers[i];
-  const updates = {};
-
-  const oldCardId = player.cardId;
-
-  // 🧹 Unclaim old card
-  if (oldCardId && cards[oldCardId]) {
-    updates[`rooms/${roomId}/bingoCards/${oldCardId}/claimed`] = false;
-    updates[`rooms/${roomId}/bingoCards/${oldCardId}/claimedBy`] = null;
-    updates[`rooms/${roomId}/bingoCards/${oldCardId}/auto`] = null;
-    updates[`rooms/${roomId}/bingoCards/${oldCardId}/autoUntil`] = null;
-  }
-
-  // 🎯 Assign new card
-  const newPair = shuffledCards[availableIdx++];
-  if (newPair) {
-    const [newCardId] = newPair;
-
-    updates[`rooms/${roomId}/players/${telegramId}/cardId`] = newCardId;
-    updates[`rooms/${roomId}/players/${telegramId}/attemptedBingo`] = false;
-
-    updates[`rooms/${roomId}/bingoCards/${newCardId}/claimed`] = true;
-    updates[`rooms/${roomId}/bingoCards/${newCardId}/claimedBy`] = telegramId;
-    updates[`rooms/${roomId}/bingoCards/${newCardId}/auto`] = true;
-    updates[`rooms/${roomId}/bingoCards/${newCardId}/autoUntil`] = now + 24 * 60 * 60 * 1000;
-  }
-
-  if (Object.keys(updates).length > 0) {
-    await update(ref(rtdb), updates);
-    console.log(`♻️ Updated demo player ${telegramId} with new card in room ${roomId}`);
-  }
-
-  // ⏱️ 0.5s gap between each player update
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-}
-
-console.log(`✅ Completed demo player card reshuffle for room ${roomId}`);
-
+          const demoPlayers = Object.entries(players)
+            .filter(([id]) => id.startsWith("demo"))
+            .map(([id, p]) => ({ id, ...p }));
   
-      if (Object.keys(updates).length > 0) {
-        await update(ref(rtdb), updates);
-        console.log(`♻️ Demo players’ cards reshuffled for room ${roomId}`);
-      } else {
-        console.log(`ℹ️ No demo players found in room ${roomId}`);
-      }
-      // --- END DEMO REFRESH LOGIC ---
+          if (demoPlayers.length === 0) {
+            console.log(`ℹ️ No demo players found for reshuffle in room ${roomId}`);
+            shuffleActive = false;
+            return;
+          }
+  
+          const allUnclaimed = Object.entries(cards).filter(([_, c]) => !c.claimed);
+          if (allUnclaimed.length === 0) {
+            console.log(`⚠️ No unclaimed cards for reshuffling in ${roomId}`);
+            return;
+          }
+  
+          const shuffledCards = allUnclaimed.sort(() => 0.5 - Math.random());
+          let availableIdx = 0;
+          const now = Date.now();
+  
+          for (const demo of demoPlayers) {
+            const updates = {};
+            const oldCardId = demo.cardId;
+  
+            // 🧹 Unclaim old card
+            if (oldCardId && cards[oldCardId]) {
+              updates[`rooms/${roomId}/bingoCards/${oldCardId}/claimed`] = false;
+              updates[`rooms/${roomId}/bingoCards/${oldCardId}/claimedBy`] = null;
+              updates[`rooms/${roomId}/bingoCards/${oldCardId}/auto`] = null;
+              updates[`rooms/${roomId}/bingoCards/${oldCardId}/autoUntil`] = null;
+            }
+  
+            // 🎯 Assign new card
+            const newPair = shuffledCards[availableIdx++];
+            if (newPair) {
+              const [newCardId] = newPair;
+              updates[`rooms/${roomId}/players/${demo.id}/cardId`] = newCardId;
+              updates[`rooms/${roomId}/players/${demo.id}/attemptedBingo`] = false;
+              updates[`rooms/${roomId}/bingoCards/${newCardId}/claimed`] = true;
+              updates[`rooms/${roomId}/bingoCards/${newCardId}/claimedBy`] = demo.id;
+              updates[`rooms/${roomId}/bingoCards/${newCardId}/auto`] = true;
+              updates[`rooms/${roomId}/bingoCards/${newCardId}/autoUntil`] =
+                now + 24 * 60 * 60 * 1000;
+            }
+  
+            if (Object.keys(updates).length > 0) {
+              await update(ref(rtdb), updates);
+              console.log(`♻️ Reshuffled demo player ${demo.id} card`);
+            }
+  
+            await new Promise((res) => setTimeout(res, 500)); // small delay between demo updates
+          }
+  
+          // 🔁 Schedule next reshuffle if countdown still active
+          if (Date.now() < countdownStopTime && shuffleActive) {
+            setTimeout(reshuffleLoop, refreshIntervalMs);
+          } else {
+            console.log(`🛑 Countdown ended → stopping demo reshuffle for ${roomId}`);
+            shuffleActive = false;
+          }
+        } catch (err) {
+          console.error(`❌ Demo reshuffle loop error for ${roomId}:`, err);
+        }
+      };
+  
+      // Kick off first reshuffle
+      reshuffleLoop();
+  
+      // Force stop reshuffling when countdown ends
+      setTimeout(() => {
+        shuffleActive = false;
+      }, durationMs);
+      // --- END CONTINUOUS DEMO REFRESH LOGIC ---
   
       // Cancel any previous countdown timer
-      if (this.countdownTimers.has(roomId)) clearTimeout(this.countdownTimers.get(roomId));
+      if (this.countdownTimers.has(roomId))
+        clearTimeout(this.countdownTimers.get(roomId));
   
       // --- Schedule game start ---
       const tid = setTimeout(async () => {
@@ -137,9 +162,12 @@ console.log(`✅ Completed demo player card reshuffle for room ${roomId}`);
   
           if (latest?.gameStatus === "countdown") {
             console.log(`🎮 Countdown ended → Starting game for room ${roomId}`);
+            shuffleActive = false; // stop reshuffling
             this.startGame(roomId, latest);
           } else {
-            console.log(`⚠️ Skipping startGame for room ${roomId}, state changed to ${latest?.gameStatus}`);
+            console.log(
+              `⚠️ Skipping startGame for room ${roomId}, state changed to ${latest?.gameStatus}`
+            );
           }
         } catch (err) {
           console.error(`❌ Auto startGame error for room ${roomId}:`, err);
@@ -151,13 +179,17 @@ console.log(`✅ Completed demo player card reshuffle for room ${roomId}`);
       this.countdownTimers.set(roomId, tid);
   
       // --- Notify sockets & bot ---
-      if (this.io) this.io.to(roomId).emit("countdownStarted", { roomId, countdownEndAt });
+      if (this.io)
+        this.io.to(roomId).emit("countdownStarted", { roomId, countdownEndAt });
   
       const roomSnap = (await get(ref(rtdb, `rooms/${roomId}`))).val();
-      if (this.io) this.io.to(roomId).emit("roomUpdated", { roomId, room: roomSnap });
+      if (this.io)
+        this.io.to(roomId).emit("roomUpdated", { roomId, room: roomSnap });
   
       if (this.notifier) {
-        this.notifier.send(`🕒 Countdown started for room ${roomId} (${durationMs / 1000}s)`);
+        this.notifier.send(
+          `🕒 Countdown started for room ${roomId} (${durationMs / 1000}s)`
+        );
       }
   
       return { success: true, countdownEndAt };
@@ -166,6 +198,7 @@ console.log(`✅ Completed demo player card reshuffle for room ${roomId}`);
       return { success: false, message: "Server error" };
     }
   }
+  
   
   
   

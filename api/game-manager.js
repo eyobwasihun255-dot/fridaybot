@@ -59,19 +59,19 @@ class GameManager {
   
       console.log(`⏳ Countdown started for room ${roomId} (${durationMs / 1000}s)`);
   
-      // --- 🔁 CONTINUOUS DEMO CARD REFRESH UNTIL COUNTDOWN ENDS ---
-     // --- 🔁 CONTINUOUS DEMO CARD REFRESH UNTIL COUNTDOWN ENDS ---
-const countdownStopTime = Date.now() + durationMs;
+      const countdownStopTime = Date.now() + durationMs;
 const refreshIntervalMs = 3000; // every 3 seconds
 let shuffleActive = true;
+let reshuffleCount = 0;
+const MAX_RESHUFFLES = 15;
 
-console.log(`♻️ Starting continuous demo reshuffle for room ${roomId}`);
+console.log(`♻️ Starting continuous demo reshuffle for room ${roomId} (max ${MAX_RESHUFFLES})`);
 
 const reshuffleLoop = async () => {
   if (!shuffleActive) return;
 
   try {
-    // 🔍 Re-check room status every loop
+    // 🔍 Check room state before anything
     const roomSnap = await get(ref(rtdb, `rooms/${roomId}`));
     const roomData = roomSnap.exists() ? roomSnap.val() : null;
 
@@ -81,9 +81,9 @@ const reshuffleLoop = async () => {
       return;
     }
 
-    // 🔥 Hard stop if countdown time expired
-    if (Date.now() >= countdownStopTime) {
-      console.log(`🛑 Countdown time expired → stopping reshuffle for ${roomId}`);
+    // 🧨 Stop if time expired or reshuffle limit hit
+    if (Date.now() >= countdownStopTime || reshuffleCount >= MAX_RESHUFFLES) {
+      console.log(`🛑 Stopping reshuffle for ${roomId}: ${reshuffleCount} reshuffles done`);
       shuffleActive = false;
       return;
     }
@@ -118,7 +118,6 @@ const reshuffleLoop = async () => {
       const updates = {};
       const oldCardId = demo.cardId;
 
-      // 🧹 Unclaim old card
       if (oldCardId && cards[oldCardId]) {
         updates[`rooms/${roomId}/bingoCards/${oldCardId}/claimed`] = false;
         updates[`rooms/${roomId}/bingoCards/${oldCardId}/claimedBy`] = null;
@@ -126,7 +125,6 @@ const reshuffleLoop = async () => {
         updates[`rooms/${roomId}/bingoCards/${oldCardId}/autoUntil`] = null;
       }
 
-      // 🎯 Assign new card
       const newPair = shuffledCards[availableIdx++];
       if (newPair) {
         const [newCardId] = newPair;
@@ -146,14 +144,23 @@ const reshuffleLoop = async () => {
       await new Promise((res) => setTimeout(res, 300));
     }
 
-    // 🔁 Loop again only if still active
-    if (shuffleActive) setTimeout(reshuffleLoop, refreshIntervalMs);
+    reshuffleCount++; // increment counter
+    console.log(`🔁 Reshuffle #${reshuffleCount} completed for room ${roomId}`);
+
+    // 🔁 Schedule next reshuffle
+    if (shuffleActive && reshuffleCount < MAX_RESHUFFLES) {
+      setTimeout(reshuffleLoop, refreshIntervalMs);
+    } else {
+      console.log(`🛑 Max reshuffles reached (${MAX_RESHUFFLES}) for ${roomId}`);
+      shuffleActive = false;
+    }
 
   } catch (err) {
     console.error(`❌ Demo reshuffle loop error for ${roomId}:`, err);
     shuffleActive = false;
   }
 };
+
 
 // Kick off first reshuffle
 reshuffleLoop();

@@ -161,10 +161,16 @@ class GameManager {
           const latest = snap.val();
   
           if (latest?.gameStatus === "countdown") {
-            console.log(`🎮 Countdown ended → Starting game for room ${roomId}`);
-            shuffleActive = false; // stop reshuffling
-            this.startGame(roomId, latest);
-          } else {
+            console.log(`🎮 Countdown ended → Waiting for reshuffle to finish before starting game`);
+            shuffleActive = false;
+          
+            // Give the loop time to complete its last batch of writes
+            await new Promise(res => setTimeout(res, 2000));
+          
+            console.log(`🎮 Starting game for room ${roomId}`);
+            await this.startGame(roomId, latest);
+          }
+           else {
             console.log(
               `⚠️ Skipping startGame for room ${roomId}, state changed to ${latest?.gameStatus}`
             );
@@ -843,7 +849,10 @@ for (const pid of playerIds) {
         const balanceRef = ref(rtdb, `users/${playerId}/balance`);
 
         // Deduct balance
-        await runTransaction(balanceRef, current => (current || 0) - betAmount);
+        const snap = await get(balanceRef);
+const current = snap.val() || 0;
+await set(balanceRef, current - betAmount);
+
 
         // Record deduction
         const deductRef = ref(rtdb, `deductRdbs/${uuidv4()}`);

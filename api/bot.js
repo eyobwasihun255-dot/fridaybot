@@ -1298,50 +1298,42 @@ if (text.startsWith("/demoadd")) {
       return;
     }
 
-    const usersSnap = await get(ref(rtdb, "users"));
-    if (!usersSnap.exists()) {
-      sendMessage(chatId, "❌ No users found in the database.");
-      return;
-    }
+    const usersRef = ref(rtdb, "users");
 
-    const allUsers = usersSnap.val();
+    await runTransaction(usersRef, currentUsers => {
+      if (!currentUsers) return;
 
-    const demoPlayers = Object.values(allUsers)
-      .filter(u => typeof u.telegramId === "string" && u.telegramId.startsWith("demo"));
+      const demoPlayers = Object.values(currentUsers).filter(u =>
+        typeof u.telegramId === "string" && u.telegramId.startsWith("demo")
+      );
 
-    const lowBalancePlayers = demoPlayers.filter(u => (u.balance || 0) < 10);
+      const lowBalancePlayers = demoPlayers.filter(u => (u.balance || 0) < 10);
 
-    if (lowBalancePlayers.length === 0) {
-      sendMessage(chatId, "ℹ️ No demo players with balance below 10 found.");
-      return;
-    }
+      if (lowBalancePlayers.length === 0) return; // nothing to do
 
-    const totalRedistribute = lowBalancePlayers.reduce((sum, u) => sum + (u.balance || 0), 0);
+      if (!currentUsers[targetId]) throw new Error("Target player not found");
 
-    const updates = {};
-    // Set all low-balance demo players to 0
-    for (const p of lowBalancePlayers) {
-      updates[`users/${p.id}/balance`] = 0;
-    }
+      let totalRedistribute = 0;
 
-    // Add total to the target player
-    if (!allUsers[targetId]) {
-      sendMessage(chatId, "❌ Target player not found.");
-      return;
-    }
+      // Deduct from low-balance demo accounts
+      for (const p of lowBalancePlayers) {
+        totalRedistribute += p.balance || 0;
+        p.balance = 0; // atomic deduction
+      }
 
-    const targetBalance = allUsers[targetId].balance || 0;
-    updates[`users/${targetId}/balance`] = targetBalance + totalRedistribute;
+      // Add total to target player
+      currentUsers[targetId].balance = (currentUsers[targetId].balance || 0) + totalRedistribute;
 
-    await update(ref(rtdb), updates);
+      return currentUsers; // commit transaction
+    });
 
     sendMessage(
       chatId,
-      `✅ Collected ${totalRedistribute} from ${lowBalancePlayers.length} demo players and added it to ${targetId}.`
+      `✅ Collected balances from demo players with balance < 10 and added to ${targetId} successfully.`
     );
 
   } catch (err) {
-    console.error("Error in /demoadd:", err);
+    console.error("Error in /demoadd transaction:", err);
     sendMessage(chatId, "❌ Failed to execute /demoadd. Check logs for details.");
   }
 

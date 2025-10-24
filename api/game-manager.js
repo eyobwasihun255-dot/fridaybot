@@ -115,6 +115,7 @@ class GameManager {
               updates[`rooms/${roomId}/bingoCards/${oldCardId}/claimedBy`] = null;
               updates[`rooms/${roomId}/bingoCards/${oldCardId}/auto`] = false;
               updates[`rooms/${roomId}/bingoCards/${oldCardId}/autoUntil`] = null;
+              console.log("removed old card");
             }
           
             // --- 3️⃣ Assign new card and "return" player ---

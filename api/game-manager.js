@@ -104,33 +104,48 @@ class GameManager {
             // Stop reshuffle if countdown ended
             const currentRoom = (await get(roomRef)).val();
             if (currentRoom.gameStatus !== "countdown") break;
-  
+          
             const oldCardId = demo.cardId;
             const updates = {};
-  
+          
+            // --- 1️⃣ Remove player temporarily from room ---
+            updates[`rooms/${roomId}/players/${demo.id}`] = null;
+          
+            // --- 2️⃣ Unclaim old card if exists ---
             if (oldCardId && cards[oldCardId]) {
               updates[`rooms/${roomId}/bingoCards/${oldCardId}/claimed`] = false;
               updates[`rooms/${roomId}/bingoCards/${oldCardId}/claimedBy`] = null;
               updates[`rooms/${roomId}/bingoCards/${oldCardId}/auto`] = false;
               updates[`rooms/${roomId}/bingoCards/${oldCardId}/autoUntil`] = null;
             }
-  
+          
+            // --- 3️⃣ Assign new card and "return" player ---
             const newPair = shuffledCards[availableIdx++];
             if (newPair) {
               const [newCardId] = newPair;
-              updates[`rooms/${roomId}/players/${demo.id}/cardId`] = newCardId;
-              updates[`rooms/${roomId}/players/${demo.id}/attemptedBingo`] = false;
+          
+              // Reinsert player with new card assignment
+              const updatedDemo = {
+                ...demo,
+                cardId: newCardId,
+                attemptedBingo: false,
+                lastReshuffledAt: now,
+              };
+          
+              updates[`rooms/${roomId}/players/${demo.id}`] = updatedDemo;
+          
               updates[`rooms/${roomId}/bingoCards/${newCardId}/claimed`] = true;
               updates[`rooms/${roomId}/bingoCards/${newCardId}/claimedBy`] = demo.id;
               updates[`rooms/${roomId}/bingoCards/${newCardId}/auto`] = true;
               updates[`rooms/${roomId}/bingoCards/${newCardId}/autoUntil`] = now + 24 * 60 * 60 * 1000;
             }
-  
+          
             await update(ref(rtdb), updates);
-            console.log(`   ↪️ Demo ${demo.id} reshuffled`);
-  
+            console.log(`   ↪️ Demo ${demo.id} temporarily removed and re-added with new card`);
+          
             await new Promise(r => setTimeout(r, 1000)); // 1s gap between each
           }
+          
   
           console.log(`✅ Finished reshuffling demo players in room ${roomId}`);
         } catch (err) {
@@ -824,48 +839,32 @@ await set(balanceRef, current - betAmount);
     const usedNumbers = new Set();
     const drawnNumbers = [];
   
-    if (!Array.isArray(cards) || cards.length === 0) {
-      console.warn(`⚠️ No cards found for room ${roomId}`);
-      return { drawnNumbers: [], winners: [] };
-    }
+    if (!Array.isArray(cards) || cards.length === 0) return { drawnNumbers: [], winners: [] };
   
-    if (!this.lastWinnerUserByRoom) this.lastWinnerUserByRoom = new Map();
-    const lastWinnerUserId = this.lastWinnerUserByRoom.get(roomId) || null;
+    if (!this.winHistoryByRoom) this.winHistoryByRoom = new Map(); // track last 10 winners per room
+    const winHistory = this.winHistoryByRoom.get(roomId) || [];
   
     // Filter valid cards
     const validCards = cards.filter(c => c && Array.isArray(c.numbers) && c.claimedBy);
-    if (validCards.length === 0) {
-      console.warn(`⚠️ No valid cards for room ${roomId}`);
-      return { drawnNumbers: [], winners: [] };
-    }
+    if (validCards.length === 0) return { drawnNumbers: [], winners: [] };
   
-    // --- Filter out last winner’s user ---
-    let possibleWinners = validCards.filter(
-      c => c.claimedBy !== lastWinnerUserId
-    );
+    // Filter users who haven't hit the 2-win limit in last 10 games
+    const eligibleCards = validCards.filter(card => {
+      const wins = winHistory.filter(u => u === card.claimedBy).length;
+      return wins < 2;
+    });
   
-    // --- Edge case: all cards belong to last winner ---
-    const allSameUser = validCards.every(c => c.claimedBy === lastWinnerUserId);
-    if (possibleWinners.length === 0 || allSameUser) {
-      possibleWinners = [...validCards];
-    }
+    let possibleWinners = eligibleCards.length > 0 ? eligibleCards : validCards; // fallback if everyone hit limit
   
+    // Randomly select winner
     const winnerCard = possibleWinners[Math.floor(Math.random() * possibleWinners.length)];
-    if (!winnerCard) {
-      console.error(`❌ Could not select a winner card for room ${roomId}`);
-      return { drawnNumbers: [], winners: [] };
-    }
+    if (!winnerCard) return { drawnNumbers: [], winners: [] };
   
     const newWinnerUserId = winnerCard.claimedBy;
   
     // --- Safe pattern selection ---
     const patterns = this.pickPatternNumbers(winnerCard) || [];
     const winnerPattern = patterns[Math.floor(Math.random() * patterns.length)] || [];
-    if (winnerPattern.length === 0) {
-      console.error(`❌ Invalid pattern for winnerCard in room ${roomId}`);
-      return { drawnNumbers: [], winners: [] };
-    }
-  
     const winnerMissIndex = Math.floor(Math.random() * winnerPattern.length);
     const winnerMissing = winnerPattern[winnerMissIndex] || 0;
   
@@ -876,15 +875,13 @@ await set(balanceRef, current - betAmount);
       }
     });
   
-    const loserMissingNumbers = [];
+    // Generate numbers for losers
     validCards.forEach(card => {
       if (card.id === winnerCard.id) return;
       const pats = this.pickPatternNumbers(card);
-if (!Array.isArray(pats) || pats.length === 0) return;
-const chosen = pats[Math.floor(Math.random() * pats.length)];
-if (!Array.isArray(chosen) || chosen.length === 0) return;
-const missIndex = Math.floor(Math.random() * chosen.length);
-
+      if (!Array.isArray(pats) || pats.length === 0) return;
+      const chosen = pats[Math.floor(Math.random() * pats.length)];
+      const missIndex = Math.floor(Math.random() * chosen.length);
       const missingNum = chosen[missIndex] || 0;
   
       chosen.forEach((n, i) => {
@@ -893,12 +890,9 @@ const missIndex = Math.floor(Math.random() * chosen.length);
           drawnNumbers.push(n);
         }
       });
-  
-      if (missingNum > 0 && missingNum <= 75) {
-        loserMissingNumbers.push(missingNum);
-      }
     });
   
+    // Fill remaining numbers
     while (drawnNumbers.length < 24) {
       const rand = Math.floor(Math.random() * 75) + 1;
       if (!usedNumbers.has(rand)) {
@@ -921,37 +915,23 @@ const missIndex = Math.floor(Math.random() * chosen.length);
     }
   
     const rest = [];
-    loserMissingNumbers.forEach(n => {
-      if (n > 0 && n <= 75 && !usedNumbers.has(n)) {
-        usedNumbers.add(n);
-        rest.push(n);
-      }
-    });
-  
     const totalNeeded = 75 - (first25.length + neutralAfterWinner.length + rest.length);
-const availableNumbers = [];
-for (let i = 1; i <= 75; i++) {
-  if (!usedNumbers.has(i)) availableNumbers.push(i);
-}
-
-while (rest.length < totalNeeded && availableNumbers.length > 0) {
-  const randIndex = Math.floor(Math.random() * availableNumbers.length);
-  const randNum = availableNumbers.splice(randIndex, 1)[0];
-  rest.push(randNum);
-  usedNumbers.add(randNum);
-}
-
+    const availableNumbers = Array.from({ length: 75 }, (_, i) => i + 1).filter(n => !usedNumbers.has(n));
+    while (rest.length < totalNeeded && availableNumbers.length > 0) {
+      const randIndex = Math.floor(Math.random() * availableNumbers.length);
+      rest.push(availableNumbers.splice(randIndex, 1)[0]);
+    }
   
-    const finalDrawn = [
-      ...first25,
-      ...neutralAfterWinner,
-      ...this.shuffleArray(rest),
-    ];
+    const finalDrawn = [...first25, ...neutralAfterWinner, ...this.shuffleArray(rest)];
+  
+    // Save winner to history
+    winHistory.push(newWinnerUserId);
+    if (winHistory.length > 10) winHistory.shift(); // keep last 10 games
+    this.winHistoryByRoom.set(roomId, winHistory);
   
     winners.push(winnerCard.id);
-    console.log(`last winner before current drawn${this.lastWinnerUserByRoom.get(roomId) || null}`)
     this.lastWinnerUserByRoom.set(roomId, newWinnerUserId);
-    console.log(`last winner after current drawn${this.lastWinnerUserByRoom.get(roomId) || null}`)
+  
     return { drawnNumbers: finalDrawn.slice(0, 75), winners };
   }
   

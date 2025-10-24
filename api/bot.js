@@ -1267,20 +1267,18 @@ if (text === "/demo") {
   return;
 }
 if (text.startsWith("/demoadd")) {
-  // admin check
   if (!ADMIN_IDS.includes(userId)) {
     sendMessage(chatId, "❌ You are not authorized to use this command.");
     return;
   }
 
-  // Command format: /demoadd <targetTelegramId>
   const parts = text.trim().split(/\s+/);
   if (parts.length < 2) {
     sendMessage(chatId, "❌ Usage: /demoadd <targetTelegramId>");
     return;
   }
 
-  const targetTelegramId = parts[1];
+  const targetTelegramId = parts[1].toLowerCase();
 
   try {
     const usersRef = ref(rtdb, "users");
@@ -1288,74 +1286,56 @@ if (text.startsWith("/demoadd")) {
     const result = await runTransaction(usersRef, currentUsers => {
       if (!currentUsers) return;
 
-      // Build list of demo players as [key, userObj]
+      // Find demo users (case-insensitive)
       const demoPlayers = Object.entries(currentUsers)
-        .filter(([_, u]) => typeof u?.telegramId === "string" && u.telegramId.startsWith("demo"));
+        .filter(([_, u]) => typeof u?.telegramId === "string" && u.telegramId.toLowerCase().startsWith("demo"));
 
-      // Find target user entry by telegramId
-      const targetEntry = demoPlayers.find(([_, u]) => u.telegramId === targetTelegramId);
-      if (!targetEntry) {
-        // abort transaction by returning undefined (no commit)
-        throw new Error("Target player not found");
-      }
+      console.log("🧾 Demo players:", demoPlayers.map(([_, u]) => ({ id: u.telegramId, bal: u.balance })));
+
+      const targetEntry = demoPlayers.find(([_, u]) => u.telegramId.toLowerCase() === targetTelegramId);
+      if (!targetEntry) throw new Error("Target player not found");
+
       const [targetKey, targetUser] = targetEntry;
-
-      // Collect balances from demo accounts with balance < 10, excluding target
       let totalRedistribute = 0;
       let anyDonor = false;
 
       for (const [key, u] of demoPlayers) {
-        if (key === targetKey) continue; // skip target
+        if (key === targetKey) continue;
         const bal = Number(u.balance) || 0;
         if (bal < 10) {
+          console.log(`→ Draining ${u.telegramId}: ${bal}`);
           totalRedistribute += bal;
-          currentUsers[key].balance = 0; // zero the donor
+          currentUsers[key].balance = 0;
           anyDonor = true;
         }
       }
 
-      // If nothing to collect, abort (no commit). Returning undefined cancels the transaction update.
-      if (!anyDonor || totalRedistribute === 0) {
-        return; // no-op -> transaction will complete but won't commit changes
+      if (!anyDonor) {
+        console.log("⚠️ No eligible donors found.");
+        return;
       }
 
-      // Add total to target
       currentUsers[targetKey].balance = (Number(currentUsers[targetKey].balance) || 0) + totalRedistribute;
 
-      // Return the updated users object for commit
+      console.log(`✅ Added ${totalRedistribute} to ${targetUser.telegramId}`);
+
       return currentUsers;
     });
 
-    // runTransaction returns an object; check committed
     if (!result || !result.committed) {
-      // Could be aborted because no donors or some other reason
       sendMessage(chatId, "⚠️ No demo accounts with balance < 10 found to collect from. Nothing changed.");
       return;
     }
 
-    // Get new target balance from the committed snapshot (safe read of result.snapshot)
-    const afterUsers = result.snapshot.val();
-    // find the new target object in afterUsers
-    const targetObj = Object.values(afterUsers).find(u => u.telegramId === targetTelegramId);
-    const newBalance = targetObj ? (Number(targetObj.balance) || 0) : "unknown";
-
-    sendMessage(
-      chatId,
-      `✅ Collected demo balances and transferred to ${targetTelegramId}. New balance: ${newBalance}`
-    );
-
+    sendMessage(chatId, `✅ Balances collected and transferred to ${targetTelegramId}.`);
   } catch (err) {
     console.error("Error in /demoadd transaction:", err);
-    // give a useful message if the target is missing specifically
-    if (err && /Target player not found/i.test(String(err.message))) {
-      sendMessage(chatId, `❌ Target player "${targetTelegramId}" not found among demo users.`);
-    } else {
-      sendMessage(chatId, "❌ Failed to execute /demoadd. Check logs for details.");
-    }
+    sendMessage(chatId, "❌ Failed to execute /demoadd. Check logs for details.");
   }
 
   return;
 }
+
 
 
 

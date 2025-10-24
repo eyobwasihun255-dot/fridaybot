@@ -178,51 +178,89 @@ const server = createSocketServer(app);
 // Hack: socket-server internally creates and owns io; expose by setting on connection
 // We can set it via a small timeout after server starts by attaching to globalThis.io if set there.
 
-// Auto-countdown monitor: if room is waiting, has >=2 players, and no active countdown, start one
-// ✅ Auto-countdown monitor only
+// Optimized auto-countdown monitor with caching and batch operations
+let roomCache = new Map();
+let lastCacheUpdate = 0;
+const CACHE_TTL = 5000; // 5 seconds cache
+
 const autoCountdownCheck = async () => {
   try {
-    const roomsSnap = await get(ref(rtdb, 'rooms'));
-    const rooms = roomsSnap.val() || {};
-
-    for (const [roomId, room] of Object.entries(rooms)) {
-      const players = Object.values(room.players || {}).filter((p) => {
-        if (!p.cardId) return false;
-        if (room.isDemoRoom) return true;
-
-        // Bet placed or card claimed (for auto-bet)
-        const hasBet = !!p.betAmount;
-        const card = room.bingoCards?.[p.cardId];
-        const hasAuto = card?.claimed && card?.auto;
-
-        return hasBet || hasAuto;
+    const now = Date.now();
+    
+    // Use cache if still valid, otherwise refresh
+    if (now - lastCacheUpdate > CACHE_TTL) {
+      const roomsSnap = await get(ref(rtdb, 'rooms'));
+      const rooms = roomsSnap.val() || {};
+      
+      // Update cache
+      roomCache.clear();
+      Object.entries(rooms).forEach(([roomId, room]) => {
+        roomCache.set(roomId, {
+          ...room,
+          lastChecked: now
+        });
       });
+      lastCacheUpdate = now;
+    }
 
-      const hasEnoughPlayers = players.length >= 2;
-      const isWaiting = room.gameStatus === "waiting";
-      const countdownActive = room.countdownEndAt && room.countdownEndAt > Date.now();
-
-      if (isWaiting && hasEnoughPlayers && !countdownActive) {
-        console.log(`🔄 Starting countdown for room ${roomId} with ${players.length} players`);
-        const result = await gameManager.startCountdown(room, roomId, players, 30000, "auto");
-        if (!result.success) {
-          console.warn(`❌ Failed to start countdown for room ${roomId}: ${result.message}`);
+    // Process rooms in parallel batches
+    const roomEntries = Array.from(roomCache.entries());
+    const batchSize = 5;
+    
+    for (let i = 0; i < roomEntries.length; i += batchSize) {
+      const batch = roomEntries.slice(i, i + batchSize);
+      await Promise.allSettled(batch.map(async ([roomId, room]) => {
+        try {
+          await processRoomCountdown(roomId, room, now);
+        } catch (error) {
+          console.error(`❌ Error processing room ${roomId}:`, error);
         }
-      }
-
-      // Cancel countdown if not enough players remain (only if auto)
-      if (room.gameStatus === "countdown" && !hasEnoughPlayers && room.countdownStartedBy === "auto") {
-        console.log(`❌ Cancelling countdown for room ${roomId} (not enough players)`);
-        await gameManager.cancelCountdown(roomId);
-      }
+      }));
     }
   } catch (error) {
     console.error("⚠️ autoCountdownCheck error:", error);
   }
 };
 
-// 🔁 Run only this loop every 3 seconds
-setInterval(autoCountdownCheck, 2000);
+const processRoomCountdown = async (roomId, room, now) => {
+  // Quick validation
+  if (!room || !room.players) return;
+
+  const players = Object.values(room.players).filter((p) => {
+    if (!p.cardId) return false;
+    if (room.isDemoRoom) return true;
+
+    // Bet placed or card claimed (for auto-bet)
+    const hasBet = !!p.betAmount;
+    const card = room.bingoCards?.[p.cardId];
+    const hasAuto = card?.claimed && card?.auto;
+
+    return hasBet || hasAuto;
+  });
+
+  const hasEnoughPlayers = players.length >= 2;
+  const isWaiting = room.gameStatus === "waiting";
+  const countdownActive = room.countdownEndAt && room.countdownEndAt > now;
+
+  // Start countdown if conditions are met
+  if (isWaiting && hasEnoughPlayers && !countdownActive) {
+    console.log(`🔄 Starting countdown for room ${roomId} with ${players.length} players`);
+    const result = await gameManager.startCountdown(room, roomId, players, 30000, "auto");
+    if (!result.success) {
+      console.warn(`❌ Failed to start countdown for room ${roomId}: ${result.message}`);
+    }
+    return;
+  }
+
+  // Cancel countdown if not enough players remain (only if auto)
+  if (room.gameStatus === "countdown" && !hasEnoughPlayers && room.countdownStartedBy === "auto") {
+    console.log(`❌ Cancelling countdown for room ${roomId} (not enough players)`);
+    await gameManager.cancelCountdown(roomId);
+  }
+};
+
+// 🔁 Run optimized loop every 3 seconds
+setInterval(autoCountdownCheck, 3000);
 
 
 server.listen(PORT, () => {

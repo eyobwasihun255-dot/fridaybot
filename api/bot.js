@@ -153,32 +153,61 @@ fallback: "Send /playgame or /deposit or /withdraw to start.",
 }
 
 // ====================== TELEGRAM HELPERS ======================
-async function telegram(method, payload) {
+async function telegram(method, payload, retries = 3) {
   const url = `https://api.telegram.org/bot${TOKEN}/${method}`;
   
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000); // 5-second timeout
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000); // 10-second timeout
 
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
 
-    clearTimeout(timeout);
+      clearTimeout(timeout);
 
-    if (!res.ok) {
-      const text = await res.text();
-      console.warn(`⚠️ Telegram API error: ${res.status} - ${text}`);
-      return { ok: false, error: text };
+      if (!res.ok) {
+        const text = await res.text();
+        
+        // Don't retry for certain error codes
+        if (res.status === 400 || res.status === 403 || res.status === 404) {
+          console.warn(`⚠️ Telegram API error (non-retryable): ${res.status} - ${text}`);
+          return { ok: false, error: text };
+        }
+        
+        // Retry for server errors and network issues
+        if (attempt < retries) {
+          console.warn(`⚠️ Telegram API error (attempt ${attempt}/${retries}): ${res.status} - ${text}`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
+          continue;
+        }
+        
+        console.warn(`⚠️ Telegram API error (final attempt): ${res.status} - ${text}`);
+        return { ok: false, error: text };
+      }
+
+      return await res.json();
+    } catch (err) {
+      // Don't retry for certain network errors
+      if (err.name === 'AbortError' || err.code === 'ENOTFOUND' || err.code === 'ECONNREFUSED') {
+        console.error(`❌ Telegram network error (non-retryable):`, err.message);
+        return { ok: false, error: err.message };
+      }
+      
+      // Retry for timeout and other network issues
+      if (attempt < retries) {
+        console.warn(`⚠️ Telegram network error (attempt ${attempt}/${retries}):`, err.message);
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
+        continue;
+      }
+      
+      console.error(`❌ Telegram network error (final attempt):`, err.message);
+      return { ok: false, error: err.message };
     }
-
-    return await res.json();
-  } catch (err) {
-    console.error(`❌ Telegram send error:`, err.message);
-    return { ok: false, error: err.message }; // Never throw!
   }
 }
 function homeKeyboard(lang) {

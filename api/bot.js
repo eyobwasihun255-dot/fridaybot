@@ -1110,13 +1110,14 @@ if (pending?.type === "awaiting_random_auto") {
     }
 
     const allUsers = usersSnap.val();
-    const demoUsers = Object.values(allUsers).filter(
-      u =>
-        typeof u.telegramId === "string" &&
-        u.telegramId.startsWith("demo") &&
-        !currentPlayers[u.telegramId] && // not already in the room
-        (u.balance || 0) >= betAmount
-    );
+    const demoUsers = Object.entries(allUsers)
+  .filter(([key, u]) =>
+    key.startsWith("demo") &&
+    !currentPlayers[key] && // not already in the room
+    (u.balance || 0) >= betAmount
+  )
+  .map(([_, u]) => u);
+
 
     if (demoUsers.length < neededCount) {
       sendMessage(

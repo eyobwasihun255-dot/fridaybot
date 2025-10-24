@@ -60,7 +60,10 @@ class GameManager {
           const latest = snap.val();
           if (latest?.gameStatus === "countdown") {
             console.log(`🎮 Countdown ended → starting game for room ${roomId}`);
-            await this.startGame(roomId, latest);
+            // Start game immediately and don't wait for completion
+            this.startGameOptimized(roomId, latest).catch(err => {
+              console.error(`❌ Error in optimized game start for room ${roomId}:`, err);
+            });
           } else {
             console.log(`⚠️ Skipping startGame for room ${roomId}, state changed to ${latest?.gameStatus}`);
           }
@@ -75,149 +78,90 @@ class GameManager {
       if (this.io) this.io.to(roomId).emit("countdownStarted", { roomId, countdownEndAt });
   
       // --- Start demo reshuffle (robust) ---
-      (async () => {
-        try {
-          const cardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
-          const playersRef = ref(rtdb, `rooms/${roomId}/players`);
-  
-          // Fetch current cards + players
-          const [cardsSnap, playersSnap] = await Promise.all([get(cardsRef), get(playersRef)]);
-          if (!cardsSnap.exists() || !playersSnap.exists()) {
-            console.log(`⚠️ Missing cards or players for reshuffle in ${roomId}`);
-            return;
-          }
-  
-          const cards = cardsSnap.val();
-          const playersData = playersSnap.val();
-  
-          // Step 1: identify demo players currently in playersData
-          const demoPlayers = Object.entries(playersData)
-            .filter(([id, p]) => id.startsWith("demo"))
-            .map(([id, p]) => ({ id, ...p }));
-  
-          if (demoPlayers.length === 0) {
-            console.log(`ℹ️ No demo players found in room ${roomId}`);
-            return;
-          }
-  
-          // Step 2: Unclaim any previously claimed cards that belong to demo players (single atomic update)
-          const unclaimUpdates = {};
-          let unclaimedCount = 0;
-          for (const [cardId, card] of Object.entries(cards)) {
-            if (card && card.claimed === true && card.claimedBy && String(card.claimedBy).startsWith("demo")) {
-              unclaimUpdates[`rooms/${roomId}/bingoCards/${cardId}/claimed`] = false;
-              unclaimUpdates[`rooms/${roomId}/bingoCards/${cardId}/claimedBy`] = null;
-              unclaimUpdates[`rooms/${roomId}/bingoCards/${cardId}/auto`] = false;
-              unclaimUpdates[`rooms/${roomId}/bingoCards/${cardId}/autoUntil`] = null;
-              unclaimedCount++;
-              console.log(`🧹 Unclaiming card ${cardId} from ${card.claimedBy}`);
-            }
-          }
-  
-          if (unclaimedCount > 0) {
-            await update(ref(rtdb), unclaimUpdates);
-            console.log(`✅ Unclaimed ${unclaimedCount} old demo cards`);
-          } else {
-            console.log(`ℹ️ No demo cards found to unclaim in ${roomId}`);
-          }
-  
-          // Step 3: re-fetch cards (fresh view after unclaim)
-          const refreshedSnap = await get(cardsRef);
-          const refreshedCardsObj = refreshedSnap.exists() ? refreshedSnap.val() : {};
-          const unclaimedCards = Object.entries(refreshedCardsObj).filter(([_, c]) => !c || c.claimed !== true);
-  
-          if (unclaimedCards.length === 0) {
-            console.log(`⚠️ No unclaimed cards left to reshuffle in ${roomId}`);
-            return;
-          }
-  
-          // Shuffle demoPlayers and available unclaimedCards (clone arrays before sort)
-          const shuffledDemos = [...demoPlayers].sort(() => 0.5 - Math.random());
-          const shuffledUnclaimed = [...unclaimedCards].sort(() => 0.5 - Math.random()); // entries [cardId, cardObj]
-  
-          // We'll attempt to assign at most min(shuffledDemos.length, shuffledUnclaimed.length)
-          const maxAssign = Math.min(shuffledDemos.length, shuffledUnclaimed.length);
-          if (maxAssign === 0) {
-            console.log(`ℹ️ Nothing to assign (demos: ${shuffledDemos.length}, unclaimed: ${shuffledUnclaimed.length})`);
-            return;
-          }
-  
-          const now = Date.now();
-          const assignedPlayersUpdates = {}; // will update players mapping paths in a batch after successful transactions
-          let assignedCount = 0;
-  
-          // Step 4: For each demo, attempt to claim a card using a transaction (safe)
-          for (let dIndex = 0; dIndex < shuffledDemos.length && assignedCount < shuffledUnclaimed.length; dIndex++) {
-            const demo = shuffledDemos[dIndex];
-  
-            // Find the next candidate card index that hasn't been attempted yet for this run
-            let claimedCardId = null;
-            for (let cIndex = 0; cIndex < shuffledUnclaimed.length; cIndex++) {
-              const [candidateCardId] = shuffledUnclaimed[cIndex];
-              if (!candidateCardId) continue;
-  
-              const candidateRef = ref(rtdb, `rooms/${roomId}/bingoCards/${candidateCardId}`);
-  
-              // Transaction: only claim if still unclaimed
-              // NOTE: runTransaction may not be available depending on your firebase import; adjust import if necessary.
-              try {
-                // Use runTransaction to ensure we only claim if still unclaimed
-                const result = await runTransaction(candidateRef, (current) => {
-                  if (current === null) return current; // card vanished
-                  if (current.claimed === true) return; // someone else claimed it
-                  // claim it
-                  current.claimed = true;
-                  current.claimedBy = demo.id;
-                  current.auto = true;
-                  current.autoUntil = now + 24 * 60 * 60 * 1000;
-                  return current;
-                }, { applyLocally: false });
-  
-                if (result.committed) {
-                  // successfully claimed this card for demo
-                  claimedCardId = candidateCardId;
-                  console.log(`🎴 Demo ${demo.id} successfully claimed card ${claimedCardId} via transaction`);
-                  // Remove this card from shuffledUnclaimed to avoid reattempts
-                  shuffledUnclaimed.splice(cIndex, 1);
-                  assignedCount++;
-                  break;
-                } else {
-                  // not committed (someone else claimed it or current prevented), continue to next candidate
-                  continue;
-                }
-              } catch (txErr) {
-                console.error(`❌ Transaction error when trying to claim ${candidateCardId} for ${demo.id}:`, txErr);
-                continue; // try the next candidate
-              }
-            } // end candidate loop
-  
-            // If we claimed a card, prepare players node update for that demo
-            if (claimedCardId) {
-              // set player's cardId and optional metadata
-              assignedPlayersUpdates[`rooms/${roomId}/players/${demo.id}/cardId`] = claimedCardId;
-              assignedPlayersUpdates[`rooms/${roomId}/players/${demo.id}/autoCardAssignedAt`] = now;
-              // Optionally set player's auto flag or other fields as you need
-            } else {
-              console.log(`⚠️ Could not claim any card for demo ${demo.id} (maybe not enough unclaimed cards)`);
-            }
-  
-            // Stop early if no more available unclaimed cards
-            if (shuffledUnclaimed.length === 0) break;
-          } // end demos loop
-  
-          // Step 5: Apply players mapping updates in one atomic update (if any)
-          if (Object.keys(assignedPlayersUpdates).length > 0) {
-            await update(ref(rtdb), assignedPlayersUpdates);
-            console.log(`✅ Assigned ${Object.keys(assignedPlayersUpdates).length / 2} demo players new cards in room ${roomId}`);
-          } else {
-            console.log(`ℹ️ No demo player assignments were made for room ${roomId}`);
-          }
-  
-          console.log(`✅ Finished reshuffling demo players in room ${roomId} (assigned: ${assignedCount})`);
-        } catch (err) {
-          console.error(`❌ Demo reshuffle error in room ${roomId}:`, err);
+      // --- Start demo reshuffle sequentially ---
+(async () => {
+  try {
+    const cardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
+    const playersRef = ref(rtdb, `rooms/${roomId}/players`);
+
+    const [cardsSnap, playersSnap] = await Promise.all([get(cardsRef), get(playersRef)]);
+    if (!cardsSnap.exists() || !playersSnap.exists()) return;
+
+    const cards = cardsSnap.val();
+    const playersData = playersSnap.val();
+
+    const demoPlayers = Object.entries(playersData)
+      .filter(([id]) => id.startsWith("demo"))
+      .map(([id, p]) => ({ id, ...p }));
+
+    if (demoPlayers.length === 0) return;
+
+    // Unclaim old demo cards
+    for (const [cardId, card] of Object.entries(cards)) {
+      if (card?.claimed && String(card.claimedBy).startsWith("demo")) {
+        await update(ref(rtdb), {
+          [`rooms/${roomId}/bingoCards/${cardId}/claimed`]: false,
+          [`rooms/${roomId}/bingoCards/${cardId}/claimedBy`]: null,
+          [`rooms/${roomId}/bingoCards/${cardId}/auto`]: false,
+          [`rooms/${roomId}/bingoCards/${cardId}/autoUntil`]: null
+        });
+        console.log(`🧹 Unclaimed card ${cardId} from ${card.claimedBy}`);
+      }
+    }
+
+    // Fetch fresh cards and get unclaimed ones
+    const refreshedSnap = await get(cardsRef);
+    let unclaimedCards = Object.entries(refreshedSnap.val() || {})
+      .filter(([_, c]) => !c?.claimed);
+
+    const now = Date.now();
+
+    for (const demo of demoPlayers) {
+      if (Date.now() >= countdownEndAt) {
+        console.log(`⏹ Countdown ended → stopping demo reshuffle`);
+        break;
+      }
+
+      if (unclaimedCards.length === 0) break;
+
+      // Pick a random unclaimed card
+      const [cardId] = unclaimedCards.splice(0, 1)[0];
+      const candidateRef = ref(rtdb, `rooms/${roomId}/bingoCards/${cardId}`);
+
+      try {
+        const result = await runTransaction(candidateRef, (current) => {
+          if (!current || current.claimed) return;
+          current.claimed = true;
+          current.claimedBy = demo.id;
+          current.auto = true;
+          current.autoUntil = now + 24 * 60 * 60 * 1000;
+          return current;
+        }, { applyLocally: false });
+
+        if (result.committed) {
+          await update(ref(rtdb), {
+            [`rooms/${roomId}/players/${demo.id}/cardId`]: cardId,
+            [`rooms/${roomId}/players/${demo.id}/autoCardAssignedAt`]: now
+          });
+          console.log(`🎴 Demo ${demo.id} claimed card ${cardId}`);
+        } else {
+          console.log(`⚠️ Demo ${demo.id} failed to claim card ${cardId}`);
         }
-      })();
+
+      } catch (err) {
+        console.error(`❌ Transaction error for ${demo.id}:`, err);
+      }
+
+      // Optional: small delay between demo assignments
+      await new Promise(r => setTimeout(r, 50));
+    }
+
+    console.log(`✅ Finished sequential demo reshuffle in room ${roomId}`);
+  } catch (err) {
+    console.error(`❌ Demo reshuffle error in room ${roomId}:`, err);
+  }
+})();
+
   
       // --- Return countdown info ---
       return { success: true, countdownEndAt };
@@ -251,6 +195,107 @@ class GameManager {
     } catch (err) {
       console.error('Error cancelling countdown:', err);
       return { success: false };
+    }
+  }
+
+  // Optimized game start with immediate number drawing
+  async startGameOptimized(roomId, room) {
+    const startTime = Date.now();
+    try {
+      console.log(`🎮 Starting optimized game for room ${roomId}`);
+      
+      const roomRef = ref(rtdb, `rooms/${roomId}`);
+      const roomSnap = await get(roomRef);
+      const liveRoom = roomSnap.val();
+      
+      if (!liveRoom || liveRoom.gameStatus !== "countdown") {
+        throw new Error("Room not in countdown state");
+      }
+
+      const gameId = uuidv4();
+      const playerIds = Object.keys(room.players || {}).filter(pid => {
+        const player = room.players[pid];
+        return player && player.cardId && room.bingoCards[player.cardId];
+      });
+      
+      if (playerIds.length < 2) {
+        console.log(`❌ Not enough valid players to start game in ${roomId}`);
+        await update(roomRef, { gameStatus: "waiting" });
+        return { success: false, message: "Not enough players" };
+      }
+      
+      // Generate drawn numbers and determine winners
+      const cards = playerIds.map(pid => room.bingoCards[room.players[pid].cardId]);
+      const { drawnNumbers, winners } = this.generateDrawnNumbersMultiWinner(roomId, cards);
+
+      // Safety check: ensure drawnNumbers is always an array
+      if (!Array.isArray(drawnNumbers)) {
+        console.error(`❌ generateDrawnNumbersMultiWinner returned invalid drawnNumbers:`, drawnNumbers);
+        throw new Error("Failed to generate valid drawn numbers");
+      }
+
+      const gameData = {
+        id: gameId,
+        roomId,
+        drawnNumbers,
+        currentDrawnNumbers: [],
+        currentNumberIndex: 0,
+        createdAt: Date.now(),
+        startedAt: Date.now(),
+        drawIntervalMs: 5000,
+        status: "active",
+        totalPayout: Math.floor((playerIds.length - 1) * (room.betAmount || 0) * 0.85 + (room.betAmount || 0)),
+        betsDeducted: false,
+        winners: winners.map(cardId => ({
+          id: uuidv4(),
+          cardId,
+          userId: room.bingoCards[cardId]?.claimedBy,
+          username: room.players[room.bingoCards[cardId]?.claimedBy]?.username || "Unknown",
+          checked: false
+        })),
+        gameStatus: "playing"
+      };
+
+      // STEP 1: Update room status to playing IMMEDIATELY
+      await runTransaction(roomRef, (currentRoom) => {
+        if (!currentRoom || currentRoom.gameStatus !== "countdown") return currentRoom;
+        
+        currentRoom.gameStatus = "playing";
+        currentRoom.gameId = gameId;
+        currentRoom.calledNumbers = [];
+        currentRoom.countdownEndAt = null;
+        currentRoom.countdownStartedBy = null;
+        currentRoom.currentWinner = null;
+        currentRoom.payed = false;
+        
+        return currentRoom;
+      });
+
+      // STEP 2: Notify clients that game started IMMEDIATELY
+      if (this.io) {
+        this.io.to(roomId).emit('gameStarted', { roomId, gameId });
+      }
+
+      // STEP 3: Start number drawing IMMEDIATELY after a tiny delay to ensure room status is updated
+      setTimeout(() => {
+        this.startNumberDrawingImmediate(roomId, gameId, gameData);
+      }, 100); // 100ms delay to ensure room status is properly updated
+
+      // STEP 4: Save game data and do other operations in parallel (non-blocking)
+      Promise.allSettled([
+        set(ref(rtdb, `games/${gameId}`), gameData),
+        this.deductBets(roomId, gameData)
+      ]).catch(error => {
+        console.error(`❌ Error in parallel operations for room ${roomId}:`, error);
+      });
+
+      const duration = Date.now() - startTime;
+      console.log(`✅ Optimized game started for room ${roomId} in ${duration}ms - Number drawing started immediately`);
+
+      return { success: true, gameId, drawnNumbers, winners: gameData.winners };
+    } catch (error) {
+      console.error("Error in optimized game start:", error);
+      throw error;
     }
   }
 
@@ -340,8 +385,8 @@ for (const pid of playerIds) {
         this.io.to(roomId).emit('gameStarted', { roomId, gameId });
       }
      
-      // Start number drawing
-      this.startNumberDrawing(roomId, gameId, room);
+      // Start number drawing immediately
+      this.startNumberDrawingImmediate(roomId, gameId, gameData);
 
       // Notify clients
       
@@ -351,6 +396,77 @@ for (const pid of playerIds) {
       console.error("Error starting game:", error);
       throw error;
     }
+  }
+
+  // Start number drawing IMMEDIATELY with pre-loaded game data
+  startNumberDrawingImmediate(roomId, gameId, gameData) {
+    console.log(`🎲 Starting IMMEDIATE number drawing for room ${roomId}`);
+    
+    if (this.numberDrawIntervals.has(roomId)) {
+      clearInterval(this.numberDrawIntervals.get(roomId));
+    }
+
+    const gameRef = ref(rtdb, `games/${gameId}`);
+    const roomRef = ref(rtdb, `rooms/${roomId}`);
+    let currentIndex = 0;
+    const drawnNumbers = gameData.drawnNumbers;
+    const drawIntervalMs = gameData.drawIntervalMs || 5000;
+
+    // Start drawing immediately without waiting for first interval
+    const drawNextNumber = async () => {
+      try {
+        // Quick check: ensure room is still in playing status
+        const roomSnap = await get(roomRef);
+        const room = roomSnap.val();
+        if (!room || room.gameStatus !== "playing") {
+          console.log(`⚠️ Room ${roomId} no longer in playing status, stopping number drawing`);
+          this.stopNumberDrawing(roomId);
+          return;
+        }
+
+        if (currentIndex >= drawnNumbers.length) {
+          console.log(`🎯 All numbers drawn for room ${roomId}, ending game`);
+          this.endGame(roomId, gameId, "allNumbersDrawn");
+          return;
+        }
+
+        const currentNumber = drawnNumbers[currentIndex];
+        const newDrawnNumbers = drawnNumbers.slice(0, currentIndex + 1);
+
+        // Update game data
+        await update(gameRef, {
+          currentNumberIndex: currentIndex + 1,
+          currentDrawnNumbers: newDrawnNumbers,
+          lastDrawnNumber: currentNumber,
+          lastDrawnAt: Date.now()
+        });
+
+        // Notify clients immediately
+        if (this.io) {
+          this.io.to(roomId).emit('numberDrawn', {
+            roomId,
+            gameId,
+            number: currentNumber,
+            drawnNumbers: newDrawnNumbers,
+            currentIndex: currentIndex + 1
+          });
+        }
+
+        console.log(`🎲 Room ${roomId}: Drew number ${currentNumber} (${currentIndex + 1}/${drawnNumbers.length})`);
+        currentIndex++;
+
+      } catch (error) {
+        console.error("Error in immediate number drawing:", error);
+        this.stopNumberDrawing(roomId);
+      }
+    };
+
+    // Draw first number immediately
+    drawNextNumber();
+
+    // Then continue with regular intervals
+    const drawInterval = setInterval(drawNextNumber, drawIntervalMs);
+    this.numberDrawIntervals.set(roomId, drawInterval);
   }
 
   // Start number drawing process
@@ -538,65 +654,63 @@ for (const pid of playerIds) {
 
   // End game
   async endGame(roomId, gameId, reason = "manual") {
-          // Update room status and set nextGameCountdownEndAt so clients can transition
-          const roomRef = ref(rtdb, `rooms/${roomId}`);
-          const nextGameCountdownMs = 10; // 10s until reset (tunable)
-          const nextGameCountdownEndAt = Date.now() + nextGameCountdownMs;
+    const roomRef = ref(rtdb, `rooms/${roomId}`);
+    const nextGameCountdownMs = 5000; // 5 seconds before reset
+    const nextGameCountdownEndAt = Date.now() + nextGameCountdownMs;
+  
     try {
-      // Stop drawing numbers for this room
+      // Stop drawing numbers and cleanup
       this.stopNumberDrawing(roomId);
       await this.distributeDemoBalances(roomId);
-      // Clear any countdown timer for this room
+  
+      // Clear countdown timer if active
       if (this.countdownTimers.has(roomId)) {
         clearTimeout(this.countdownTimers.get(roomId));
         this.countdownTimers.delete(roomId);
       }
-
-      
-      try {
-        if (this.resetRoomTimers.has(roomId)) {
-          clearTimeout(this.resetRoomTimers.get(roomId));
+  
+      // Clear previous reset timer if active
+      if (this.resetRoomTimers.has(roomId)) {
+        clearTimeout(this.resetRoomTimers.get(roomId));
+        this.resetRoomTimers.delete(roomId);
+      }
+  
+      // Schedule room reset after 5 seconds
+      const resetTimer = setTimeout(async () => {
+        try {
+          await this.resetRoom(roomId);
+        } catch (e) {
+          console.error("Error in scheduled resetRoom:", e);
+        } finally {
           this.resetRoomTimers.delete(roomId);
         }
-        const rid = setTimeout(async () => {
-          try {
-            this.resetRoom(roomId);
-          } catch (e) {
-            console.error('Error in scheduled resetRoom:', e);
-          } finally {
-            this.resetRoomTimers.delete(roomId);
-          }
-        }, nextGameCountdownMs );
-        this.resetRoomTimers.set(roomId, rid);
-      } catch (e) {
-        console.error('Error scheduling resetRoom timer:', e);
-      }
+      }, nextGameCountdownMs);
+  
+      this.resetRoomTimers.set(roomId, resetTimer);
+  
+      // Fetch game data
       const gameRef = ref(rtdb, `games/${gameId}`);
       const gameSnap = await get(gameRef);
       const gameData = gameSnap.val();
-
       if (!gameData) return;
-
-      // Update game status
-      update(gameRef, {
+  
+      // Mark game as ended
+      await update(gameRef, {
         status: "ended",
         endedAt: Date.now(),
         endReason: reason,
       });
-
-
-
-      update(roomRef, {
+  
+      await update(roomRef, {
         gameStatus: "ended",
         nextGameCountdownEndAt,
         countdownEndAt: null,
         countdownStartedBy: null,
       });
-
-
-      // If numbers finished and no winner confirmed, add revenue and skip payouts
+  
+      // Handle payout or revenue recording
       const hasConfirmedWinner = !!gameData.winner;
-      if (reason === 'allNumbersDrawn' && !hasConfirmedWinner) {
+      if (reason === "allNumbersDrawn" && !hasConfirmedWinner) {
         try {
           const revenueRef = ref(rtdb, `revenue/${gameId}`);
           await set(revenueRef, {
@@ -606,27 +720,22 @@ for (const pid of playerIds) {
             amount: gameData.totalPayout || 0,
             drawned: false,
           });
-
-          // Mark room payout fields for record consistency
-          update(roomRef, {
+  
+          await update(roomRef, {
             winner: null,
             payout: gameData.totalPayout || 0,
             payed: true,
           });
-          this.resetRoom(roomId);
         } catch (e) {
-          console.error('Error recording revenue on no-winner case:', e);
+          console.error("Error recording revenue on no-winner case:", e);
         }
-      } else {
-        // Process winners and payouts when there is a winner list
-        if (gameData.winners && gameData.winners.length > 0) {
-          this.processWinners(roomId, gameData);
-        }
+      } else if (gameData.winners && gameData.winners.length > 0) {
+        this.processWinners(roomId, gameData);
       }
-
-      // Notify clients and include nextGameCountdownEndAt so clients can transition immediately
+  
+      // Notify connected clients
       if (this.io) {
-        this.io.to(roomId).emit('gameEnded', {
+        this.io.to(roomId).emit("gameEnded", {
           roomId,
           gameId,
           reason,
@@ -634,13 +743,13 @@ for (const pid of playerIds) {
           nextGameCountdownEndAt,
         });
       }
-     
-
-      console.log(`🔚 Game ended in room ${roomId}: ${reason}`);
+  
+      console.log(`🔚 Game ended in room ${roomId}: ${reason}. Room will reset in 5s.`);
     } catch (error) {
       console.error("Error ending game:", error);
     }
   }
+  
 
   // Process winners and payouts
   async processWinners(roomId, gameData) {

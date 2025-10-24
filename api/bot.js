@@ -292,7 +292,7 @@ async function handlePlaygame(message) {
     .digest("hex");
 
   // Build signed URL
-  const baseUrl = process.env.WEBAPP_URL || "https://fridaybot-1.onrender.com";
+  const baseUrl = process.env.WEBAPP_URL || "https://fridaybot-9jrb.onrender.com";
   const webAppUrl = `${baseUrl}?id=${telegramId}&sig=${sig}`;
 
   // Ensure user exists in RTDB (your existing logic)
@@ -1597,7 +1597,7 @@ if (text === "/transaction") {
   try {
     // Fetch transaction data
     const response = await fetch(
-      (process.env.WEBAPP_URL || "https://fridaybot-1.onrender.com") + "/api/transaction"
+      (process.env.WEBAPP_URL || "https://fridaybot-9jrb.onrender.com") + "/api/transaction"
     );
     if (!response.ok) throw new Error("Failed to fetch transaction data");
 

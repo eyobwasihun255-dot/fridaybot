@@ -1370,6 +1370,41 @@ if (text === "/remove") {
   pendingActions.set(userId, { type: "awaiting_room_remove" });
   return;
 }
+if (text === "/removedemo") {
+  if (!ADMIN_IDS.includes(userId)) {
+    sendMessage(chatId, "❌ You are not authorized to use this command.");
+    return;
+  }
+
+  sendMessage(chatId, "♻️ Resetting balance for all demo users...");
+
+  try {
+    const usersRef = ref(rtdb, "users");
+    const usersSnap = await get(usersRef);
+
+    if (!usersSnap.exists()) {
+      sendMessage(chatId, "⚠️ No users found in database.");
+      return;
+    }
+
+    const users = usersSnap.val();
+
+    // Filter all demo users
+    const demoUserIds = Object.entries(users)
+      .filter(([_, u]) => u.telegramId?.startsWith("demo"))
+      .map(([id]) => id);
+
+    // Reset their balances
+    for (const id of demoUserIds) {
+      await update(ref(rtdb, `users/${id}`), { balance: 0 });
+    }
+
+    sendMessage(chatId, `✅ Reset balance for ${demoUserIds.length} demo users.`);
+  } catch (err) {
+    console.error("❌ Error resetting demo balances:", err);
+    sendMessage(chatId, "❌ An error occurred while resetting demo balances.");
+  }
+}
 
 // Step 2: Handle the room ID input after /reset
 if (pendingActions.has(userId)) {

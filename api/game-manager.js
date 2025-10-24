@@ -853,27 +853,7 @@ await set(balanceRef, current - betAmount);
       console.warn(`⚠️ No valid cards for room ${roomId}`);
       return { drawnNumbers: [], winners: [] };
     }
-    // --- Add this at the top, after defining validCards ---
-if (!this.winHistoryByRoom) this.winHistoryByRoom = new Map(); // track last 10 winners per room
-const winHistory = this.winHistoryByRoom.get(roomId) || [];
-
-// --- Modify possibleWinners to enforce the 2-win/10-games rule if more than 15 players ---
-if (validCards.length > 15) {
-  const filtered = possibleWinners.filter(card => {
-    const wins = winHistory.filter(u => u === card.claimedBy).length;
-    return wins < 2;
-  });
-  if (filtered.length > 0) possibleWinners = filtered; // fallback if all reached limit
-}
-
-// --- After selecting winnerCard, save to history ---
-
-
-// Save winner to history
-winHistory.push(newWinnerUserId);
-if (winHistory.length > 10) winHistory.shift(); // keep last 10 games
-this.winHistoryByRoom.set(roomId, winHistory);
-
+  
     // --- Filter out last winner’s user ---
     let possibleWinners = validCards.filter(
       c => c.claimedBy !== lastWinnerUserId

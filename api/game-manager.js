@@ -293,7 +293,8 @@ for (const pid of playerIds) {
             if (autoUntil <= Date.now()) continue;
             if (!card.claimed || !card.claimedBy) continue;
             
-            const flat = card.numbers.flat();
+            const flat = Array.isArray(card.numbers) ? card.numbers.flat() : [];
+
          
             // find first winning pattern
             let winningPattern = null;

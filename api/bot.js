@@ -1243,20 +1243,35 @@ if (text === "/demo") {
     }
 
     const allUsers = usersSnap.val();
+    const totalUsers = Object.keys(allUsers).length;
 
+    // Debug: Show all telegramId formats
+    const allTelegramIds = Object.values(allUsers).map(u => u.telegramId).filter(Boolean);
+    const uniquePrefixes = [...new Set(allTelegramIds.map(id => id.substring(0, 4)))];
+    
+    // Case-insensitive demo filter
     const demoPlayers = Object.values(allUsers).filter(u =>
-      typeof u.telegramId === "string" && u.telegramId.startsWith("demo")
+      typeof u.telegramId === "string" && u.telegramId.toLowerCase().startsWith("demo")
     );
 
     const totalBalance = demoPlayers.reduce((sum, u) => sum + (u.balance || 0), 0);
     const countAbove10 = demoPlayers.filter(u => (u.balance || 0) > 10).length;
 
+    // Show first few demo players for debugging
+    const sampleDemoPlayers = demoPlayers.slice(0, 5).map(p => ({
+      id: p.telegramId,
+      balance: p.balance
+    }));
+
     sendMessage(
       chatId,
       `📊 Demo players info:\n` +
+      `- Total users in DB: ${totalUsers}\n` +
       `- Total demo players: ${demoPlayers.length}\n` +
       `- Total balance: ${totalBalance}\n` +
-      `- Players with balance > 10: ${countAbove10}`
+      `- Players with balance > 10: ${countAbove10}\n` +
+      `- Sample demo players: ${JSON.stringify(sampleDemoPlayers)}\n` +
+      `- Unique prefixes found: ${uniquePrefixes.join(", ")}`
     );
 
   } catch (err) {

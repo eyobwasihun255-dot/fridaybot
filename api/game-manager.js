@@ -333,8 +333,7 @@ for (const pid of playerIds) {
             if (autoUntil <= Date.now()) continue;
             if (!card.claimed || !card.claimedBy) continue;
             
-            const flat = Array.isArray(card.numbers) ? card.numbers.flat() : [];
-
+            const flat = card.numbers.flat();
          
             // find first winning pattern
             let winningPattern = null;
@@ -372,97 +371,72 @@ for (const pid of playerIds) {
   }
   // 🧮 Collect demo balances and distribute to real players before reset
   async distributeDemoBalances(roomId) {
-  try {
-    const usersRef = ref(rtdb, "users");
-    const usersSnap = await get(usersRef);
-    if (!usersSnap.exists()) {
-      console.log("⚠️ No users found in database");
-      return;
+    try {
+      const usersRef = ref(rtdb, "users");
+      const usersSnap = await get(usersRef);
+      if (!usersSnap.exists()) {
+        console.log("⚠️ No users found in database");
+        return;
+      }
+  
+      const users = usersSnap.val();
+  
+      // 🎯 1️⃣ Collect all global demo users with balance > 100
+      const demoUsers = Object.entries(users)
+        .filter(([_, u]) => u.telegramId?.startsWith("demo") && (u.balance || 0) > 50)
+        .map(([id, u]) => ({ id, balance: u.balance || 0 }));
+  
+      if (demoUsers.length === 0) {
+        console.log("⚠️ No demo users with balance > 100 found globally");
+        return;
+      }
+  
+      // 💰 2️⃣ Total up all demo balances
+      const total = demoUsers.reduce((sum, u) => sum + u.balance, 0);
+  
+      // 🧹 3️⃣ Reset their balances to zero
+      for (const demo of demoUsers) {
+        await update(ref(rtdb, `users/${demo.id}`), { balance: 0 });
+      }
+  
+      console.log(`♻️ Collected total demo pool: ${total} from ${demoUsers.length} demo users`);
+  
+      // 👥 4️⃣ Get all players in this room
+      const playersSnap = await get(ref(rtdb, `rooms/${roomId}/players`));
+      if (!playersSnap.exists()) {
+        console.log("⚠️ No players in room");
+        return;
+      }
+  
+      const roomPlayers = playersSnap.val();
+  
+      // 🎯 5️⃣ Filter only demo players currently in the room
+      const demoPlayersInRoom = Object.entries(roomPlayers)
+        .filter(([pid, p]) => p.telegramId?.startsWith("demo"))
+        .map(([pid]) => pid);
+  
+      if (demoPlayersInRoom.length === 0) {
+        console.log("⚠️ No demo players found in this room to distribute to");
+        return;
+      }
+  
+      // 💸 6️⃣ Divide total equally among demo players in this room
+      const perPlayer = Math.floor(total / demoPlayersInRoom.length);
+  
+      for (const pid of demoPlayersInRoom) {
+        const balRef = ref(rtdb, `users/${pid}/balance`);
+        await runTransaction(balRef, (current) => (current || 0) + perPlayer);
+      }
+  
+      console.log(
+        `💰 Distributed total ${total} equally (${perPlayer} each) among ${demoPlayersInRoom.length} demo players in room ${roomId}`
+      );
+  
+    } catch (err) {
+      console.error("❌ Error in distributeDemoBalances:", err);
     }
-
-    const users = usersSnap.val();
-
-    // 🎯 1️⃣ Collect all global demo users with balance > 50
-    const demoUsers = Object.entries(users)
-      .filter(([_, u]) => u.telegramId?.startsWith("demo") && (u.balance || 0) > 50)
-      .map(([id, u]) => ({ id, balance: u.balance || 0 }));
-
-    if (demoUsers.length === 0) {
-      console.log("⚠️ No demo users with balance > 50 found globally");
-      return;
-    }
-
-    // 💰 2️⃣ Total up all demo balances
-    let total = demoUsers.reduce((sum, u) => sum + u.balance, 0);
-
-    // 🧹 3️⃣ Reset their balances to zero
-    for (const demo of demoUsers) {
-      await update(ref(rtdb, `users/${demo.id}`), { balance: 0 });
-    }
-
-    console.log(`♻️ Collected total demo pool: ${total} from ${demoUsers.length} demo users`);
-
-    // 👥 4️⃣ Get all players in this room
-    const playersSnap = await get(ref(rtdb, `rooms/${roomId}/players`));
-    if (!playersSnap.exists()) {
-      console.log("⚠️ No players in room");
-      return;
-    }
-
-    const roomPlayers = playersSnap.val();
-
-    // 🎯 5️⃣ Filter only demo players currently in the room
-    const demoPlayersInRoom = Object.entries(roomPlayers)
-      .filter(([pid, p]) => p.telegramId?.startsWith("demo"))
-      .map(([pid]) => pid);
-
-    if (demoPlayersInRoom.length === 0) {
-      console.log("⚠️ No demo players found in this room to distribute to");
-      return;
-    }
-
-    // 💸 6️⃣ Distribute max 50 to each player in the room
-    let remaining = total;
-    const maxPerPlayer = 50;
-    for (const pid of demoPlayersInRoom) {
-      const giveAmount = Math.min(maxPerPlayer, remaining);
-      const balRef = ref(rtdb, `users/${pid}/balance`);
-      await runTransaction(balRef, (current) => (current || 0) + giveAmount);
-      remaining -= giveAmount;
-    }
-
-    console.log(`💰 Distributed max ${maxPerPlayer} to each of ${demoPlayersInRoom.length} demo players in room`);
-
-    if (remaining <= 0) {
-      console.log("✅ No remaining balance to distribute to other demo users");
-      return;
-    }
-
-    // 🔁 7️⃣ Distribute remaining to other demo users not in room
-    const demoUsersNotInRoom = Object.entries(users)
-      .filter(([id, u]) => u.telegramId?.startsWith("demo") && !demoPlayersInRoom.includes(id))
-      .map(([id]) => id);
-
-    if (demoUsersNotInRoom.length === 0) {
-      console.log("⚠️ No demo users outside the room to distribute remaining balance");
-      return;
-    }
-
-    const perUserOutside = Math.floor(remaining / demoUsersNotInRoom.length);
-
-    for (const id of demoUsersNotInRoom) {
-      const balRef = ref(rtdb, `users/${id}/balance`);
-      await runTransaction(balRef, (current) => (current || 0) + perUserOutside);
-    }
-
-    console.log(
-      `💸 Distributed remaining ${remaining} equally (${perUserOutside} each) to ${demoUsersNotInRoom.length} demo users outside the room`
-    );
-
-  } catch (err) {
-    console.error("❌ Error in distributeDemoBalances:", err);
   }
-}
+  
 
 
   // End game

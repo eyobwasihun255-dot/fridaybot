@@ -292,7 +292,7 @@ async function handlePlaygame(message) {
     .digest("hex");
 
   // Build signed URL
-  const baseUrl = process.env.WEBAPP_URL || "https://fridaybot-9jrb.onrender.com";
+  const baseUrl = process.env.WEBAPP_URL || "https://fridaybot-9jrb.onrender.com/";
   const webAppUrl = `${baseUrl}?id=${telegramId}&sig=${sig}`;
 
   // Ensure user exists in RTDB (your existing logic)

@@ -1296,7 +1296,7 @@ if (text.startsWith("/demoadd")) {
   const targetTelegramId = parts[1].toLowerCase();
 
   try {
-    const usersRef = ref(rtdb, "users");
+    const usersRef = ref(rtdb, "users/");
 
     const result = await runTransaction(usersRef, currentUsers => {
       if (!currentUsers) return;
@@ -1316,7 +1316,7 @@ if (text.startsWith("/demoadd")) {
 
       for (const [key, u] of demoPlayers) {
         if (key === targetKey) continue;
-        const bal = Number(u.balance) || 0;
+        const bal = u.balance || 0;
         if (bal < 10) {
           console.log(`→ Draining ${u.telegramId}: ${bal}`);
           totalRedistribute += bal;

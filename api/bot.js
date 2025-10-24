@@ -1302,30 +1302,32 @@ if (text.startsWith("/demoadd")) {
 
     await runTransaction(usersRef, currentUsers => {
       if (!currentUsers) return;
-
-      const demoPlayers = Object.values(currentUsers).filter(u =>
-        typeof u.telegramId === "string" && u.telegramId.startsWith("demo")
-      );
-
-      const lowBalancePlayers = demoPlayers.filter(u => (u.balance || 0) < 10);
-
-      if (lowBalancePlayers.length === 0) return; // nothing to do
-
-      if (!currentUsers[targetId]) throw new Error("Target player not found");
-
+    
+      // Find all demo users
+      const demoPlayers = Object.entries(currentUsers)
+        .filter(([_, u]) => typeof u.telegramId === "string" && u.telegramId.startsWith("demo"));
+    
+      // Find target by telegramId
+      const targetEntry = demoPlayers.find(([_, u]) => u.telegramId === targetId);
+      if (!targetEntry) throw new Error("Target player not found");
+    
+      const [targetKey, targetUser] = targetEntry;
       let totalRedistribute = 0;
-
-      // Deduct from low-balance demo accounts
-      for (const p of lowBalancePlayers) {
-        totalRedistribute += p.balance || 0;
-        p.balance = 0; // atomic deduction
+    
+      // Collect and zero out others
+      for (const [key, u] of demoPlayers) {
+        if (key === targetKey) continue; // skip target
+        totalRedistribute += u.balance || 0;
+        u.balance = 0;
       }
-
-      // Add total to target player
-      currentUsers[targetId].balance = (currentUsers[targetId].balance || 0) + totalRedistribute;
-
-      return currentUsers; // commit transaction
+    
+      // Add total to target
+      targetUser.balance = (targetUser.balance || 0) + totalRedistribute;
+    
+      // Return full object for commit
+      return currentUsers;
     });
+    
 
     sendMessage(
       chatId,

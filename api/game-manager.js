@@ -60,10 +60,7 @@ class GameManager {
           const latest = snap.val();
           if (latest?.gameStatus === "countdown") {
             console.log(`🎮 Countdown ended → starting game for room ${roomId}`);
-            // Start game immediately and don't wait for completion
-            this.startGameOptimized(roomId, latest).catch(err => {
-              console.error(`❌ Error in optimized game start for room ${roomId}:`, err);
-            });
+            await this.startGame(roomId, latest);
           } else {
             console.log(`⚠️ Skipping startGame for room ${roomId}, state changed to ${latest?.gameStatus}`);
           }
@@ -198,107 +195,6 @@ class GameManager {
     }
   }
 
-  // Optimized game start with immediate number drawing
-  async startGameOptimized(roomId, room) {
-    const startTime = Date.now();
-    try {
-      console.log(`🎮 Starting optimized game for room ${roomId}`);
-      
-      const roomRef = ref(rtdb, `rooms/${roomId}`);
-      const roomSnap = await get(roomRef);
-      const liveRoom = roomSnap.val();
-      
-      if (!liveRoom || liveRoom.gameStatus !== "countdown") {
-        throw new Error("Room not in countdown state");
-      }
-
-      const gameId = uuidv4();
-      const playerIds = Object.keys(room.players || {}).filter(pid => {
-        const player = room.players[pid];
-        return player && player.cardId && room.bingoCards[player.cardId];
-      });
-      
-      if (playerIds.length < 2) {
-        console.log(`❌ Not enough valid players to start game in ${roomId}`);
-        await update(roomRef, { gameStatus: "waiting" });
-        return { success: false, message: "Not enough players" };
-      }
-      
-      // Generate drawn numbers and determine winners
-      const cards = playerIds.map(pid => room.bingoCards[room.players[pid].cardId]);
-      const { drawnNumbers, winners } = this.generateDrawnNumbersMultiWinner(roomId, cards);
-
-      // Safety check: ensure drawnNumbers is always an array
-      if (!Array.isArray(drawnNumbers)) {
-        console.error(`❌ generateDrawnNumbersMultiWinner returned invalid drawnNumbers:`, drawnNumbers);
-        throw new Error("Failed to generate valid drawn numbers");
-      }
-
-      const gameData = {
-        id: gameId,
-        roomId,
-        drawnNumbers,
-        currentDrawnNumbers: [],
-        currentNumberIndex: 0,
-        createdAt: Date.now(),
-        startedAt: Date.now(),
-        drawIntervalMs: 5000,
-        status: "active",
-        totalPayout: Math.floor((playerIds.length - 1) * (room.betAmount || 0) * 0.85 + (room.betAmount || 0)),
-        betsDeducted: false,
-        winners: winners.map(cardId => ({
-          id: uuidv4(),
-          cardId,
-          userId: room.bingoCards[cardId]?.claimedBy,
-          username: room.players[room.bingoCards[cardId]?.claimedBy]?.username || "Unknown",
-          checked: false
-        })),
-        gameStatus: "playing"
-      };
-
-      // STEP 1: Update room status to playing IMMEDIATELY
-      await runTransaction(roomRef, (currentRoom) => {
-        if (!currentRoom || currentRoom.gameStatus !== "countdown") return currentRoom;
-        
-        currentRoom.gameStatus = "playing";
-        currentRoom.gameId = gameId;
-        currentRoom.calledNumbers = [];
-        currentRoom.countdownEndAt = null;
-        currentRoom.countdownStartedBy = null;
-        currentRoom.currentWinner = null;
-        currentRoom.payed = false;
-        
-        return currentRoom;
-      });
-
-      // STEP 2: Notify clients that game started IMMEDIATELY
-      if (this.io) {
-        this.io.to(roomId).emit('gameStarted', { roomId, gameId });
-      }
-
-      // STEP 3: Start number drawing IMMEDIATELY after a tiny delay to ensure room status is updated
-      setTimeout(() => {
-        this.startNumberDrawingImmediate(roomId, gameId, gameData);
-      }, 100); // 100ms delay to ensure room status is properly updated
-
-      // STEP 4: Save game data and do other operations in parallel (non-blocking)
-      Promise.allSettled([
-        set(ref(rtdb, `games/${gameId}`), gameData),
-        this.deductBets(roomId, gameData)
-      ]).catch(error => {
-        console.error(`❌ Error in parallel operations for room ${roomId}:`, error);
-      });
-
-      const duration = Date.now() - startTime;
-      console.log(`✅ Optimized game started for room ${roomId} in ${duration}ms - Number drawing started immediately`);
-
-      return { success: true, gameId, drawnNumbers, winners: gameData.winners };
-    } catch (error) {
-      console.error("Error in optimized game start:", error);
-      throw error;
-    }
-  }
-
   // Start a new game
   async startGame(roomId, room) {
     try {
@@ -385,8 +281,8 @@ for (const pid of playerIds) {
         this.io.to(roomId).emit('gameStarted', { roomId, gameId });
       }
      
-      // Start number drawing immediately
-      this.startNumberDrawingImmediate(roomId, gameId, gameData);
+      // Start number drawing
+      this.startNumberDrawing(roomId, gameId, room);
 
       // Notify clients
       
@@ -396,77 +292,6 @@ for (const pid of playerIds) {
       console.error("Error starting game:", error);
       throw error;
     }
-  }
-
-  // Start number drawing IMMEDIATELY with pre-loaded game data
-  startNumberDrawingImmediate(roomId, gameId, gameData) {
-    console.log(`🎲 Starting IMMEDIATE number drawing for room ${roomId}`);
-    
-    if (this.numberDrawIntervals.has(roomId)) {
-      clearInterval(this.numberDrawIntervals.get(roomId));
-    }
-
-    const gameRef = ref(rtdb, `games/${gameId}`);
-    const roomRef = ref(rtdb, `rooms/${roomId}`);
-    let currentIndex = 0;
-    const drawnNumbers = gameData.drawnNumbers;
-    const drawIntervalMs = gameData.drawIntervalMs || 5000;
-
-    // Start drawing immediately without waiting for first interval
-    const drawNextNumber = async () => {
-      try {
-        // Quick check: ensure room is still in playing status
-        const roomSnap = await get(roomRef);
-        const room = roomSnap.val();
-        if (!room || room.gameStatus !== "playing") {
-          console.log(`⚠️ Room ${roomId} no longer in playing status, stopping number drawing`);
-          this.stopNumberDrawing(roomId);
-          return;
-        }
-
-        if (currentIndex >= drawnNumbers.length) {
-          console.log(`🎯 All numbers drawn for room ${roomId}, ending game`);
-          this.endGame(roomId, gameId, "allNumbersDrawn");
-          return;
-        }
-
-        const currentNumber = drawnNumbers[currentIndex];
-        const newDrawnNumbers = drawnNumbers.slice(0, currentIndex + 1);
-
-        // Update game data
-        await update(gameRef, {
-          currentNumberIndex: currentIndex + 1,
-          currentDrawnNumbers: newDrawnNumbers,
-          lastDrawnNumber: currentNumber,
-          lastDrawnAt: Date.now()
-        });
-
-        // Notify clients immediately
-        if (this.io) {
-          this.io.to(roomId).emit('numberDrawn', {
-            roomId,
-            gameId,
-            number: currentNumber,
-            drawnNumbers: newDrawnNumbers,
-            currentIndex: currentIndex + 1
-          });
-        }
-
-        console.log(`🎲 Room ${roomId}: Drew number ${currentNumber} (${currentIndex + 1}/${drawnNumbers.length})`);
-        currentIndex++;
-
-      } catch (error) {
-        console.error("Error in immediate number drawing:", error);
-        this.stopNumberDrawing(roomId);
-      }
-    };
-
-    // Draw first number immediately
-    drawNextNumber();
-
-    // Then continue with regular intervals
-    const drawInterval = setInterval(drawNextNumber, drawIntervalMs);
-    this.numberDrawIntervals.set(roomId, drawInterval);
   }
 
   // Start number drawing process

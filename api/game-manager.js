@@ -108,8 +108,6 @@ class GameManager {
             const oldCardId = demo.cardId;
             const updates = {};
           
-            // --- 1️⃣ Remove player temporarily from room ---
-            updates[`rooms/${roomId}/players/${demo.id}`] = null;
           
             // --- 2️⃣ Unclaim old card if exists ---
             if (oldCardId && cards[oldCardId]) {
@@ -123,16 +121,6 @@ class GameManager {
             const newPair = shuffledCards[availableIdx++];
             if (newPair) {
               const [newCardId] = newPair;
-          
-              // Reinsert player with new card assignment
-              const updatedDemo = {
-                ...demo,
-                cardId: newCardId,
-                attemptedBingo: false,
-                lastReshuffledAt: now,
-              };
-          
-              updates[`rooms/${roomId}/players/${demo.id}`] = updatedDemo;
           
               updates[`rooms/${roomId}/bingoCards/${newCardId}/claimed`] = true;
               updates[`rooms/${roomId}/bingoCards/${newCardId}/claimedBy`] = demo.id;

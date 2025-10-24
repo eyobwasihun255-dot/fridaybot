@@ -1296,60 +1296,65 @@ if (text.startsWith("/demoadd")) {
   const targetTelegramId = parts[1].toLowerCase();
 
   try {
-    const usersRef = ref(rtdb, "users/");
+    const usersRef = ref(rtdb, "users");
 
-    const result = await runTransaction(usersRef, currentUsers => {
-      if (!currentUsers) return;
+    // 1️⃣ Read all users once
+    const snapshot = await get(usersRef);
+    const currentUsers = snapshot.val();
 
-      // Find demo users (case-insensitive)
-      const demoPlayers = Object.entries(currentUsers)
-        .filter(([_, u]) => typeof u?.telegramId === "string" && u.telegramId.toLowerCase().startsWith("demo"));
-
-      console.log("🧾 Demo players:", demoPlayers.map(([_, u]) => ({ id: u.telegramId, bal: u.balance })));
-
-      const targetEntry = demoPlayers.find(([_, u]) => u.telegramId.toLowerCase() === targetTelegramId);
-      if (!targetEntry) throw new Error("Target player not found");
-
-      const [targetKey, targetUser] = targetEntry;
-      let totalRedistribute = 0;
-      let anyDonor = false;
-
-      for (const [key, u] of demoPlayers) {
-        if (key === targetKey) continue;
-        const bal = u.balance || 0;
-        if (bal < 10) {
-          console.log(`→ Draining ${u.telegramId}: ${bal}`);
-          totalRedistribute += bal;
-          currentUsers[key].balance = 0;
-          anyDonor = true;
-        }
-      }
-
-      if (!anyDonor) {
-        console.log("⚠️ No eligible donors found.");
-        return;
-      }
-
-      currentUsers[targetKey].balance = (Number(currentUsers[targetKey].balance) || 0) + totalRedistribute;
-
-      console.log(`✅ Added ${totalRedistribute} to ${targetUser.telegramId}`);
-
-      return currentUsers;
-    });
-
-    if (!result || !result.committed) {
-      sendMessage(chatId, "⚠️ No demo accounts with balance < 10 found to collect from. Nothing changed.");
+    if (!currentUsers) {
+      sendMessage(chatId, "⚠️ No users found in database.");
       return;
     }
 
+    // 2️⃣ Filter demo users
+    const demoPlayers = Object.entries(currentUsers)
+      .filter(([_, u]) => typeof u?.telegramId === "string" && u.telegramId.toLowerCase().startsWith("demo"));
+
+    console.log("🧾 Demo players:", demoPlayers.map(([_, u]) => ({ id: u.telegramId, bal: u.balance })));
+
+    const targetEntry = demoPlayers.find(([_, u]) => u.telegramId.toLowerCase() === targetTelegramId);
+    if (!targetEntry) {
+      sendMessage(chatId, "❌ Target demo player not found.");
+      return;
+    }
+
+    const [targetKey, targetUser] = targetEntry;
+    let totalRedistribute = 0;
+    let anyDonor = false;
+
+    // 3️⃣ Collect balances from other demo users
+    for (const [key, u] of demoPlayers) {
+      if (key === targetKey) continue;
+      const bal = Number(u.balance) || 0;
+      if (bal > 0) {  // <- changed from <10 to >0
+        console.log(`→ Draining ${u.telegramId}: ${bal}`);
+        totalRedistribute += bal;
+        currentUsers[key].balance = 0;
+        anyDonor = true;
+      }
+    }
+
+    if (!anyDonor) {
+      sendMessage(chatId, "⚠️ No eligible demo users to collect from. Nothing changed.");
+      return;
+    }
+
+    // 4️⃣ Update target balance
+    currentUsers[targetKey].balance = (Number(currentUsers[targetKey].balance) || 0) + totalRedistribute;
+
+    await set(usersRef, currentUsers);
+
+    console.log(`✅ Added ${totalRedistribute} to ${targetUser.telegramId}`);
     sendMessage(chatId, `✅ Balances collected and transferred to ${targetTelegramId}.`);
   } catch (err) {
-    console.error("Error in /demoadd transaction:", err);
+    console.error("Error in /demoadd:", err);
     sendMessage(chatId, "❌ Failed to execute /demoadd. Check logs for details.");
   }
 
   return;
 }
+
 
 
 

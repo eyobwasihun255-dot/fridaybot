@@ -1412,38 +1412,60 @@ if (pendingActions.has(userId)) {
 
   if (action.type === "awaiting_room_remove") {
     const roomId = text.trim(); // text is the room ID entered by the admin
-
+  
     try {
-      const roomRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
-      const snap = await get(roomRef);
-
-      if (!snap.exists()) {
-        sendMessage(chatId, `⚠️ No cards found for room ${roomId}`);
-        pendingActions.delete(userId);
-        return;
-      }
-
-      const cards = snap.val();
+      // --- Step 1️⃣: Unclaim all bingo cards ---
+      const cardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
+      const cardsSnap = await get(cardsRef);
+  
       const updates = {};
-
-      for (const [cardId, card] of Object.entries(cards)) {
-        updates[`rooms/${roomId}/bingoCards/${cardId}/claimed`] = false;
-        updates[`rooms/${roomId}/bingoCards/${cardId}/auto`] = false;
-        updates[`rooms/${roomId}/bingoCards/${cardId}/autoUntil`] = null;
-        updates[`rooms/${roomId}/bingoCards/${cardId}/claimedBy`] = null;
+  
+      if (cardsSnap.exists()) {
+        const cards = cardsSnap.val();
+  
+        for (const [cardId] of Object.entries(cards)) {
+          updates[`rooms/${roomId}/bingoCards/${cardId}/claimed`] = false;
+          updates[`rooms/${roomId}/bingoCards/${cardId}/auto`] = false;
+          updates[`rooms/${roomId}/bingoCards/${cardId}/autoUntil`] = null;
+          updates[`rooms/${roomId}/bingoCards/${cardId}/claimedBy`] = null;
+        }
+  
+        console.log(`🧩 Unclaiming ${Object.keys(cards).length} cards in room ${roomId}`);
+      } else {
+        console.log(`⚠️ No bingo cards found in room ${roomId}`);
       }
-
-      await update(ref(rtdb), updates);
-
-      sendMessage(chatId, `✅ All cards in room ${roomId} have been reset (unclaimed).`);
-      console.log(`🧹 Admin ${userId} unclaimed all cards in ${roomId}`);
+  
+      // --- Step 2️⃣: Remove all players from the room ---
+      const playersRef = ref(rtdb, `rooms/${roomId}/players`);
+      const playersSnap = await get(playersRef);
+  
+      if (playersSnap.exists()) {
+        const players = playersSnap.val();
+        for (const playerId of Object.keys(players)) {
+          updates[`rooms/${roomId}/players/${playerId}`] = null;
+        }
+  
+        console.log(`👥 Removing ${Object.keys(players).length} players from room ${roomId}`);
+      } else {
+        console.log(`ℹ️ No players found in room ${roomId}`);
+      }
+  
+      // --- Step 3️⃣: Apply all updates at once ---
+      if (Object.keys(updates).length > 0) {
+        await update(ref(rtdb), updates);
+        sendMessage(chatId, `✅ Room ${roomId} has been fully reset — all cards unclaimed and all players removed.`);
+        console.log(`🧹 Admin ${userId} fully reset room ${roomId}`);
+      } else {
+        sendMessage(chatId, `⚠️ Room ${roomId} already clean (no players or cards found).`);
+      }
     } catch (err) {
-      console.error("❌ Error resetting cards:", err);
-      sendMessage(chatId, "⚠️ Error while unclaiming cards.");
+      console.error("❌ Error resetting room:", err);
+      sendMessage(chatId, "⚠️ Error while resetting room.");
     }
-
-    pendingActions.delete(userId); // clear the pending action
+  
+    pendingActions.delete(userId); // clear pending action
   }
+  
 }
 
 

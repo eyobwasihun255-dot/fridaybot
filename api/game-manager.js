@@ -79,12 +79,20 @@ class GameManager {
       (async () => {
         try {
           const roomRef = ref(rtdb, `rooms/${roomId}`);
-          const cardsSnap = await get(ref(rtdb, `rooms/${roomId}/bingoCards`));
-          const cards = cardsSnap.exists() ? cardsSnap.val() : {};
+          const cardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
+          const playersRef = ref(rtdb, `rooms/${roomId}/players`);
       
-          const playersSnap = await get(ref(rtdb, `rooms/${roomId}/players`));
-          const playersData = playersSnap.exists() ? playersSnap.val() : {};
+          const [cardsSnap, playersSnap] = await Promise.all([get(cardsRef), get(playersRef)]);
       
+          if (!cardsSnap.exists() || !playersSnap.exists()) {
+            console.log(`⚠️ Missing cards or players for reshuffle in ${roomId}`);
+            return;
+          }
+      
+          const cards = cardsSnap.val();
+          const playersData = playersSnap.val();
+      
+          // 🧩 Step 1: Identify all demo players
           const demoPlayers = Object.entries(playersData)
             .filter(([id]) => id.startsWith("demo"))
             .map(([id, p]) => ({ id, ...p }));
@@ -94,56 +102,50 @@ class GameManager {
             return;
           }
       
-          // --- Step 1️⃣: Unclaim all cards claimed by demo players ---
+          const demoIds = demoPlayers.map(d => d.id);
+      
+          // 🧩 Step 2: Unclaim all cards owned by demo players
           const unclaimUpdates = {};
           let unclaimedCount = 0;
       
           for (const [cardId, card] of Object.entries(cards)) {
-            if (card.claimed && demoPlayers.some(d => d.id === card.claimedBy)) {
+            if (card.claimed === true && demoIds.includes(card.claimedBy)) {
               unclaimUpdates[`rooms/${roomId}/bingoCards/${cardId}/claimed`] = false;
               unclaimUpdates[`rooms/${roomId}/bingoCards/${cardId}/claimedBy`] = null;
               unclaimUpdates[`rooms/${roomId}/bingoCards/${cardId}/auto`] = false;
               unclaimUpdates[`rooms/${roomId}/bingoCards/${cardId}/autoUntil`] = null;
               unclaimedCount++;
+              console.log(`🧹 Unclaiming card ${cardId} from ${card.claimedBy}`);
             }
           }
       
           if (unclaimedCount > 0) {
             await update(ref(rtdb), unclaimUpdates);
-            console.log(`🧹 Unclaimed ${unclaimedCount} cards previously held by demo players`);
+            console.log(`✅ Unclaimed ${unclaimedCount} old demo cards`);
           } else {
-            console.log(`ℹ️ No demo cards to unclaim`);
+            console.log(`ℹ️ No demo cards found to unclaim in ${roomId}`);
           }
       
-          // --- Step 2️⃣: Get updated unclaimed list after cleanup ---
-          const refreshedSnap = await get(ref(rtdb, `rooms/${roomId}/bingoCards`));
+          // 🧩 Step 3: Refresh list of available cards
+          const refreshedSnap = await get(cardsRef);
           const refreshedCards = refreshedSnap.exists() ? refreshedSnap.val() : {};
-          const allUnclaimed = Object.entries(refreshedCards).filter(([_, c]) => !c.claimed);
+          const unclaimedCards = Object.entries(refreshedCards).filter(([_, c]) => !c.claimed);
       
-          if (!allUnclaimed.length) {
-            console.log(`⚠️ No unclaimed cards available for reshuffle in room ${roomId}`);
+          if (!unclaimedCards.length) {
+            console.log(`⚠️ No unclaimed cards left to reshuffle in ${roomId}`);
             return;
           }
       
-          // --- Step 3️⃣: Randomly assign unclaimed cards to demo players ---
+          // 🧩 Step 4: Randomly assign new cards
           const shuffledDemos = demoPlayers.sort(() => 0.5 - Math.random());
-          const shuffledCards = allUnclaimed.sort(() => 0.5 - Math.random());
-          let availableIdx = 0;
+          const shuffledCards = unclaimedCards.sort(() => 0.5 - Math.random());
           const now = Date.now();
-      
-          console.log(`♻️ Reassigning ${shuffledDemos.length} demo players to random cards in room ${roomId}`);
+          let cardIndex = 0;
       
           for (const demo of shuffledDemos) {
-            const currentRoom = (await get(roomRef)).val();
-            if (currentRoom?.gameStatus !== "countdown") {
-              console.log(`⏹️ Countdown ended early — stopping reshuffle for ${roomId}`);
-              break;
-            }
+            const [newCardId] = shuffledCards[cardIndex++] || [];
+            if (!newCardId) break;
       
-            const newPair = shuffledCards[availableIdx++];
-            if (!newPair) break;
-      
-            const [newCardId] = newPair;
             const assignUpdates = {
               [`rooms/${roomId}/bingoCards/${newCardId}/claimed`]: true,
               [`rooms/${roomId}/bingoCards/${newCardId}/claimedBy`]: demo.id,
@@ -152,16 +154,17 @@ class GameManager {
             };
       
             await update(ref(rtdb), assignUpdates);
-            console.log(`   ↪️ Demo ${demo.id} claimed card ${newCardId}`);
+            console.log(`🎴 Demo ${demo.id} claimed new card ${newCardId}`);
       
-            await new Promise(r => setTimeout(r, 800)); // 0.8s delay per player
+            await new Promise(r => setTimeout(r, 500)); // small delay
           }
       
           console.log(`✅ Finished reshuffling ${shuffledDemos.length} demo players in room ${roomId}`);
         } catch (err) {
-          console.error(`❌ Demo reshuffle error for room ${roomId}:`, err);
+          console.error(`❌ Demo reshuffle error in room ${roomId}:`, err);
         }
       })();
+      
       
   
       // --- Return countdown info ---

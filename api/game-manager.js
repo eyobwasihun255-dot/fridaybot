@@ -886,25 +886,35 @@ await set(balanceRef, current - betAmount);
       return { drawnNumbers: [], winners: [] };
     }
   
-    // --- Track last winner per room ---
-    if (!this.lastWinnerUserByRoom) this.lastWinnerUserByRoom = new Map();
-    const lastWinnerUserId = this.lastWinnerUserByRoom.get(roomId) || null;
-  
-    // --- Valid cards: must have numbers + claimedBy ---
+    // --- Valid cards (must have numbers + claimedBy) ---
     const validCards = cards.filter(c => c && Array.isArray(c.numbers) && c.claimedBy);
     if (validCards.length === 0) {
       console.warn(`⚠️ No valid cards for room ${roomId}`);
       return { drawnNumbers: [], winners: [] };
     }
   
-    // --- Filter out last winner’s cards ---
-    let possibleWinners = validCards.filter(c => c.claimedBy !== lastWinnerUserId);
+    // --- Initialize recent winners tracking ---
+    if (!this.recentWinnersByRoom) this.recentWinnersByRoom = new Map();
+    if (!this.recentWinnersByRoom.has(roomId)) this.recentWinnersByRoom.set(roomId, []);
   
-    // --- Edge case: if all cards belong to last winner, allow them ---
-    if (possibleWinners.length === 0) possibleWinners = [...validCards];
+    const recentWinners = this.recentWinnersByRoom.get(roomId);
+    const playerIds = [...new Set(validCards.map(c => c.claimedBy))];
+    const playerCount = playerIds.length;
+    const cooldown = Math.max(1, Math.floor(playerCount / 2)); // cooldown interval
   
-    // --- Pick winner card ---
-    const winnerCard = possibleWinners[Math.floor(Math.random() * possibleWinners.length)];
+    // --- Select eligible cards for winning ---
+    const eligibleCards = validCards.filter(c => !recentWinners.includes(c.claimedBy));
+  
+    let winnerCard;
+    if (eligibleCards.length === 0) {
+      // Everyone is on cooldown → reset and allow all again
+      console.log(`♻️ All players on cooldown in ${roomId}, resetting eligible pool`);
+      winnerCard = validCards[Math.floor(Math.random() * validCards.length)];
+      this.recentWinnersByRoom.set(roomId, []);
+    } else {
+      winnerCard = eligibleCards[Math.floor(Math.random() * eligibleCards.length)];
+    }
+  
     if (!winnerCard) {
       console.error(`❌ Could not select a winner card for room ${roomId}`);
       return { drawnNumbers: [], winners: [] };
@@ -953,7 +963,7 @@ await set(balanceRef, current - betAmount);
       }
     });
   
-    // --- Fill remaining spots up to 25 numbers ---
+    // --- Fill remaining first 25 numbers ---
     while (drawnNumbers.length < 25) {
       const rand = Math.floor(Math.random() * 75) + 1;
       if (!usedNumbers.has(rand)) {
@@ -962,13 +972,11 @@ await set(balanceRef, current - betAmount);
       }
     }
   
-    // --- Shuffle first 25 numbers for randomness ---
     const first25 = this.shuffleArray(drawnNumbers.slice(0, 25));
   
-    // --- After winner (26–75): draw missing numbers + random rest ---
+    // --- After 25: add missing numbers then random fill to 75 ---
     const after25 = [];
   
-    // Add all loser missing numbers first
     loserMissingNumbers.forEach(n => {
       if (n > 0 && n <= 75 && !usedNumbers.has(n)) {
         usedNumbers.add(n);
@@ -976,7 +984,6 @@ await set(balanceRef, current - betAmount);
       }
     });
   
-    // Fill remaining till 75
     while (after25.length + first25.length < 75) {
       const rand = Math.floor(Math.random() * 75) + 1;
       if (!usedNumbers.has(rand)) {
@@ -987,14 +994,19 @@ await set(balanceRef, current - betAmount);
   
     const finalDrawn = [...first25, ...this.shuffleArray(after25)];
   
-    // --- Store and return ---
-    winners.push(winnerCard.id);
-    console.log(`last winner before current drawn: ${lastWinnerUserId}`);
-    this.lastWinnerUserByRoom.set(roomId, newWinnerUserId);
-    console.log(`last winner after current drawn: ${this.lastWinnerUserByRoom.get(roomId)}`);
+    // --- Update winner cooldown tracking ---
+    const updatedHistory = [...recentWinners, newWinnerUserId];
+    if (updatedHistory.length > cooldown) {
+      updatedHistory.splice(0, updatedHistory.length - cooldown);
+    }
+    this.recentWinnersByRoom.set(roomId, updatedHistory);
   
+    console.log(`🏆 Winner: ${newWinnerUserId} | Cooldown=${cooldown} | History=[${updatedHistory.join(", ")}]`);
+  
+    winners.push(winnerCard.id);
     return { drawnNumbers: finalDrawn.slice(0, 75), winners };
   }
+  
   
   
   

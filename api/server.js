@@ -245,7 +245,7 @@ const processRoomCountdown = async (roomId, room, now) => {
   // Start countdown if conditions are met
   if (isWaiting && hasEnoughPlayers && !countdownActive) {
     console.log(`🔄 Starting countdown for room ${roomId} with ${players.length} players`);
-    const result = await gameManager.startCountdown(room, roomId, players, 30000, "auto");
+    const result = await gameManager.startCountdown(room, roomId, players, 28000, "auto");
     if (!result.success) {
       console.warn(`❌ Failed to start countdown for room ${roomId}: ${result.message}`);
     }

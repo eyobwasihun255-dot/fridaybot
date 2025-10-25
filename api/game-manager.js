@@ -875,10 +875,30 @@ await set(balanceRef, current - betAmount);
   }
 
   // Generate drawn numbers with predetermined winners
-  generateDrawnNumbersMultiWinner(roomId, cards = []) {
+  async generateDrawnNumbersMultiWinner(roomId, cards = []) {
     const winners = [];
     const usedNumbers = new Set();
     const drawnNumbers = [];
+  
+    // --- Check room status first ---
+    try {
+      const roomRef = ref(rtdb, `rooms/${roomId}`);
+      const roomSnap = await get(roomRef);
+  
+      if (!roomSnap.exists()) {
+        console.warn(`⚠️ Room ${roomId} not found`);
+        return { drawnNumbers: [], winners: [] };
+      }
+  
+      const roomData = roomSnap.val();
+      if (roomData.gameStatus !== "playing") {
+        console.log(`⏸️ Skipping number generation for room ${roomId}: state=${roomData.gameStatus}`);
+        return { drawnNumbers: [], winners: [] };
+      }
+    } catch (err) {
+      console.error(`❌ Failed to check room state for ${roomId}:`, err);
+      return { drawnNumbers: [], winners: [] };
+    }
   
     // --- Validate cards ---
     if (!Array.isArray(cards) || cards.length === 0) {
@@ -900,14 +920,13 @@ await set(balanceRef, current - betAmount);
     const recentWinners = this.recentWinnersByRoom.get(roomId);
     const playerIds = [...new Set(validCards.map(c => c.claimedBy))];
     const playerCount = playerIds.length;
-    const cooldown = Math.max(1, Math.floor(playerCount / 2)); // cooldown interval
+    const cooldown = Math.max(1, Math.floor(playerCount / 2));
   
     // --- Select eligible cards for winning ---
     const eligibleCards = validCards.filter(c => !recentWinners.includes(c.claimedBy));
   
     let winnerCard;
     if (eligibleCards.length === 0) {
-      // Everyone is on cooldown → reset and allow all again
       console.log(`♻️ All players on cooldown in ${roomId}, resetting eligible pool`);
       winnerCard = validCards[Math.floor(Math.random() * validCards.length)];
       this.recentWinnersByRoom.set(roomId, []);
@@ -930,7 +949,7 @@ await set(balanceRef, current - betAmount);
       return { drawnNumbers: [], winners: [] };
     }
   
-    // --- Winner: all pattern numbers will appear within first 25 ---
+    // --- Winner pattern numbers first ---
     winnerPattern.forEach(n => {
       if (n > 0 && n <= 75 && !usedNumbers.has(n)) {
         usedNumbers.add(n);
@@ -938,7 +957,7 @@ await set(balanceRef, current - betAmount);
       }
     });
   
-    // --- Losers: one missing number from their pattern ---
+    // --- Losers ---
     const loserMissingNumbers = [];
     validCards.forEach(card => {
       if (card.id === winnerCard.id) return;
@@ -963,7 +982,7 @@ await set(balanceRef, current - betAmount);
       }
     });
   
-    // --- Fill remaining first 25 numbers ---
+    // --- Fill up to 25 ---
     while (drawnNumbers.length < 25) {
       const rand = Math.floor(Math.random() * 75) + 1;
       if (!usedNumbers.has(rand)) {
@@ -974,7 +993,7 @@ await set(balanceRef, current - betAmount);
   
     const first25 = this.shuffleArray(drawnNumbers.slice(0, 25));
   
-    // --- After 25: add missing numbers then random fill to 75 ---
+    // --- After 25 ---
     const after25 = [];
   
     loserMissingNumbers.forEach(n => {
@@ -1006,6 +1025,7 @@ await set(balanceRef, current - betAmount);
     winners.push(winnerCard.id);
     return { drawnNumbers: finalDrawn.slice(0, 75), winners };
   }
+  
   
   
   

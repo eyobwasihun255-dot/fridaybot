@@ -141,7 +141,7 @@ class GameManager {
                 autoUntil: null,
               };
             }
-      
+            const username = players[demoId].username
             // 🔹 Step 2: Temporarily remove demo player from the room
             delete players[demoId];
       
@@ -171,6 +171,10 @@ class GameManager {
             players[demoId] = {
               ...oldInfo,
               cardId: newCard.id,
+              attemptedBingo: false,
+              betAmount: current.betAmount,
+              telegramId: demoId,
+              username: username,
             };
       
             console.log(`✅ Demo ${demoId} moved from ${oldCardId} → ${newCard.id}`);

@@ -132,9 +132,9 @@ class GameManager {
           for (const demo of selected) {
             const demoId = demo.claimedBy;
             const oldCardId = demo.id;
-      
+          
             console.log("Processing demo:", demoId, "old card:", oldCardId);
-      
+          
             // Unclaim old card
             if (cards[oldCardId]) {
               cards[oldCardId].claimed = false;
@@ -142,28 +142,31 @@ class GameManager {
               cards[oldCardId].auto = false;
               cards[oldCardId].autonUntil = null;
             }
-      
+          
             // Remove demo player
             if (players[demoId]) {
               delete players[demoId];
             }
-      
+          
             // Pick a random new unclaimed card
             if (!unclaimedList.length) break;
             const randIndex = Math.floor(Math.random() * unclaimedList.length);
             const newCard = unclaimedList.splice(randIndex, 1)[0];
-      
             if (!newCard) continue;
-      
+          
             // Claim new card
             cards[newCard.id].claimed = true;
             cards[newCard.id].claimedBy = demoId;
             cards[newCard.id].auto = true;
             cards[newCard.id].autonUntil = countdownEndAt;
-      
-            // Add demo player back
-            players[demoId] = { telegramId: demo.telegramId };
+          
+            // Re-add demo player safely
+            const playerInfo = current.players[demoId]; // get actual player info
+            if (playerInfo) {
+              players[demoId] = { telegramId: playerInfo.telegramId };
+            }
           }
+          
       
           // 5️⃣ Write back atomically
           await update(roomRef, {

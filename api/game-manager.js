@@ -112,12 +112,20 @@ class GameManager {
             return { done: false, reason: "none" };
           }
       
-          const demoCount = demoCards.length;
-          const numToReshuffle = demoCount < 10 ? Math.ceil(demoCount / 2) : Math.ceil(demoCount / 3);
-          const selected = demoCards.slice(0, numToReshuffle);
-      
-          console.log("Selected demo cards:", selected.map(d => d.id));
-      
+          // 2️⃣ Determine how many demo cards to reshuffle
+            const demoCount = demoCards.length;
+            const numCardsToChange = Math.min(3, demoCount); // change 3 cards, or fewer if not enough
+
+            // Pick demo cards randomly
+            function getRandomElements(array, n) {
+              const shuffled = [...array].sort(() => 0.5 - Math.random());
+              return shuffled.slice(0, n);
+            }
+
+            const selected = getRandomElements(demoCards, numCardsToChange);
+
+            console.log("Selected demo cards to reshuffle:", selected.map(d => d.id));
+
           // 3️⃣ Get unclaimed cards
           const unclaimedList = Object.entries(cards)
             .filter(([_, c]) => !c.claimed)
@@ -143,7 +151,7 @@ class GameManager {
               cards[oldCardId].autonUntil = null;
             }
           
-            // Remove demo player
+            // Remove demo player temporarily (optional)
             if (players[demoId]) {
               delete players[demoId];
             }
@@ -160,12 +168,16 @@ class GameManager {
             cards[newCard.id].auto = true;
             cards[newCard.id].autonUntil = countdownEndAt;
           
-            // Re-add demo player safely
-            const playerInfo = current.players[demoId]; // get actual player info
-            if (playerInfo) {
-              players[demoId] = { telegramId: playerInfo.telegramId };
+            // ✅ Re-add demo player fully with all properties, updating cardId
+            const oldPlayerInfo = current.players[demoId];
+            if (oldPlayerInfo) {
+              players[demoId] = {
+                ...oldPlayerInfo,
+                cardId: newCard.id, // update to new card
+              };
             }
           }
+          
           
       
           // 5️⃣ Write back atomically

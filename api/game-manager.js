@@ -137,48 +137,47 @@ class GameManager {
           }
       
           // 4️⃣ Perform reshuffle
-          for (const demo of selected) {
-            const demoId = demo.claimedBy;
-            const oldCardId = demo.id;
-          
-            console.log("Processing demo:", demoId, "old card:", oldCardId);
-          
-            // Unclaim old card
-            if (cards[oldCardId]) {
-              cards[oldCardId].claimed = false;
-              cards[oldCardId].claimedBy = null;
-              cards[oldCardId].auto = false;
-              cards[oldCardId].autonUntil = null;
-            }
-          
-            // Remove demo player temporarily (optional)
-            if (players[demoId]) {
-              delete players[demoId];
-            }
-          
-            // Pick a random new unclaimed card
-            if (!unclaimedList.length) break;
-            const randIndex = Math.floor(Math.random() * unclaimedList.length);
-            const newCard = unclaimedList.splice(randIndex, 1)[0];
-            if (!newCard) continue;
-          
-            // Claim new card
-            cards[newCard.id].claimed = true;
-            cards[newCard.id].claimedBy = demoId;
-            cards[newCard.id].auto = true;
-            cards[newCard.id].autonUntil = countdownEndAt;
-          
-            // ✅ Re-add demo player fully with all properties, updating cardId
-            const oldPlayerInfo = current.players[demoId];
-            if (oldPlayerInfo) {
-              players[demoId] = {
-                ...oldPlayerInfo,
-                cardId: newCard.id, // update to new card
-              };
-            }
-          }
-          
-          
+        // 4️⃣ Perform reshuffle
+for (const demo of selected) {
+  const demoId = demo.claimedBy;
+  const oldCardId = demo.id;
+
+  console.log("Processing demo:", demoId, "old card:", oldCardId);
+
+  // Unclaim old card
+  if (cards[oldCardId]) {
+    cards[oldCardId].claimed = false;
+    cards[oldCardId].claimedBy = null;
+    cards[oldCardId].auto = false;
+    cards[oldCardId].autonUntil = null;
+  }
+
+  // Pick a random new unclaimed card
+  if (!unclaimedList.length) break;
+  const randIndex = Math.floor(Math.random() * unclaimedList.length);
+  const newCard = unclaimedList.splice(randIndex, 1)[0];
+  if (!newCard) continue;
+
+  // Claim new card
+  cards[newCard.id].claimed = true;
+  cards[newCard.id].claimedBy = demoId;
+  cards[newCard.id].auto = true;
+  cards[newCard.id].autonUntil = countdownEndAt;
+
+  // Update or re-add demo player with full info
+  const oldPlayerInfo = players[demoId] || {
+    attemptedBingo: false,
+    betAmount: 0,
+    telegramId: demoId,
+    username: `demo_${demoId}`
+  };
+
+  players[demoId] = {
+    ...oldPlayerInfo,
+    cardId: newCard.id,  // update cardId to new card
+  };
+}
+
       
           // 5️⃣ Write back atomically
           await update(roomRef, {

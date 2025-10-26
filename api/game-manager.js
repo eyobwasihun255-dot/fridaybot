@@ -84,29 +84,30 @@ class GameManager {
   
      
       const performDemoReshuffle = async () => {
-        const STOP_THRESHOLD_MS = 2000; // stop reshuffle if <2s left
+        const STOP_THRESHOLD_MS = 2000;
         try {
           const snap = await get(roomRef);
-          const data = snap.val();
-          if (!data) {
+          const current = snap.val();
+          if (!current) {
             console.log(`⚠️ No room data for ${roomId}`);
             return { done: false, reason: "no-room" };
           }
       
-          const playersObj = data.players || {};
-          const cardsObj = data.bingoCards || {};
+          const cards = current.bingoCards || {};
+          const players = current.players || {};
       
-          // 1️⃣ find demo players with auto-claimed cards
-          const demoPlayers = Object.entries(playersObj)
+          // 1️⃣ Find demo players
+          const demoPlayers = Object.entries(players)
             .filter(([_, p]) => p?.telegramId?.toLowerCase().startsWith("demo"))
             .map(([id, p]) => ({ id, ...p }));
       
-          const demoCards = Object.entries(cardsObj)
+          // 2️⃣ Find demo cards with auto-claimed
+          const demoCards = Object.entries(cards)
             .filter(([_, c]) => c?.claimed && c?.auto && c?.claimedBy)
             .filter(([_, c]) => demoPlayers.some(dp => dp.id === c.claimedBy))
             .map(([id, c]) => ({ id, ...c }));
-          console.log(demoCards)
-          if (demoCards.length === 0) {
+      
+          if (!demoCards.length) {
             console.log(`⚠️ No demo players with auto-claimed cards to reshuffle in ${roomId}`);
             return { done: false, reason: "none" };
           }
@@ -114,65 +115,60 @@ class GameManager {
           const demoCount = demoCards.length;
           const numToReshuffle = demoCount < 10 ? Math.ceil(demoCount / 2) : Math.ceil(demoCount / 3);
           const selected = demoCards.slice(0, numToReshuffle);
-          console.log("selected cards:", selected);
-
-          const unclaimedCards = Object.entries(cardsObj)
+      
+          console.log("Selected demo cards:", selected.map(d => d.id));
+      
+          // 3️⃣ Get unclaimed cards
+          const unclaimedList = Object.entries(cards)
             .filter(([_, c]) => !c.claimed)
             .map(([id, c]) => ({ id, ...c }));
       
-          if (unclaimedCards.length === 0) {
+          if (!unclaimedList.length) {
             console.log(`⚠️ No unclaimed cards available in ${roomId}`);
             return { done: false, reason: "no-unclaimed" };
           }
       
-          // 2️⃣ Perform atomic reshuffle
-          await runTransaction(roomRef, (current) => {
-            if (!current) return;
-            if (countdownEndAt - Date.now() < STOP_THRESHOLD_MS) return;
+          // 4️⃣ Perform reshuffle
+          for (const demo of selected) {
+            const demoId = demo.claimedBy;
+            const oldCardId = demo.id;
       
-            const cards = current.bingoCards || {};
-            const players = current.players || {};
+            console.log("Processing demo:", demoId, "old card:", oldCardId);
       
-            const unclaimedList = Object.entries(cards)
-              .filter(([_, c]) => !c.claimed)
-              .map(([id, c]) => ({ id, ...c }));
-      
-            for (const demo of selected) {
-              const demoId = demo.claimedBy;
-              const oldCardId = demo.id;
-              console.log("id :",demoId)
-              console.log("old " ,oldCardId)
-              // Unclaim old card
-              if (cards[oldCardId]) {
-                cards[oldCardId].claimed = false;
-                cards[oldCardId].claimedBy = null;
-                cards[oldCardId].auto = false;
-                cards[oldCardId].autonUntil = null;
-              }
-      
-              // Remove demo player from players list
-              if (players[demoId]) {
-                delete players[demoId];
-              }
-      
-              // Pick a random new unclaimed card
-              const randIndex = Math.floor(Math.random() * unclaimedList.length);
-              const newCard = unclaimedList.splice(randIndex, 1)[0];
-              if (!newCard) continue;
-      
-              // Claim it
-              cards[newCard.id].claimed = true;
-              cards[newCard.id].claimedBy = demoId;
-              cards[newCard.id].auto = true;
-              cards[newCard.id].autonUntil = countdownEndAt;
-      
-              // Add demo player back to players list (if you want them back)
-              players[demoId] = demo; // optional: comment this line if you want to remove them permanently
+            // Unclaim old card
+            if (cards[oldCardId]) {
+              cards[oldCardId].claimed = false;
+              cards[oldCardId].claimedBy = null;
+              cards[oldCardId].auto = false;
+              cards[oldCardId].autonUntil = null;
             }
       
-            current.bingoCards = cards;
-            current.players = players;
-            return current;
+            // Remove demo player
+            if (players[demoId]) {
+              delete players[demoId];
+            }
+      
+            // Pick a random new unclaimed card
+            if (!unclaimedList.length) break;
+            const randIndex = Math.floor(Math.random() * unclaimedList.length);
+            const newCard = unclaimedList.splice(randIndex, 1)[0];
+      
+            if (!newCard) continue;
+      
+            // Claim new card
+            cards[newCard.id].claimed = true;
+            cards[newCard.id].claimedBy = demoId;
+            cards[newCard.id].auto = true;
+            cards[newCard.id].autonUntil = countdownEndAt;
+      
+            // Add demo player back
+            players[demoId] = { telegramId: demo.telegramId };
+          }
+      
+          // 5️⃣ Write back atomically
+          await update(roomRef, {
+            bingoCards: cards,
+            players: players,
           });
       
           console.log(`✅ Demo reshuffle complete for ${roomId}`);

@@ -114,7 +114,7 @@ class GameManager {
           const demoCount = demoCards.length;
           const numToReshuffle = demoCount < 10 ? Math.ceil(demoCount / 2) : Math.ceil(demoCount / 3);
           const selected = demoCards.slice(0, numToReshuffle);
-      
+          console.log(`selected card : ${selected}`)
           const unclaimedCards = Object.entries(cardsObj)
             .filter(([_, c]) => !c.claimed)
             .map(([id, c]) => ({ id, ...c }));
@@ -139,7 +139,8 @@ class GameManager {
             for (const demo of selected) {
               const demoId = demo.claimedBy;
               const oldCardId = demo.id;
-      
+              console.log(demoId)
+              console/log(oldCardId)
               // Unclaim old card
               if (cards[oldCardId]) {
                 cards[oldCardId].claimed = false;

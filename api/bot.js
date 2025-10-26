@@ -1505,14 +1505,14 @@ if (pending?.type === "awaiting_room_reset") {
     const players = Object.values(roomData.players || {});
 
     // 🛑 1) Stop number drawing if the room is currently playing
-    if (previousState === "playing") {
+    
       try {
         gameManager.stopNumberDrawing(roomId);
         console.log(`🛑 Number drawing stopped for room ${roomId} before reset.`);
       } catch (err) {
         console.error(`⚠️ Failed to stop number drawing for ${roomId}:`, err);
       }
-    }
+  
 
     // 💰 2) Refund all players if game was playing
     if (previousState === "playing" && players.length > 0 && betAmount > 0) {

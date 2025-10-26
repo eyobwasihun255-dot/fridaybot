@@ -94,7 +94,7 @@ class GameManager {
           }
       
           const playersObj = data.players || {};
-          const cardsObj = data.cards || {};
+          const cardsObj = data.bingoCards || {};
       
           // 1️⃣ find demo players with auto-claimed cards
           const demoPlayers = Object.entries(playersObj)

@@ -85,6 +85,8 @@ class GameManager {
      
       const performDemoReshuffle = async () => {
         const STOP_THRESHOLD_MS = 2000;
+        const INTERVAL_MS = 300; // ⏱️ 300ms delay between reshuffles
+      
         try {
           const snap = await get(roomRef);
           const current = snap.val();
@@ -112,21 +114,20 @@ class GameManager {
             return { done: false, reason: "none" };
           }
       
-          // 2️⃣ Determine how many demo cards to reshuffle
-            const demoCount = demoCards.length;
-            const numCardsToChange = Math.min(3, demoCount); // change 3 cards, or fewer if not enough
-
-            // Pick demo cards randomly
-            function getRandomElements(array, n) {
-              const shuffled = [...array].sort(() => 0.5 - Math.random());
-              return shuffled.slice(0, n);
-            }
-
-            const selected = getRandomElements(demoCards, numCardsToChange);
-
-            console.log("Selected demo cards to reshuffle:", selected.map(d => d.id));
-
-          // 3️⃣ Get unclaimed cards
+          // 3️⃣ Determine how many demo cards to reshuffle
+          const demoCount = demoCards.length;
+          const numCardsToChange = Math.min(3, demoCount);
+      
+          // Randomly select demo cards
+          function getRandomElements(array, n) {
+            const shuffled = [...array].sort(() => 0.5 - Math.random());
+            return shuffled.slice(0, n);
+          }
+      
+          const selected = getRandomElements(demoCards, numCardsToChange);
+          console.log("Selected demo cards to reshuffle:", selected.map(d => d.id));
+      
+          // 4️⃣ Get unclaimed cards
           const unclaimedList = Object.entries(cards)
             .filter(([_, c]) => !c.claimed)
             .map(([id, c]) => ({ id, ...c }));
@@ -136,60 +137,62 @@ class GameManager {
             return { done: false, reason: "no-unclaimed" };
           }
       
-          // 4️⃣ Perform reshuffle
-        // 4️⃣ Perform reshuffle
-// 4️⃣ Perform reshuffle sequentially
-for (const demo of selected) {
-  const demoId = demo.claimedBy;
-  const oldCardId = demo.id;
-
-  console.log("Processing demo:", demoId, "old card:", oldCardId);
-
-  // Unclaim old card
-  if (cards[oldCardId]) {
-    cards[oldCardId] = {
-      ...cards[oldCardId],
-      claimed: false,
-      claimedBy: null,
-      auto: false,
-      autonUntil: null,
-    };
-  }
-
-  // Pick a random new unclaimed card
-  if (unclaimedList.length === 0) break;
-  const randIndex = Math.floor(Math.random() * unclaimedList.length);
-  const newCard = unclaimedList.splice(randIndex, 1)[0];
-  if (!newCard) continue;
-
-  // Claim new card
-  cards[newCard.id] = {
-    ...cards[newCard.id],
-    claimed: true,
-    claimedBy: demoId,
-    auto: true,
-    autonUntil: countdownEndAt,
-  };
-
-  // Update or re-add demo player with full info
-  const oldPlayerInfo = current.players?.[demoId] || {
-    attemptedBingo: false,
-    betAmount: 0,
-    telegramId: demoId,
-    username: `demo_${demoId}`,
-  };
-
-  players[demoId] = {
-    ...oldPlayerInfo,
-    cardId: newCard.id, // update cardId to new card
-  };
-
-  console.log(`Demo player ${demoId} assigned new card ${newCard.id}`);
-}
-
-
+          // Helper function for delay
+          const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
       
-          // 5️⃣ Write back atomically
+          // 5️⃣ Sequential reshuffle with delay
+          for (const demo of selected) {
+            const demoId = demo.claimedBy;
+            const oldCardId = demo.id;
+      
+            console.log("Processing demo:", demoId, "old card:", oldCardId);
+      
+            // Unclaim old card
+            if (cards[oldCardId]) {
+              cards[oldCardId] = {
+                ...cards[oldCardId],
+                claimed: false,
+                claimedBy: null,
+                auto: false,
+                autoUntil: null,
+              };
+            }
+      
+            // Pick a random new unclaimed card
+            if (unclaimedList.length === 0) break;
+            const randIndex = Math.floor(Math.random() * unclaimedList.length);
+            const newCard = unclaimedList.splice(randIndex, 1)[0];
+            if (!newCard) continue;
+      
+            // Claim new card
+            cards[newCard.id] = {
+              ...cards[newCard.id],
+              claimed: true,
+              claimedBy: demoId,
+              auto: true,
+              autoUntil: countdownEndAt,
+            };
+      
+            // Update player info
+            const oldPlayerInfo = current.players?.[demoId] || {
+              attemptedBingo: false,
+              betAmount: 0,
+              telegramId: demoId,
+              username: `demo_${demoId}`,
+            };
+      
+            players[demoId] = {
+              ...oldPlayerInfo,
+              cardId: newCard.id,
+            };
+      
+            console.log(`✅ Demo player ${demoId} assigned new card ${newCard.id}`);
+      
+            // Wait 300ms before moving to the next demo player
+            await delay(INTERVAL_MS);
+          }
+      
+          // 6️⃣ Write back atomically after all reshuffles
           await update(roomRef, {
             bingoCards: cards,
             players: players,
@@ -202,6 +205,7 @@ for (const demo of selected) {
           return { done: false, reason: "error", err };
         }
       };
+      
       
 
   

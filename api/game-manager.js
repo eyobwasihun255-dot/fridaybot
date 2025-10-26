@@ -23,6 +23,13 @@ class GameManager {
   setSocketIO(io) {
     this.io = io;
   }
+  stopNumberDrawing(roomId) {
+    const interval = this.numberDrawIntervals.get(roomId);
+    if (interval) {
+      clearInterval(interval);
+      this.numberDrawIntervals.delete(roomId);
+    }
+  }
   async startCountdown(room, roomId, players, durationMs = 30000, startedBy = "auto") {
     try {
       console.log(`🎮 Room ${roomId} snapshot received for countdown`);
@@ -417,13 +424,7 @@ for (const pid of playerIds) {
   }
 
   // Stop number drawing
-  stopNumberDrawing(roomId) {
-    const interval = this.numberDrawIntervals.get(roomId);
-    if (interval) {
-      clearInterval(interval);
-      this.numberDrawIntervals.delete(roomId);
-    }
-  }
+
   // 🧮 Collect demo balances and distribute to real players before reset
   async distributeDemoBalances(roomId) {
     try {

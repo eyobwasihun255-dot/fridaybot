@@ -1,7 +1,7 @@
 import { ref, get, set, update, push , remove, runTransaction } from "firebase/database";
 import { rtdb } from "../bot/firebaseConfig.js"; 
 import fetch from "node-fetch";
-import gameManager from "./game-manager.js"; // adjust path as needed
+import GameManager, { gameManager } from "./game-manager.js"; // adjust path as needed
 // or for CommonJS: const gameManager = require("./game-manager.js");
 
 

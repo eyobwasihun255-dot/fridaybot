@@ -138,8 +138,8 @@ class GameManager {
       
           // 4️⃣ Perform reshuffle
         // 4️⃣ Perform reshuffle
-        for (let i = 0; i < selected.length; i++) {
-          const demo = selected[i];
+// 4️⃣ Perform reshuffle sequentially
+for (const demo of selected) {
   const demoId = demo.claimedBy;
   const oldCardId = demo.id;
 
@@ -147,37 +147,46 @@ class GameManager {
 
   // Unclaim old card
   if (cards[oldCardId]) {
-    cards[oldCardId].claimed = false;
-    cards[oldCardId].claimedBy = null;
-    cards[oldCardId].auto = false;
-    cards[oldCardId].autonUntil = null;
+    cards[oldCardId] = {
+      ...cards[oldCardId],
+      claimed: false,
+      claimedBy: null,
+      auto: false,
+      autonUntil: null,
+    };
   }
 
   // Pick a random new unclaimed card
-  if (!unclaimedList.length) break;
+  if (unclaimedList.length === 0) break;
   const randIndex = Math.floor(Math.random() * unclaimedList.length);
   const newCard = unclaimedList.splice(randIndex, 1)[0];
   if (!newCard) continue;
 
   // Claim new card
-  cards[newCard.id].claimed = true;
-  cards[newCard.id].claimedBy = demoId;
-  cards[newCard.id].auto = true;
-  cards[newCard.id].autonUntil = countdownEndAt;
+  cards[newCard.id] = {
+    ...cards[newCard.id],
+    claimed: true,
+    claimedBy: demoId,
+    auto: true,
+    autonUntil: countdownEndAt,
+  };
 
   // Update or re-add demo player with full info
-  const oldPlayerInfo = players[demoId] || {
+  const oldPlayerInfo = current.players?.[demoId] || {
     attemptedBingo: false,
     betAmount: 0,
     telegramId: demoId,
-    username: `demo_${demoId}`
+    username: `demo_${demoId}`,
   };
 
   players[demoId] = {
     ...oldPlayerInfo,
-    cardId: newCard.id,  // update cardId to new card
+    cardId: newCard.id, // update cardId to new card
   };
+
+  console.log(`Demo player ${demoId} assigned new card ${newCard.id}`);
 }
+
 
       
           // 5️⃣ Write back atomically

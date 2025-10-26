@@ -105,7 +105,7 @@ class GameManager {
             .filter(([_, c]) => c?.claimed && c?.auto && c?.claimedBy)
             .filter(([_, c]) => demoPlayers.some(dp => dp.id === c.claimedBy))
             .map(([id, c]) => ({ id, ...c }));
-      
+          console.log(demoCards)
           if (demoCards.length === 0) {
             console.log(`⚠️ No demo players with auto-claimed cards to reshuffle in ${roomId}`);
             return { done: false, reason: "none" };
@@ -148,6 +148,11 @@ class GameManager {
                 cards[oldCardId].autonUntil = null;
               }
       
+              // Remove demo player from players list
+              if (players[demoId]) {
+                delete players[demoId];
+              }
+      
               // Pick a random new unclaimed card
               const randIndex = Math.floor(Math.random() * unclaimedList.length);
               const newCard = unclaimedList.splice(randIndex, 1)[0];
@@ -158,9 +163,12 @@ class GameManager {
               cards[newCard.id].claimedBy = demoId;
               cards[newCard.id].auto = true;
               cards[newCard.id].autonUntil = countdownEndAt;
+      
+              // Add demo player back to players list (if you want them back)
+              players[demoId] = demo; // optional: comment this line if you want to remove them permanently
             }
       
-            current.cards = cards;
+            current.bingoCards = cards;
             current.players = players;
             return current;
           });

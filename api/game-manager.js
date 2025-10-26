@@ -141,7 +141,7 @@ class GameManager {
               const demoId = demo.claimedBy;
               const oldCardId = demo.id;
               console.log("id :",demoId)
-              console/log("old " ,oldCardId)
+              console.log("old " ,oldCardId)
               // Unclaim old card
               if (cards[oldCardId]) {
                 cards[oldCardId].claimed = false;

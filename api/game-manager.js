@@ -138,7 +138,8 @@ class GameManager {
       
           // 4️⃣ Perform reshuffle
         // 4️⃣ Perform reshuffle
-for (const demo of selected) {
+        for (let i = 0; i < selected.length; i++) {
+          const demo = selected[i];
   const demoId = demo.claimedBy;
   const oldCardId = demo.id;
 

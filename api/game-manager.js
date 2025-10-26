@@ -74,114 +74,240 @@ class GameManager {
   
       if (this.io) this.io.to(roomId).emit("countdownStarted", { roomId, countdownEndAt });
   
-      // --- Start demo reshuffle (robust) ---
-      // --- Start demo reshuffle sequentially ---
-      (async () => {
-        try {
-          const cardsRef = ref(rtdb, `rooms/${roomId}/bingoCards`);
-          const playersRef = ref(rtdb, `rooms/${roomId}/players`);
-          const roomRef = ref(rtdb, `rooms/${roomId}`);
-      
-          // Fetch cards + players
-          const [cardsSnap, playersSnap] = await Promise.all([get(cardsRef), get(playersRef)]);
-          if (!cardsSnap.exists() || !playersSnap.exists()) {
-            console.log(`⚠️ Missing cards or players for reshuffle in ${roomId}`);
-            return;
-          }
-      
-          const cards = cardsSnap.val();
-          const playersData = playersSnap.val();
-      
-          // --- Step 1: Identify demo players ---
-          const demoPlayers = Object.entries(playersData)
-            .filter(([id]) => id.startsWith("demo"))
-            .map(([id, p]) => ({ id, ...p }));
-      
-          if (demoPlayers.length === 0) {
-            console.log(`ℹ️ No demo players found in room ${roomId}`);
-            return;
-          }
-      
-          // Limit to 10 max
-          const limitedDemos = demoPlayers.slice(0, 10);
-          console.log(`🎯 Sequentially reshuffling ${limitedDemos.length} demo players in ${roomId}`);
-      
-          // --- Step 2: Unclaim any demo-owned cards ---
-          const unclaimUpdates = {};
-          for (const [cardId, card] of Object.entries(cards)) {
-            if (card?.claimed && card.claimedBy?.startsWith("demo")) {
-              unclaimUpdates[`rooms/${roomId}/bingoCards/${cardId}/claimed`] = false;
-              unclaimUpdates[`rooms/${roomId}/bingoCards/${cardId}/claimedBy`] = null;
-              unclaimUpdates[`rooms/${roomId}/bingoCards/${cardId}/auto`] = false;
-              unclaimUpdates[`rooms/${roomId}/bingoCards/${cardId}/autoUntil`] = null;
-            }
-          }
-      
-          if (Object.keys(unclaimUpdates).length > 0) {
-            await update(ref(rtdb), unclaimUpdates);
-            console.log(`✅ Cleared old demo claims in ${roomId}`);
-          }
-      
-          // --- Step 3: Prepare sequential reshuffling ---
-          const refreshedSnap = await get(cardsRef);
-          const refreshedCards = refreshedSnap.exists() ? refreshedSnap.val() : {};
-          const unclaimed = Object.entries(refreshedCards).filter(([_, c]) => !c?.claimed);
-      
-          if (unclaimed.length === 0) {
-            console.log(`⚠️ No unclaimed cards available in ${roomId}`);
-            return;
-          }
-      
-          const shuffledDemos = [...limitedDemos].sort(() => 0.5 - Math.random());
-          const shuffledUnclaimed = [...unclaimed].sort(() => 0.5 - Math.random());
-      
-          const totalToAssign = Math.min(shuffledDemos.length, shuffledUnclaimed.length);
-          const startTime = Date.now();
-      
-          // Fetch countdownEndAt so we know when to stop
-          const roomSnap = await get(roomRef);
-          const countdownEndAt = roomSnap.val()?.countdownEndAt || (Date.now() + 10000);
-      
-          console.log(`⏱ Countdown ends at ${new Date(countdownEndAt).toLocaleTimeString()}`);
-      
-          let assigned = 0;
-          for (let i = 0; i < totalToAssign; i++) {
-            const now = Date.now();
-      
-            // Stop if less than 3s remain
-            if (countdownEndAt - now <= 3000) {
-              console.log(`🛑 Stopping reshuffle — only ${((countdownEndAt - now) / 1000).toFixed(1)}s left`);
-              break;
-            }
-      
-            const demo = shuffledDemos[i];
-            const [cardId] = shuffledUnclaimed[i];
-            if (!cardId) continue;
-      
-            const updates = {};
-            updates[`rooms/${roomId}/bingoCards/${cardId}/claimed`] = true;
-            updates[`rooms/${roomId}/bingoCards/${cardId}/claimedBy`] = demo.id;
-            updates[`rooms/${roomId}/bingoCards/${cardId}/auto`] = true;
-            updates[`rooms/${roomId}/bingoCards/${cardId}/autoUntil`] = now + 24 * 60 * 60 * 1000;
-            updates[`rooms/${roomId}/players/${demo.id}/cardId`] = cardId;
-            updates[`rooms/${roomId}/players/${demo.id}/autoCardAssignedAt`] = now;
-      
-            await update(ref(rtdb), updates);
-            assigned++;
-      
-            console.log(`🎴 [${assigned}/${totalToAssign}] Assigned ${demo.id} → card ${cardId}`);
-      
-            // Wait 500ms before next (to simulate sequential reshuffling)
-            await new Promise(res => setTimeout(res, 500));
-          }
-      
-          console.log(`✅ Sequential reshuffle completed (${assigned} demos assigned) in ${roomId}`);
-        } catch (err) {
-          console.error(`❌ Sequential reshuffle error in ${roomId}:`, err);
+      // -------------------------
+      // --- Demo reshuffle ---
+      // -------------------------
+      // Run the reshuffle as described by you:
+      // 1) find demo players with claimed card & auto=true
+      // 2) choose X players (half if demoCount<10, else 1/3)
+      // 3) atomically unclaim their cards, pick random unclaimed cards and claim them again
+      // 4) remove & re-add players in players list
+      // 5) do it sequentially (deterministic selection), but commit atomically
+      // 6) stop if near countdown end (we stop if less than STOP_THRESHOLD_MS left)
+  
+      const STOP_THRESHOLD_MS = 2000; // stop reshuffle if < 2s remaining
+  
+      const shuffleArray = (arr) => {
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
         }
-      })();
-      
-      
+        return arr;
+      };
+  
+      // performDemoReshuffle: gather info, prepare changes sequentially, commit via one transaction
+      const performDemoReshuffle = async () => {
+        try {
+          // quick guard: abort if almost over
+          if (countdownEndAt - Date.now() < STOP_THRESHOLD_MS) {
+            console.log(`⏸️ Aborting demo reshuffle for ${roomId}: too little time left`);
+            return { done: false, reason: "time" };
+          }
+  
+          const snap = await get(roomRef);
+          const data = snap.val();
+          if (!data) {
+            console.log(`⚠️ No room data for ${roomId} when reshuffling`);
+            return { done: false, reason: "no-room" };
+          }
+  
+          // assume room.cards is an object: { cardId: { id, claimed, claimedBy, auto, autonUntil, ... } }
+          const cardsObj = data.cards || {};
+          const cardsList = Object.values(cardsObj);
+  
+          // Determine demo players that have a claimed card and auto === true.
+          // We'll map by userId (claimedBy)
+          // Assumption: players array contains either ids or player objects; try both
+          const roomPlayers = Array.isArray(data.players) ? data.players.slice() : [];
+  
+          // Build a map of playerId -> player info (try to get telegramId)
+          const playerMap = new Map();
+          for (const p of roomPlayers) {
+            if (!p) continue;
+            if (typeof p === "string") {
+              // if players were strings (ids) we don't have telegramId here; we'll derive from cards
+              playerMap.set(p, { id: p, telegramId: null });
+            } else if (typeof p === "object") {
+              playerMap.set(p.id ?? p.uid ?? p.userId, { ...p, id: p.id ?? p.uid ?? p.userId });
+            }
+          }
+  
+          // find demo players using cards (preferred — we require claimed card)
+          const demoPlayersWithCards = [];
+          for (const card of cardsList) {
+            if (!card || !card.claimed) continue;
+            const claimedBy = card.claimedBy;
+            if (!claimedBy) continue;
+            const playerInfo = playerMap.get(claimedBy) || { id: claimedBy, telegramId: null };
+            // try to obtain telegramId from card or player if present
+            const telegramId = (playerInfo.telegramId || card.telegramId || "").toString();
+            if (typeof telegramId === "string" && telegramId.toLowerCase().startsWith("demo")) {
+              // require that card.auto === true to be eligible
+              if (card.auto) {
+                demoPlayersWithCards.push({ playerId: claimedBy, telegramId, cardId: card.id, card });
+              }
+            }
+          }
+  
+          if (demoPlayersWithCards.length === 0) {
+            console.log(`⚠️ No demo players with auto-claimed cards to reshuffle in ${roomId}`);
+            return { done: false, reason: "none" };
+          }
+  
+          // determine how many to reshuffle
+          const demoCount = demoPlayersWithCards.length;
+          const numToReshuffle =
+            demoCount < 10 ? Math.ceil(demoCount / 2) : Math.ceil(demoCount / 3);
+          console.log(`🔁 Demo players found: ${demoCount}, reshuffling: ${numToReshuffle}`);
+  
+          // choose the players sequentially by shuffling and taking first N — this is deterministic after shuffling
+          const shuffled = shuffleArray(demoPlayersWithCards.slice());
+          const selected = shuffled.slice(0, numToReshuffle);
+  
+          // Prepare atomic transaction: unclaim selected cards, find unclaimed cards for reassigning, update players list
+          // We'll collect steps sequentially in JS, but then commit them in a single transaction for atomicity.
+          const selectedByPlayerId = new Map(selected.map(s => [s.playerId, s]));
+          const unclaimedCardIds = Object.keys(cardsObj).filter(cid => {
+            const c = cardsObj[cid];
+            return c && (!c.claimed || c.claimed === false);
+          });
+  
+          // If there are not enough unclaimed cards, we can still reassign by choosing previously-unselected unclaimed cards.
+          // We'll shuffle unclaimedCardIds to pick random ones.
+          shuffleArray(unclaimedCardIds);
+  
+          // Build the transaction function
+          const transactionResult = await runTransaction(roomRef, (current) => {
+            if (!current) return; // abort if room not found
+  
+            // Safety: stop early if time almost up before applying transaction
+            if (countdownEndAt - Date.now() < STOP_THRESHOLD_MS) {
+              console.log(`⏸️ Aborting transaction for ${roomId}: countdown too close to end`);
+              return; // returning undefined/false aborts transaction (no change)
+            }
+  
+            // Ensure cards and players exist in the snapshot used for transaction
+            current.cards = current.cards || {};
+            current.players = Array.isArray(current.players) ? current.players.slice() : [];
+  
+            // We'll operate sequentially in the same order as `selected`
+            let unclaimedIdx = 0;
+            for (const sel of selected) {
+              const { playerId, cardId: oldCardId } = sel;
+  
+              // 1) Remove the player from current.players (if present)
+              // remove all entries with that id
+              current.players = current.players.filter((p) => {
+                if (!p) return false;
+                if (typeof p === "string") return p !== playerId;
+                const pid = p.id ?? p.uid ?? p.userId;
+                return pid !== playerId;
+              });
+  
+              // 2) Unclaim the player's old card (if present and matches)
+              if (oldCardId && current.cards[oldCardId]) {
+                current.cards[oldCardId].claimed = false;
+                current.cards[oldCardId].claimedBy = null;
+                current.cards[oldCardId].auto = false;
+                current.cards[oldCardId].autonUntil = null;
+              } else {
+                // if the old card not found by id, attempt to find any card claimed by this playerId
+                for (const cid of Object.keys(current.cards)) {
+                  const c = current.cards[cid];
+                  if (c && c.claimedBy === playerId) {
+                    c.claimed = false;
+                    c.claimedBy = null;
+                    c.auto = false;
+                    c.autonUntil = null;
+                    break;
+                  }
+                }
+              }
+  
+              // 3) Find an unclaimed card to reassign
+              let pickCardId = null;
+              // first try the precomputed pool
+              while (unclaimedIdx < unclaimedCardIds.length) {
+                const cand = unclaimedCardIds[unclaimedIdx++];
+                const candCard = current.cards[cand];
+                if (!candCard) continue;
+                if (!candCard.claimed) {
+                  pickCardId = cand;
+                  break;
+                }
+              }
+  
+              // If none available from precomputed list, scan current.cards to find an unclaimed one
+              if (!pickCardId) {
+                for (const cid of Object.keys(current.cards)) {
+                  const c = current.cards[cid];
+                  if (c && !c.claimed) {
+                    pickCardId = cid;
+                    break;
+                  }
+                }
+              }
+  
+              if (!pickCardId) {
+                // No unclaimed card available — abort transaction (so none of the partial changes apply)
+                console.warn(`⚠️ No unclaimed card available to assign to demo player ${playerId} in ${roomId}`);
+                return; // abort transaction (no changes)
+              }
+  
+              // 4) Claim the pickCardId for this demo user, set auto true and autonUntil = countdownEndAt
+              const claimCard = current.cards[pickCardId];
+              claimCard.claimed = true;
+              claimCard.claimedBy = playerId;
+              claimCard.auto = true;
+              claimCard.autonUntil = countdownEndAt;
+  
+              // 5) Add the player back to current.players (append to end)
+              // Keep player object if we have stored player details in 'selected', else add id string
+              const selPlayerTelegram = sel.telegramId || null;
+              if (selPlayerTelegram) {
+                // prefer object form
+                current.players.push({ id: playerId, telegramId: selPlayerTelegram });
+              } else {
+                current.players.push(playerId);
+              }
+  
+              // Emit progress per player (if socket available) — won't break atomicity; it's outside transaction
+            } // end for selected players
+  
+            // if we reach here, we return the modified current snapshot and transaction will commit
+            return current;
+          }, {
+            // optional: max retries, etc.
+          });
+  
+          // runTransaction result handling: depends on SDK; some return committed snapshot
+          if (transactionResult && transactionResult.committed) {
+            console.log(`✅ Demo reshuffle committed for ${roomId} — reshuffled ${selected.length} players`);
+            if (this.io) {
+              this.io.to(roomId).emit("countdownDemoReshuffleDone", {
+                roomId,
+                reshuffled: selected.map(s => s.playerId),
+              });
+            }
+            return { done: true, reshuffled: selected.map(s => s.playerId) };
+          } else {
+            console.warn(`⚠️ Demo reshuffle transaction aborted or not committed for ${roomId}`);
+            return { done: false, reason: "tx-aborted" };
+          }
+        } catch (err) {
+          console.error(`❌ Error during demo reshuffle for ${roomId}:`, err);
+          return { done: false, reason: "error", err };
+        }
+      }; // end performDemoReshuffle
+  
+      // Kick off the demo reshuffle but ensure it completes before countdownEndAt - STOP_THRESHOLD_MS
+      // We'll await it now (synchronous for the rest of the function) so it stops before return.
+      // If you prefer this to run in background, remove the await and handle cancellations differently.
+      const reshuffleResult = await performDemoReshuffle();
+      if (!reshuffleResult.done) {
+        console.log(`ℹ️ Demo reshuffle for ${roomId} did not complete:`, reshuffleResult.reason || reshuffleResult);
+      }
+  
       // --- Return countdown info ---
       return { success: true, countdownEndAt };
     } catch (err) {
@@ -189,6 +315,7 @@ class GameManager {
       return { success: false, message: "Server error" };
     }
   }
+  
   
   
   

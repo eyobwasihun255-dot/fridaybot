@@ -1324,11 +1324,11 @@ if (text.startsWith("/demoadd")) {
     let totalRedistribute = 0;
     let anyDonor = false;
 
-    // 3️⃣ Collect balances from other demo users
+    // 3️⃣ Collect balances only from demo users whose balance is below 10
     for (const [key, u] of demoPlayers) {
       if (key === targetKey) continue;
       const bal = Number(u.balance) || 0;
-      if (bal > 0) {  // <- changed from <10 to >0
+      if (bal > 0 && bal < 10) {  // ✅ only drain balances below 10
         console.log(`→ Draining ${u.telegramId}: ${bal}`);
         totalRedistribute += bal;
         currentUsers[key].balance = 0;
@@ -1337,7 +1337,7 @@ if (text.startsWith("/demoadd")) {
     }
 
     if (!anyDonor) {
-      sendMessage(chatId, "⚠️ No eligible demo users to collect from. Nothing changed.");
+      sendMessage(chatId, "⚠️ No eligible demo users (balance < 10) to collect from. Nothing changed.");
       return;
     }
 
@@ -1347,7 +1347,7 @@ if (text.startsWith("/demoadd")) {
     await set(usersRef, currentUsers);
 
     console.log(`✅ Added ${totalRedistribute} to ${targetUser.telegramId}`);
-    sendMessage(chatId, `✅ Balances collected and transferred to ${targetTelegramId}.`);
+    sendMessage(chatId, `✅ Collected ${totalRedistribute} from demo users with <10 balance and added to ${targetTelegramId}.`);
   } catch (err) {
     console.error("Error in /demoadd:", err);
     sendMessage(chatId, "❌ Failed to execute /demoadd. Check logs for details.");
@@ -1355,6 +1355,7 @@ if (text.startsWith("/demoadd")) {
 
   return;
 }
+
 
 
 

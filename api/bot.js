@@ -1137,14 +1137,14 @@ if (pending?.type === "awaiting_random_auto") {
     const availableNames = [
       "Abiti213", "Bubu_24", "temesgen2507", "bk52_2000", "blackii",
       "ዘላለም", "kala11", "አንዱ00", "Teda_xx1", "Abeni_20",
-      "nattii1122", "Jonas_row", "Shmew_GG", "Abebe_123", "Sultan_great",
+      "nattii1122", "Jonas_row", "shmew_GG", "Abebe_123", "Sultan_great",
       "Rene_41", "mativiva", "Debeli_2023", "ሲሳይ_23", "Dereyew49", "Nahomx", "Biruk_101", "Miki_theOne", "KalebKing", "Eyobzz",
       "Nati_real", "YoniLover", "Beki45", "KiduPro", "Solo_999",
-      "HenokD", "Teddy21", "Luelx", "DawitZone", "AbelPrime",
-      "Getu44", "KaluMan", "Yafet07", "EyasCool", "Miki03",
-      "Tesfu88", "Sami47", "Kida_777", "Dagi2025", "TekluW",
+      "HenokD", "teddy21", "Luelx", "DawitZone", "AbelPrime",
+      "getu44", "KaluMan", "Yafet07", "EyasCool", "miki03",
+      "Tesfu88", "Sami47", "Kida_777", "dagi2025", "TekluW",
       "EyuXx", "Isra_boy", "Girmz22", "Teshi14", "BiruBoss",
-      "MikiPro", "NahomFire", "Jonny_Eth", "Hailex", "Meru12",
+      "MikiPro", "NahomFire", "jonny_Eth", "hailex", "Meru12",
       "BekiZero", "YonasXD", "Kal_2025", "SoloETH", "Kidus10"
     ];
 

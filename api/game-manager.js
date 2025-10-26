@@ -85,7 +85,7 @@ class GameManager {
      
       const performDemoReshuffle = async () => {
         const STOP_THRESHOLD_MS = 2000;
-        const INTERVAL_MS = 300; // ⏱️ 300ms delay between reshuffles
+        const INTERVAL_MS = 400; // delay between demo reshuffles
       
         try {
           const snap = await get(roomRef);
@@ -95,59 +95,43 @@ class GameManager {
             return { done: false, reason: "no-room" };
           }
       
-          const cards = current.bingoCards || {};
-          const players = current.players || {};
+          let cards = current.bingoCards || {};
+          let players = current.players || {};
       
-          // 1️⃣ Find demo players
+          // 1️⃣ Identify demo players currently having auto-claimed cards
           const demoPlayers = Object.entries(players)
             .filter(([_, p]) => p?.telegramId?.toLowerCase().startsWith("demo"))
             .map(([id, p]) => ({ id, ...p }));
       
-          // 2️⃣ Find demo cards with auto-claimed
           const demoCards = Object.entries(cards)
             .filter(([_, c]) => c?.claimed && c?.auto && c?.claimedBy)
             .filter(([_, c]) => demoPlayers.some(dp => dp.id === c.claimedBy))
             .map(([id, c]) => ({ id, ...c }));
       
-          if (!demoCards.length) {
+          if (demoCards.length === 0) {
             console.log(`⚠️ No demo players with auto-claimed cards to reshuffle in ${roomId}`);
             return { done: false, reason: "none" };
           }
       
-          // 3️⃣ Determine how many demo cards to reshuffle
-          const demoCount = demoCards.length;
-          const numCardsToChange = Math.min(3, demoCount);
+          // 2️⃣ Select a few demo players to reshuffle
+          const numToReshuffle = Math.min(3, demoCards.length);
+          const selected = demoCards
+            .sort(() => 0.5 - Math.random())
+            .slice(0, numToReshuffle);
       
-          // Randomly select demo cards
-          function getRandomElements(array, n) {
-            const shuffled = [...array].sort(() => 0.5 - Math.random());
-            return shuffled.slice(0, n);
-          }
+          console.log(`🎲 Selected ${selected.length} demo players to reshuffle:`, selected.map(d => d.claimedBy));
       
-          const selected = getRandomElements(demoCards, numCardsToChange);
-          console.log("Selected demo cards to reshuffle:", selected.map(d => d.id));
-      
-          // 4️⃣ Get unclaimed cards
-          const unclaimedList = Object.entries(cards)
-            .filter(([_, c]) => !c.claimed)
-            .map(([id, c]) => ({ id, ...c }));
-      
-          if (!unclaimedList.length) {
-            console.log(`⚠️ No unclaimed cards available in ${roomId}`);
-            return { done: false, reason: "no-unclaimed" };
-          }
-      
-          // Helper function for delay
+          // Helper delay function
           const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
       
-          // 5️⃣ Sequential reshuffle with delay
+          // 3️⃣ Process each demo player one-by-one
           for (const demo of selected) {
             const demoId = demo.claimedBy;
             const oldCardId = demo.id;
       
-            console.log("Processing demo:", demoId, "old card:", oldCardId);
+            console.log(`♻️ Reshuffling demo player: ${demoId}`);
       
-            // Unclaim old card
+            // 🔹 Step 1: Unclaim old card
             if (cards[oldCardId]) {
               cards[oldCardId] = {
                 ...cards[oldCardId],
@@ -158,13 +142,22 @@ class GameManager {
               };
             }
       
-            // Pick a random new unclaimed card
-            if (unclaimedList.length === 0) break;
-            const randIndex = Math.floor(Math.random() * unclaimedList.length);
-            const newCard = unclaimedList.splice(randIndex, 1)[0];
-            if (!newCard) continue;
+            // 🔹 Step 2: Temporarily remove demo player from the room
+            delete players[demoId];
       
-            // Claim new card
+            // 🔹 Step 3: Pick a random new unclaimed card
+            const unclaimedList = Object.entries(cards)
+              .filter(([_, c]) => !c.claimed)
+              .map(([id, c]) => ({ id, ...c }));
+      
+            if (unclaimedList.length === 0) {
+              console.log(`⚠️ No unclaimed cards available for demo ${demoId}`);
+              continue;
+            }
+      
+            const newCard = unclaimedList[Math.floor(Math.random() * unclaimedList.length)];
+      
+            // 🔹 Step 4: Claim the new card
             cards[newCard.id] = {
               ...cards[newCard.id],
               claimed: true,
@@ -173,38 +166,34 @@ class GameManager {
               autoUntil: countdownEndAt,
             };
       
-            // Update player info
-            const oldPlayerInfo = current.players?.[demoId] || {
-              attemptedBingo: false,
-              betAmount: 0,
-              telegramId: demoId,
-              username: `demo_${demoId}`,
-            };
-      
+            // 🔹 Step 5: Re-add demo player to the room with updated card
+            const oldInfo = current.players?.[demoId] || {};
             players[demoId] = {
-              ...oldPlayerInfo,
+              ...oldInfo,
               cardId: newCard.id,
             };
       
-            console.log(`✅ Demo player ${demoId} assigned new card ${newCard.id}`);
+            console.log(`✅ Demo ${demoId} moved from ${oldCardId} → ${newCard.id}`);
       
-            // Wait 300ms before moving to the next demo player
+            // 🔹 Step 6: Update RTDB incrementally (after each demo reshuffle)
+            await update(roomRef, {
+              bingoCards: cards,
+              players: players,
+            });
+      
+            // 🔹 Step 7: Wait before next reshuffle
             await delay(INTERVAL_MS);
           }
       
-          // 6️⃣ Write back atomically after all reshuffles
-          await update(roomRef, {
-            bingoCards: cards,
-            players: players,
-          });
-      
-          console.log(`✅ Demo reshuffle complete for ${roomId}`);
+          console.log(`🎯 Demo reshuffle complete for ${roomId}`);
           return { done: true };
+      
         } catch (err) {
           console.error(`❌ Demo reshuffle error for ${roomId}:`, err);
           return { done: false, reason: "error", err };
         }
       };
+      
       
       
 

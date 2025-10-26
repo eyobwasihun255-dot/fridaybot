@@ -129,7 +129,7 @@ class GameManager {
             if (!current) return;
             if (countdownEndAt - Date.now() < STOP_THRESHOLD_MS) return;
       
-            const cards = current.cards || {};
+            const cards = current.bingoCards || {};
             const players = current.players || {};
       
             const unclaimedList = Object.entries(cards)

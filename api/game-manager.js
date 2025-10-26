@@ -74,29 +74,8 @@ class GameManager {
   
       if (this.io) this.io.to(roomId).emit("countdownStarted", { roomId, countdownEndAt });
   
-      // -------------------------
-      // --- Demo reshuffle ---
-      // -------------------------
-      // Run the reshuffle as described by you:
-      // 1) find demo players with claimed card & auto=true
-      // 2) choose X players (half if demoCount<10, else 1/3)
-      // 3) atomically unclaim their cards, pick random unclaimed cards and claim them again
-      // 4) remove & re-add players in players list
-      // 5) do it sequentially (deterministic selection), but commit atomically
-      // 6) stop if near countdown end (we stop if less than STOP_THRESHOLD_MS left)
   
-      const STOP_THRESHOLD_MS = 2000; // stop reshuffle if < 2s remaining
-  
-      const shuffleArray = (arr) => {
-        for (let i = arr.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [arr[i], arr[j]] = [arr[j], arr[i]];
-        }
-        return arr;
-      };
-  
-      // performDemoReshuffle: gather info, prepare changes sequentially, commit via one transaction
-  // --- DEMO RESHUFFLE LOGIC ---
+     
 const performDemoReshuffle = async () => {
   const STOP_THRESHOLD_MS = 2000; // stop reshuffle if <2s left
   try {
@@ -104,7 +83,7 @@ const performDemoReshuffle = async () => {
     const data = snap.val();
     if (!data) return console.warn(`⚠️ No room data for ${roomId}`);
 
-    const { players = {}, cards = {} } = data;
+    const { players = {}, bingoCards = {} } = data;
     const now = Date.now();
 
     // 1️⃣ find demo players with auto-claimed cards
@@ -112,7 +91,7 @@ const performDemoReshuffle = async () => {
       .filter(([_, p]) => p?.telegramId?.toLowerCase().startsWith("demo"))
       .map(([id, p]) => ({ id, ...p }));
 
-    const demoCards = Object.entries(cards)
+    const demoCards = Object.entries(bingoCards)
       .filter(([_, c]) => c?.claimed && c?.auto && c?.claimedBy)
       .filter(([_, c]) => demoPlayers.some(dp => dp.id === c.claimedBy))
       .map(([id, c]) => ({ id, ...c }));

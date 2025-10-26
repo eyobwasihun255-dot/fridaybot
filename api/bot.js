@@ -1,6 +1,8 @@
 import { ref, get, set, update, push , remove, runTransaction } from "firebase/database";
 import { rtdb } from "../bot/firebaseConfig.js"; 
 import fetch from "node-fetch";
+import gameManager from "./game-manager.js"; // adjust path as needed
+// or for CommonJS: const gameManager = require("./game-manager.js");
 
 
 const ADMIN_PASSCODE = "19991999"; // Ideally move to process.env.ADMIN_PASSCODE
@@ -1486,13 +1488,14 @@ if (text === "/reset") {
 // Step 2: Handle room ID input
 if (pending?.type === "awaiting_room_reset") {
   const roomId = text.trim();
+  pendingActions.delete(userId);
+
   try {
     const roomRef = ref(rtdb, `rooms/${roomId}`);
     const roomSnap = await get(roomRef);
 
     if (!roomSnap.exists()) {
       sendMessage(chatId, `❌ Room with ID '${roomId}' not found.`);
-      pendingActions.delete(userId);
       return;
     }
 
@@ -1501,7 +1504,17 @@ if (pending?.type === "awaiting_room_reset") {
     const betAmount = parseFloat(roomData.betAmount || 0);
     const players = Object.values(roomData.players || {});
 
-    // If the room was playing, refund players
+    // 🛑 1) Stop number drawing if the room is currently playing
+    if (previousState === "playing") {
+      try {
+        gameManager.stopNumberDrawing(roomId);
+        console.log(`🛑 Number drawing stopped for room ${roomId} before reset.`);
+      } catch (err) {
+        console.error(`⚠️ Failed to stop number drawing for ${roomId}:`, err);
+      }
+    }
+
+    // 💰 2) Refund all players if game was playing
     if (previousState === "playing" && players.length > 0 && betAmount > 0) {
       for (const player of players) {
         if (!player.telegramId) continue;
@@ -1514,21 +1527,32 @@ if (pending?.type === "awaiting_room_reset") {
         const newBalance = (userData.balance || 0) + betAmount;
         await update(userRef, { balance: newBalance });
       }
-      sendMessage(chatId, `✅ Room '${roomId}' was in playing state — refunded ${betAmount} birr to each player.`);
+
+      sendMessage(
+        chatId,
+        `✅ Room '${roomId}' was in 'playing' state — refunded ${betAmount} birr to each player.`
+      );
     }
 
-    // Change room state to "waiting"
-    await update(roomRef, { gameStatus: "waiting" });
-    sendMessage(chatId, `♻️ Room '${roomId}' has been reset to 'waiting' state.`);
+    // ♻️ 3) Reset the room state (clear game data)
+    await update(roomRef, {
+      gameStatus: "waiting",
+      countdownEndAt: null,
+      countdownStartedBy: null,
+      drawnNumbers: [],
+      winners: [],
+    });
 
+    sendMessage(chatId, `♻️ Room '${roomId}' has been fully reset to 'waiting' state.`);
+    console.log(`✅ Room '${roomId}' reset complete.`);
   } catch (err) {
     console.error("❌ Error resetting room:", err);
     sendMessage(chatId, "❌ Failed to reset room. Check logs for details.");
   }
 
-  pendingActions.delete(userId);
   return;
 }
+
 if (text === "/stop") {
   if (!ADMIN_IDS.includes(userId)) {
     sendMessage(chatId, "❌ You are not authorized to use this command.");

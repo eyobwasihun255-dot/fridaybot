@@ -163,7 +163,8 @@ class GameManager {
               claimed: true,
               claimedBy: demoId,
               auto: true,
-              autoUntil: countdownEndAt,
+              autoUntil:Date.now() + 24 * 60 * 60 * 1000,
+
             };
       
             // 🔹 Step 5: Re-add demo player to the room with updated card

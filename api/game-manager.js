@@ -321,50 +321,49 @@ class GameManager {
       console.log("✅ startGame(): after runTransaction");
 
       // ✅ Prepare players
-      const allPlayers = Object.entries(room.players || {});
-      const validPlayers = allPlayers.filter(([pid, player]) => player?.cardId && room.bingoCards?.[player.cardId]);
-      
-      if (validPlayers.length < 2) {
-        console.log(`❌ Not enough valid players with cards: ${validPlayers.length}`);
-        return { success: false, message: "Not enough valid players with cards" };
-      }
-      
-      const cards = validPlayers.map(([pid, player]) => ({
-        id: player.cardId,
-        ...room.bingoCards[player.cardId],
-      }));
-      
-      console.log(`🃏 Loaded ${cards.length} valid cards for game`);
-      
-      console.log("🃏 Cards loaded:", cards.length);
+     // ✅ Prepare players with valid cards
+const allPlayers = Object.entries(room.players || {});
+const validPlayers = allPlayers.filter(([pid, player]) => player?.cardId && room.bingoCards?.[player.cardId]);
 
-      // ✅ Generate numbers and winners
-      console.log("🎰 Generating drawn numbers...");
-      const { drawnNumbers, winners } = this.generateDrawnNumbersMultiWinner(cards);
-      console.log("✅ Generated drawn numbers:", drawnNumbers.length, "winners:", winners);
+if (validPlayers.length < 2) {
+  console.log(`❌ Not enough valid players with cards: ${validPlayers.length}`);
+  return { success: false, message: "Not enough valid players with cards" };
+}
 
-      // ✅ Construct game data
-      const gameData = {
-        id: gameId,
-        roomId,
-        drawnNumbers,
-        currentDrawnNumbers: [],
-        currentNumberIndex: 0,
-        createdAt: Date.now(),
-        startedAt: Date.now(),
-        drawIntervalMs: 5000,
-        status: "active",
-        totalPayout: Math.floor((playerIds.length - 1) * (room.betAmount || 0) * 0.85 + (room.betAmount || 0)),
-        betsDeducted: false,
-        winners: winners.map((cardId) => ({
-          id: uuidv4(),
-          cardId,
-          userId: room.bingoCards[cardId]?.claimedBy,
-          username: room.players[room.bingoCards[cardId]?.claimedBy]?.username || "Unknown",
-          checked: false,
-        })),
-        gameStatus: "playing",
-      };
+const cards = validPlayers.map(([pid, player]) => ({
+  id: player.cardId,
+  ...room.bingoCards[player.cardId],
+}));
+
+console.log(`🃏 Loaded ${cards.length} valid cards for game`);
+
+// ✅ Generate numbers and winners
+console.log("🎰 Generating drawn numbers...");
+const { drawnNumbers, winners } = this.generateDrawnNumbersMultiWinner(cards);
+console.log("✅ Generated drawn numbers:", drawnNumbers.length, "winners:", winners);
+
+// ✅ Construct game data
+const gameData = {
+  id: gameId,
+  roomId,
+  drawnNumbers,
+  currentDrawnNumbers: [],
+  currentNumberIndex: 0,
+  createdAt: Date.now(),
+  startedAt: Date.now(),
+  drawIntervalMs: 5000,
+  status: "active",
+  totalPayout: Math.floor((validPlayers.length - 1) * (room.betAmount || 0) * 0.85 + (room.betAmount || 0)),
+  betsDeducted: false,
+  winners: winners.map((cardId) => ({
+    id: uuidv4(),
+    cardId,
+    userId: room.bingoCards[cardId]?.claimedBy,
+    username: room.players[room.bingoCards[cardId]?.claimedBy]?.username || "Unknown",
+    checked: false,
+  })),
+  gameStatus: "playing",
+};
 
       console.log("💾 Writing game data to Firebase...");
       const gameRef = ref(rtdb, `games/${gameId}`);

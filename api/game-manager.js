@@ -337,7 +337,7 @@ const cards = validPlayers.map(([pid, p]) => ({
   id: p.cardId,
   ...room.bingoCards[p.cardId],
 }));
-
+console.log(`cards${cards}`)
 // --- Generate drawn numbers ---
 console.log(`🎰 Generating drawn numbers for ${cards.length} cards...`);
 const { drawnNumbers, winners } = this.generateDrawnNumbersMultiWinner(cards);

@@ -9,6 +9,9 @@ class GameManager {
     this.countdownTimers = new Map(); // roomId -> timeout ID
     this.resetRoomTimers = new Map(); // roomId -> timeout ID for scheduled reset
     this.lastWinnerUserByRoom = new Map(); // roomId -> userId
+    this.roomLocks = new Set();
+
+
     this.io = null; // Will be set when Socket.IO is initialized
   }
 
@@ -246,6 +249,20 @@ class GameManager {
       return { success: false };
     }
   }
+ 
+
+async lockRoom(roomId, fn) {
+  while (this.roomLocks.has(roomId)) {
+    await new Promise(r => setTimeout(r, 100)); // wait 100ms
+  }
+  this.roomLocks.add(roomId);
+  try {
+    return await fn();
+  } finally {
+    this.roomLocks.delete(roomId);
+  }
+}
+
 
   // Start a new game
   async startGame(roomId) {
@@ -354,7 +371,11 @@ class GameManager {
   
       // ✅ Start number drawing
       console.log("🎯 Starting number drawing...");
-      this.startNumberDrawing(roomId, gameId);
+      await this.lockRoom(roomId, async () => {
+     this.startNumberDrawing(roomId, gameId);
+});
+
+    
       console.log("✅ Number drawing started.");
   
       // ✅ Notify clients
@@ -575,7 +596,10 @@ class GameManager {
       // Schedule room reset after 5 seconds
       const resetTimer = setTimeout(async () => {
         try {
-          await this.resetRoom(roomId);
+          await this.lockRoom(roomId, async () => {
+            await this.resetRoom(roomId);
+       });
+          
         } catch (e) {
           console.error("Error in scheduled resetRoom:", e);
         } finally {

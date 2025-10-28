@@ -245,7 +245,10 @@ function extractUrlFromText(text) {
 // ====================== HANDLERS ======================
 async function handleStart(message) {
 const chatId = message.chat.id;
-await registerUserToFirebase(message.from);
+registerUserToFirebase(message.from).catch(err =>
+  console.error("⚠️ Registration async error:", err)
+);
+
 
 
 const keyboard = {
@@ -269,19 +272,27 @@ const commands = [
   { command: "help", description: t("am", "help") },
 ];
 
-// Register the commands with Telegram
+// Register the commands with Telegram (only once, not every time)
 async function setCommands() {
-  const response = await fetch(`${API}/setMyCommands`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ commands }),
-  });
+  try {
+    const response = await fetch(`${API}/setMyCommands`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commands }),
+    });
 
-  const data = await response.json();
-  console.log("Set Commands Response:", data);
+    const data = await response.json();
+    console.log("Set Commands Response:", data);
+  } catch (err) {
+    console.error("⚠️ Failed to set Telegram commands:", err);
+  }
 }
 
-setCommands();
+// ✅ Run once during startup (not on every game or user event)
+if (process.env.NODE_ENV !== "production") {
+  setCommands();
+}
+
 async function handlePlaygame(message) {
   const chatId = message.chat.id;
   const telegramId = String(message.from.id);

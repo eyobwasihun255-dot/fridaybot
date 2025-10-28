@@ -417,7 +417,8 @@ const gameData = {
         return;
       }
     }
-    const drawInterval = setInterval(async () => {
+    const drawInterval = setInterval(() => {
+        setImmediate(async () => {
       try {
         const gameSnap = await get(gameRef);
         const gameData = gameSnap.val();
@@ -507,6 +508,7 @@ const gameData = {
         console.error("Error in number drawing:", error);
         this.stopNumberDrawing(roomId);
       }
+    });
     }, 3000); // 5 second intervals
 
     this.numberDrawIntervals.set(roomId, drawInterval);

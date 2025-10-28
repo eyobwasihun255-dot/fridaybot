@@ -307,9 +307,9 @@ for (const pid of playerIds) {
         })),
         gameStatus: "playing"
       };
-
+     
       // Update room status
-      await runTransaction(roomRef, (currentRoom) => {
+      const transactionPromise = runTransaction(roomRef, (currentRoom) => {
         if (!currentRoom || currentRoom.gameStatus !== "countdown") return currentRoom;
         
         currentRoom.gameStatus = "playing";
@@ -322,6 +322,11 @@ for (const pid of playerIds) {
         
         return currentRoom;
       });
+      await Promise.race([
+        transactionPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('runTransaction timeout')), 5000))
+      ]);
+      
 
       // Deduct bets from players
       this.deductBets(roomId, gameData);

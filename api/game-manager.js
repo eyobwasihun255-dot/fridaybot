@@ -322,25 +322,33 @@ class GameManager {
 
       // ✅ Prepare players
      // ✅ Prepare players with valid cards
+// --- Prepare cards from players ---
 const allPlayers = Object.entries(room.players || {});
-const validPlayers = allPlayers.filter(([pid, player]) => player?.cardId && room.bingoCards?.[player.cardId]);
+const validPlayers = allPlayers.filter(
+  ([pid, p]) => p?.cardId && room.bingoCards?.[p.cardId]
+);
 
 if (validPlayers.length < 2) {
   console.log(`❌ Not enough valid players with cards: ${validPlayers.length}`);
   return { success: false, message: "Not enough valid players with cards" };
 }
 
-const cards = validPlayers.map(([pid, player]) => ({
-  id: player.cardId,
-  ...room.bingoCards[player.cardId],
+const cards = validPlayers.map(([pid, p]) => ({
+  id: p.cardId,
+  ...room.bingoCards[p.cardId],
 }));
 
-console.log(`🃏 Loaded ${cards.length} valid cards for game`);
-
-// ✅ Generate numbers and winners
-console.log("🎰 Generating drawn numbers...");
+// --- Generate drawn numbers ---
+console.log(`🎰 Generating drawn numbers for ${cards.length} cards...`);
 const { drawnNumbers, winners } = this.generateDrawnNumbersMultiWinner(cards);
-console.log("✅ Generated drawn numbers:", drawnNumbers.length, "winners:", winners);
+
+if (!drawnNumbers || drawnNumbers.length === 0) {
+  console.error(`❌ Invalid drawnNumbers generated for room ${roomId}`);
+  await update(roomRef, { gameStatus: "waiting" });
+  return { success: false, message: "No valid drawn numbers generated" };
+}
+
+console.log(`✅ Generated ${drawnNumbers.length} numbers, winners: ${winners}`);
 
 // ✅ Construct game data
 const gameData = {

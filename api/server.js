@@ -14,7 +14,7 @@ import resetRoomHandler from './reset-room.js';
 import checkbingohandler from './check-bingo.js'
 import autodelete from './autodelete.js';
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT ;
 
 // Middleware
 app.use(cors());

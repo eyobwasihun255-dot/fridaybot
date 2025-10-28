@@ -321,14 +321,21 @@ class GameManager {
       console.log("✅ startGame(): after runTransaction");
 
       // ✅ Prepare players
-      const playerIds = Object.keys(room.players || {});
-      if (playerIds.length < 2) {
-        console.log("❌ Not enough players to start the game");
-        return { success: false, message: "Not enough players" };
+      const allPlayers = Object.entries(room.players || {});
+      const validPlayers = allPlayers.filter(([pid, player]) => player?.cardId && room.bingoCards?.[player.cardId]);
+      
+      if (validPlayers.length < 2) {
+        console.log(`❌ Not enough valid players with cards: ${validPlayers.length}`);
+        return { success: false, message: "Not enough valid players with cards" };
       }
-
-      // ✅ Get player cards
-      const cards = playerIds.map((pid) => room.bingoCards[room.players[pid].cardId]);
+      
+      const cards = validPlayers.map(([pid, player]) => ({
+        id: player.cardId,
+        ...room.bingoCards[player.cardId],
+      }));
+      
+      console.log(`🃏 Loaded ${cards.length} valid cards for game`);
+      
       console.log("🃏 Cards loaded:", cards.length);
 
       // ✅ Generate numbers and winners

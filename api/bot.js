@@ -383,7 +383,45 @@ const withdrawalRequests = new Map();
 async function handleUserMessage(message) {
   const chatId = message.chat.id;
   const userId = message.from.id;
-
+  if (message.contact) {
+    const contact = message.contact;
+    const chatId = message.chat.id;
+  
+    // Ignore demo players
+    if (String(contact.user_id).startsWith("demo")) return;
+  
+    const userRef = ref(rtdb, `users/${contact.user_id}`);
+    const snap = await get(userRef);
+  
+    const now = new Date().toISOString();
+    const newUser = {
+      telegramId: contact.user_id.toString(),
+      username: message.from.username || message.from.first_name || `user_${contact.user_id}`,
+      phoneNumber: contact.phone_number,
+      balance: 10,
+      gamesPlayed: 0,
+      gamesWon: 0,
+      totalWinnings: 0,
+      lang: "en",
+      createdAt: now,
+      updatedAt: now,
+    };
+  
+    await set(userRef, newUser);
+  
+    // Proceed to language choice
+    const keyboard = {
+      inline_keyboard: [
+        [{ text: "English 🇬🇧", callback_data: "lang_en" }],
+        [{ text: "አማርኛ 🇪🇹", callback_data: "lang_am" }],
+      ],
+    };
+  
+    sendMessage(chatId, "✅ Thank you! Registration completed.\nNow choose your language:", {
+      reply_markup: keyboard,
+    });
+    return;
+  }
   // Detect message type
   const hasText = !!message.text;
   const hasPhoto = !!message.photo;
@@ -442,45 +480,7 @@ async function handleUserMessage(message) {
 
     return;
   }
-  if (message.contact) {
-    const contact = message.contact;
-    const chatId = message.chat.id;
   
-    // Ignore demo players
-    if (String(contact.user_id).startsWith("demo")) return;
-  
-    const userRef = ref(rtdb, `users/${contact.user_id}`);
-    const snap = await get(userRef);
-  
-    const now = new Date().toISOString();
-    const newUser = {
-      telegramId: contact.user_id.toString(),
-      username: message.from.username || message.from.first_name || `user_${contact.user_id}`,
-      phoneNumber: contact.phone_number,
-      balance: 10,
-      gamesPlayed: 0,
-      gamesWon: 0,
-      totalWinnings: 0,
-      lang: "en",
-      createdAt: now,
-      updatedAt: now,
-    };
-  
-    await set(userRef, newUser);
-  
-    // Proceed to language choice
-    const keyboard = {
-      inline_keyboard: [
-        [{ text: "English 🇬🇧", callback_data: "lang_en" }],
-        [{ text: "አማርኛ 🇪🇹", callback_data: "lang_am" }],
-      ],
-    };
-  
-    sendMessage(chatId, "✅ Thank you! Registration completed.\nNow choose your language:", {
-      reply_markup: keyboard,
-    });
-    return;
-  }
   
   // ====================== DEPOSIT SMS STEP ======================
   if (pending?.type === "awaiting_deposit_sms") {

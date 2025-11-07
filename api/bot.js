@@ -208,32 +208,7 @@ async function sendMessage(chatId, text, extra = {}) {
 // ====================== USER MANAGEMENT ======================
 // ====================== USER MANAGEMENT ======================
 // ====================== USER MANAGEMENT ======================
-async function registerUserToFirebase(user) {
-  const userRef = ref(rtdb, "users/" + user.id);
-  const snapshot = await get(userRef);
 
-  if (!snapshot.exists()) {
-    const now = new Date().toISOString();
-
-    const newUser = {
-      telegramId: user.id.toString(),
-      username: user.username || `user_${user.id}`,
-      balance: 10,             // initial balance
-      gamesPlayed: 0,
-      gamesWon: 0,
-      totalWinnings: 0,
-      lang: "en",              // keep this consistent with rest of code
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    await set(userRef, newUser);
-    console.log(`✅ Registered new user: ${user.id} (${newUser.username})`);
-  } else {
-    const existingUser = snapshot.val();
-    console.log(`ℹ️ User already exists: ${user.id} (${existingUser.username}), balance = ${existingUser.balance}`);
-  }
-}
 
 // ====================== MESSAGE HELPERS ======================
 function extractUrlFromText(text) {
@@ -244,22 +219,46 @@ function extractUrlFromText(text) {
 
 // ====================== HANDLERS ======================
 async function handleStart(message) {
-const chatId = message.chat.id;
-registerUserToFirebase(message.from).catch(err =>
-  console.error("⚠️ Registration async error:", err)
-);
+  const chatId = message.chat.id;
+  const userId = message.from.id;
 
+  // Skip demo users
+  if (String(userId).startsWith("demo")) {
+    sendMessage(chatId, "Demo players are not required to register.");
+    return;
+  }
 
+  // Check if already registered
+  const userRef = ref(rtdb, `users/${userId}`);
+  const snap = await get(userRef);
+  if (!snap.exists()) {
+    // Ask user to share phone number
+    const keyboard = {
+      keyboard: [
+        [
+          {
+            text: "📱 Share Phone Number",
+            request_contact: true,
+          },
+        ],
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: true,
+    };
 
-const keyboard = {
-inline_keyboard: [
-[{ text: "English 🇬🇧", callback_data: "lang_en" }],
-[{ text: "አማርኛ 🇪🇹", callback_data: "lang_am" }],
-],
-};
-
-
- sendMessage(chatId, t("en", "choose_lang"), { reply_markup: keyboard });
+    await sendMessage(chatId, "📞 Please share your phone number to complete registration:", {
+      reply_markup: keyboard,
+    });
+  } else {
+    // Already registered → go to language selection
+    const keyboard = {
+      inline_keyboard: [
+        [{ text: "English 🇬🇧", callback_data: "lang_en" }],
+        [{ text: "አማርኛ 🇪🇹", callback_data: "lang_am" }],
+      ],
+    };
+    sendMessage(chatId, t("en", "choose_lang"), { reply_markup: keyboard });
+  }
 }
 
 
@@ -443,7 +442,46 @@ async function handleUserMessage(message) {
 
     return;
   }
-
+  if (message.contact) {
+    const contact = message.contact;
+    const chatId = message.chat.id;
+  
+    // Ignore demo players
+    if (String(contact.user_id).startsWith("demo")) return;
+  
+    const userRef = ref(rtdb, `users/${contact.user_id}`);
+    const snap = await get(userRef);
+  
+    const now = new Date().toISOString();
+    const newUser = {
+      telegramId: contact.user_id.toString(),
+      username: message.from.username || message.from.first_name || `user_${contact.user_id}`,
+      phoneNumber: contact.phone_number,
+      balance: 10,
+      gamesPlayed: 0,
+      gamesWon: 0,
+      totalWinnings: 0,
+      lang: "en",
+      createdAt: now,
+      updatedAt: now,
+    };
+  
+    await set(userRef, newUser);
+  
+    // Proceed to language choice
+    const keyboard = {
+      inline_keyboard: [
+        [{ text: "English 🇬🇧", callback_data: "lang_en" }],
+        [{ text: "አማርኛ 🇪🇹", callback_data: "lang_am" }],
+      ],
+    };
+  
+    sendMessage(chatId, "✅ Thank you! Registration completed.\nNow choose your language:", {
+      reply_markup: keyboard,
+    });
+    return;
+  }
+  
   // ====================== DEPOSIT SMS STEP ======================
   if (pending?.type === "awaiting_deposit_sms") {
     const url = extractUrlFromText(text);

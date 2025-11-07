@@ -459,7 +459,7 @@ const Room: React.FC = () => {
   
         {/* ✅ Bingo Card Grid */}
         <div className="grid grid-cols-10 gap-2 mb-6 justify-items-center">
-          {sortedCards.slice(0, 100).map((card) => {
+          {sortedCards.slice(0, 150).map((card) => {
             const isClaimed = card.claimed;
             const isMine = card.claimedBy === user?.telegramId;
             const isSelected = selectedCard?.id === card.id;

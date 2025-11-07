@@ -1,6 +1,6 @@
 import { rtdb } from "../firebase/config";
-import { ref, get as dbGet, set as dbSet } from "firebase/database";
-import type { User } from "../store/authStore"; // ✅ reuse same type
+import { ref, get as dbGet, set as dbSet, update as dbUpdate } from "firebase/database";
+import type { User } from "../store/authStore";
 
 export async function getOrCreateUser(user: {
   telegramId: string;
@@ -9,14 +9,19 @@ export async function getOrCreateUser(user: {
 }): Promise<User> {
   const userRef = ref(rtdb, `users/${user.telegramId}`);
   const snapshot = await dbGet(userRef);
+  const now = new Date().toISOString();
 
+  // ✅ If user already exists → just update updatedAt
   if (snapshot.exists()) {
     const existing = snapshot.val() as any;
-    const now = new Date().toISOString();
 
+    // Update only the timestamp, not the rest
+    await dbUpdate(userRef, { updatedAt: now });
+
+    // Return the normalized existing user
     const normalized: User = {
-      telegramId: String(existing.telegramId ?? user.telegramId),
-      username: existing.username ?? user.username,
+      telegramId: String(existing.telegramId),
+      username: existing.username || user.username,
       balance: Number(existing.balance ?? 0),
       gamesPlayed: Number(existing.gamesPlayed ?? 0),
       gamesWon: Number(existing.gamesWon ?? 0),
@@ -26,28 +31,22 @@ export async function getOrCreateUser(user: {
       updatedAt: now,
     };
 
-    // If any key differs, write back normalized user
-    const needsUpdate = Object.keys(normalized).some(
-      (k) => (existing as any)[k] !== (normalized as any)[k]
-    );
-    if (needsUpdate) {
-      await dbSet(userRef, normalized);
-    }
     return normalized;
-  } else {
-    const now = new Date().toISOString();
-    const newUser: User = {
-      telegramId: user.telegramId,
-      username: user.username,
-      balance: 0, // starting balance
-      gamesPlayed: 0,
-      gamesWon: 0,
-      totalWinnings: 0,
-      language: user.language,
-      createdAt: now,
-      updatedAt: now,
-    };
-    await dbSet(userRef, newUser);
-    return newUser;
   }
+
+  // 🆕 If user does NOT exist → create new record
+  const newUser: User = {
+    telegramId: user.telegramId,
+    username: user.username,
+    balance: 0,
+    gamesPlayed: 0,
+    gamesWon: 0,
+    totalWinnings: 0,
+    language: user.language,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await dbSet(userRef, newUser);
+  return newUser;
 }

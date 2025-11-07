@@ -296,36 +296,45 @@ async function handlePlaygame(message) {
   const chatId = message.chat.id;
   const telegramId = String(message.from.id);
 
-  // ✅ Sign Telegram ID
-  const secret = process.env.TELEGRAM_BOT_TOKEN;
-  const sig = crypto
-    .createHmac("sha256", secret)
-    .update(telegramId)
-    .digest("hex");
+  // Ignore demo users
+  if (telegramId.startsWith("demo")) {
+    sendMessage(chatId, "🧪 Demo players can’t open the web app.");
+    return;
+  }
 
-  // Build signed URL
+  const userRef = ref(rtdb, `users/${telegramId}`);
+  const userSnap = await get(userRef);
+
+  // ✅ If user does not exist OR has no phoneNumber → ask for phone number
+  if (!userSnap.exists() || !userSnap.val().phoneNumber) {
+    const keyboard = {
+      keyboard: [
+        [
+          {
+            text: "📱 Share Phone Number",
+            request_contact: true,
+          },
+        ],
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: true,
+    };
+
+    await sendMessage(
+      chatId,
+      "📞 Please share your phone number to complete registration before playing:",
+      { reply_markup: keyboard }
+    );
+
+    return; // stop here — don’t open webapp
+  }
+
+  // ✅ If phone number exists, continue to web app
+  const secret = process.env.TELEGRAM_BOT_TOKEN;
+  const sig = crypto.createHmac("sha256", secret).update(telegramId).digest("hex");
   const baseUrl = process.env.WEBAPP_URL || "https://fridaybot-9jrb.onrender.com/";
   const webAppUrl = `${baseUrl}?id=${telegramId}&sig=${sig}`;
 
-  // Ensure user exists in RTDB (your existing logic)
-  const userRef = ref(rtdb, `users/${telegramId}`);
-  const userSnap = await get(userRef);
-  if (!userSnap.exists()) {
-    const user = {
-      telegramId,
-      username: message.from.username || message.from.first_name || `user_${telegramId}`,
-      balance: 0,
-      gamesPlayed: 0,
-      gamesWon: 0,
-      totalWinnings: 0,
-      language: "am",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    await set(userRef, user);
-  }
-
-  // Send signed webapp button
   const keyboard = {
     inline_keyboard: [
       [
@@ -337,8 +346,9 @@ async function handlePlaygame(message) {
     ],
   };
 
-   sendMessage(chatId, t("am", "play"), { reply_markup: keyboard });
+  sendMessage(chatId, t("am", "play"), { reply_markup: keyboard });
 }
+
 
 
 

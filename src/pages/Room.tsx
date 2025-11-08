@@ -417,101 +417,89 @@ const Room: React.FC = () => {
     const handleSelectCard = (cardId: string) => {
       setSelectedCardId(cardId);
       if (!bingoCards.find((c) => c.id === cardId)?.claimed) {
-        
         selectCard(cardId);
-
       }
     };
   
-    // ✅ Get player's claimed card if any
     const myClaimedCard = bingoCards.find(
       (c) => c.claimedBy === user?.telegramId
     );
   
-    // ✅ The displayed card should be either selected or claimed one
     const displayedCard =
       bingoCards.find((c) => c.id === selectedCard?.id) || myClaimedCard;
   
-    // ✅ Sort cards by serial number
     const sortedCards = [...bingoCards].sort(
       (a, b) => (a.serialNumber ?? 0) - (b.serialNumber ?? 0)
     );
   
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen text-white p-4">
+      <div className="flex flex-col items-center min-h-screen text-white p-4">
+        {/* 🏠 Home Button */}
         <button
-  onClick={() => navigate("/")}
-  className="fixed top-3 left-3 bg-gradient-to-r from-red-500 to-pink-500 px-4 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition z-50"
->
-  {t('home')}
-</button>
-
-        <h2 className="text-2xl font-bold mb-6 text-theme-white">
-          {t('select_card')}
-          
-        </h2>
+          onClick={() => navigate("/")}
+          className="fixed top-3 left-3 bg-gradient-to-r from-red-500 to-pink-500 px-4 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition z-50"
+        >
+          {t("home")}
+        </button>
+  
+        {/* 🕒 Time Remaining */}
         {currentRoom?.gameStatus === "countdown" && (
-  <p>
-    {formatTime(timeLeft)} {t('seconds')}
-  </p>
-)}
-
+          <div className="mt-10 mb-4 text-center">
+            <h2 className="text-2xl font-bold mb-1">{t("select_card")}</h2>
+            <p className="text-sm text-theme-accent font-semibold">
+              {formatTime(timeLeft)} {t("seconds")}
+            </p>
+          </div>
+        )}
   
-        {/* ✅ Bingo Card Grid */}
-        <div className="grid grid-cols-10 gap-2 mb-6 justify-items-center">
-          {sortedCards.slice(0, 150).map((card) => {
-            const isClaimed = card.claimed;
-            const isMine = card.claimedBy === user?.telegramId;
-            const isSelected = selectedCard?.id === card.id;
+        {/* 🎴 Scrollable Grid of Cards */}
+        <div className="w-full max-w-3xl overflow-y-auto max-h-[50vh] mb-6 rounded-lg border border-white/10 p-3 bg-black/20">
+          <div className="grid grid-cols-10 gap-2 justify-items-center">
+            {sortedCards.slice(0, 300).map((card) => {
+              const isClaimed = card.claimed;
+              const isMine = card.claimedBy === user?.telegramId;
+              const isSelected = selectedCard?.id === card.id;
+              const isHighlighted = isMine || isSelected;
   
-            // ✅ Treat selected (not yet claimed) card like a claimed green card
-            const isHighlighted = isMine || isSelected;
+              let colorClass = "";
+              if (isHighlighted) {
+                colorClass =
+                  "bg-gradient-to-br from-theme-green to-emerald-600 text-white shadow-md border border-green-700";
+              } else if (isClaimed) {
+                colorClass =
+                  "bg-gradient-to-br from-theme-red to-rose-700 text-white border border-red-700 shadow-sm";
+              } else {
+                colorClass =
+                  "bg-gradient-to-br from-theme-light to-white text-gray-800 border border-gray-300 hover:from-theme-accent hover:to-theme-secondary hover:text-white transition";
+              }
   
-            let colorClass = "";
-            if (isHighlighted) {
-              colorClass =
-                "bg-gradient-to-br from-theme-green to-emerald-600 text-white shadow-md border border-green-700";
-            } else if (isClaimed) {
-              colorClass =
-                "bg-gradient-to-br from-theme-red to-rose-700 text-white border border-red-700 shadow-sm";
-            } else {
-              colorClass =
-                "bg-gradient-to-br from-theme-light to-white text-gray-800 border border-gray-300 hover:from-theme-accent hover:to-theme-secondary hover:text-white transition";
-            }
-  
-            return (
-              <div
-                key={card.id}
-                onClick={() => {
-                  console.log("Clicked:", card.id, "Claimed:", card.claimed);
-                  if (!card.claimed) {
-                    handleSelectCard(card.id);
-                  }
-                }}
-                className={`w-8 h-8 flex items-center justify-center rounded-lg font-bold cursor-pointer transition-transform duration-150 transform hover:scale-105 text-xs ${
-                  card.claimed ? 'bg-gradient-to-br from-theme-red to-rose-700 text-white border border-red-700 shadow-sm' : colorClass
-                }`}
-              >
-                {card.serialNumber}
-              </div>
-            );
-            
-          })}
+              return (
+                <div
+                  key={card.id}
+                  onClick={() => {
+                    if (!card.claimed) handleSelectCard(card.id);
+                  }}
+                  className={`w-8 h-8 flex items-center justify-center rounded-lg font-bold cursor-pointer transition-transform duration-150 transform hover:scale-105 text-xs ${colorClass}`}
+                >
+                  {card.serialNumber}
+                </div>
+              );
+            })}
+          </div>
         </div>
   
-        {/* ✅ Small Preview of Displayed Card */}
+        {/* 🟩 Selected Card Preview (shown below grid) */}
         {displayedCard && (
-          <div className="mb-4 p-2 bg-white/10 rounded-lg shadow-inner flex flex-col items-center w-1/2 max-w-[160px]">
+          <div className="mb-6 p-3 bg-white/10 rounded-lg shadow-inner flex flex-col items-center w-full max-w-[180px]">
             <div className="text-xs mb-2 font-semibold text-theme-light">
-              Card #{displayedCard.serialNumber}
+              {t("selected_card")} #{displayedCard.serialNumber}
             </div>
-  
             <div className="grid grid-cols-5 gap-0.5">
               {displayedCard.numbers.slice(0, 5).map((row, rowIdx) =>
                 row.map((num, colIdx) => (
                   <div
                     key={`${rowIdx}-${colIdx}`}
-                    className="w-5 h-5 flex items-center justify-center text-[10px] rounded bg-gradient-to-br bg-theme-primary  text-white font-bold border border-white/20"
+                    className="w-5 h-5 flex items-center justify-center text-[10px] rounded bg-gradient-to-br bg-theme-primary text-white font-bold border border-white/20"
                   >
                     {num === 0 && rowIdx === 2 && colIdx === 2 ? "★" : num}
                   </div>
@@ -521,21 +509,19 @@ const Room: React.FC = () => {
           </div>
         )}
   
-        {/* ✅ Buttons */}
+        {/* 🎯 Place Bet Button */}
         <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
           <button
             onClick={isBetActive ? handleCancelBet : handlePlaceBet}
-            className={`w-full px-4 py-2 rounded-lg shadow font-semibold transition ${
-              "bg-gradient-to-r from-theme-primary to-theme-green hover:opacity-90 text-white"
-            }`}
+            className="w-full px-4 py-2 rounded-lg shadow font-semibold transition bg-gradient-to-r from-theme-primary to-theme-green hover:opacity-90 text-white"
           >
             {t("place_bet")} card:{displayedCard?.serialNumber ?? 0}
           </button>
-  
         </div>
       </div>
     );
   };
+  
   
   
   

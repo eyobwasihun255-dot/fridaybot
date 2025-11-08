@@ -756,72 +756,98 @@ const gameData = {
       if (!room || room.gameStatus !== "playing") {
         return { success: false, message: "Game not in playing state" };
       }
-
+  
       if (player?.attemptedBingo) {
         return { success: false, message: "Already attempted bingo" };
       }
-
+  
       const playerRef = ref(rtdb, `rooms/${roomId}/players/${userId}`);
-
-      // Validate bingo pattern
+  
       const isValidBingo = this.validateBingoPattern(
         cardId,
         room,
         pattern,
         room.calledNumbers
       );
-
+  
       if (!isValidBingo) {
         update(playerRef, { attemptedBingo: true });
         return { success: false, message: "Invalid bingo pattern" };
       }
-
-      // ✅ Valid bingo
-      const gameRef = ref(rtdb, `games/${room.gameId}`);
-      update(gameRef, {
-        winner: { winnerId: userId, winningPattern: pattern },
-      });
-
-      if (this.io) {
-        const eventData = {
-          roomId,
-          gameId: room.gameId,
-          userId,
-          cardId,
-          patternIndices: pattern,
-        };
-        console.log("🎉 Emitting winnerConfirmed event:", eventData);
-        this.io.to(roomId).emit("winnerConfirmed", eventData);
-      } else {
-        console.error("❌ Cannot emit winnerConfirmed event: Socket.IO instance not set!");
-      }
-
-      // ✅ Calculate payout & revenue (with decimal precision)
+  
+      // ✅ Calculate number of winners for this game
       const playerCount = Object.keys(room.players || {}).length;
-      const roomAmount = room.betAmount || 0;
-
-      const totalBets = playerCount * roomAmount;
-      const payoutAmount = totalBets * 0.85;  // 85%
-      const revenueAmount = totalBets * 0.15; // 15%
-
-      const roomRef = ref(rtdb, `rooms/${roomId}`);
-
-      if (payoutAmount > 0) {
-        const balanceRef = ref(rtdb, `users/${userId}/balance`);
-        await runTransaction(balanceRef, (current) => (current || 0) + payoutAmount);
-
-        // ✅ Log winning history
-        const winRef = ref(rtdb, `winningHistory/${uuidv4()}`);
-        await set(winRef, {
-          playerId: userId,
-          gameId: room.gameId,
-          roomId,
-          payout: payoutAmount,
-          cardId,
-          date: Date.now(),
-        });
-
-        // ✅ Log revenue (15%)
+      const multiWinDataRef = ref(rtdb, "global/multiWinStats");
+      const multiWinDataSnap = await get(multiWinDataRef);
+      const multiWinData = multiWinDataSnap.val() || { lastMultiGame: 0, gameCount: 0 };
+  
+      const currentGameNumber = multiWinData.gameCount + 1;
+      const gamesSinceLastMulti = currentGameNumber - (multiWinData.lastMultiGame || 0);
+  
+      let winnerCount = 1;
+      let forceMulti = false;
+  
+      if (playerCount > 180) {
+        // 3 winners possible, with ~30% chance
+        if (Math.random() < 0.3) winnerCount = 3;
+        else if (Math.random() < 0.5) winnerCount = 2;
+      } else if (playerCount > 80) {
+        // 2 winners possible, with ~40% chance
+        if (Math.random() < 0.4) winnerCount = 2;
+      }
+  
+      // Force 2 winners if none occurred in last 5 games
+      if (gamesSinceLastMulti >= 5 && winnerCount === 1) {
+        winnerCount = 2;
+        forceMulti = true;
+      }
+  
+      // Update stats
+      await set(multiWinDataRef, {
+        gameCount: currentGameNumber,
+        lastMultiGame: winnerCount > 1 ? currentGameNumber : multiWinData.lastMultiGame,
+      });
+  
+      // ✅ Add this player as confirmed winner
+      const gameRef = ref(rtdb, `games/${room.gameId}`);
+      const existingWinnersSnap = await get(child(gameRef, "winnerList"));
+      const existingWinners = existingWinnersSnap.val() || [];
+  
+      // If already enough winners, reject new ones
+      if (existingWinners.length >= winnerCount) {
+        return { success: false, message: "Winners already confirmed" };
+      }
+  
+      // Add winner
+      const newWinners = [...existingWinners, { userId, cardId, pattern }];
+      await update(gameRef, { winnerList: newWinners });
+  
+      // ✅ If we reached the allowed winner count → proceed to payout
+      if (newWinners.length === winnerCount) {
+        const totalBets = playerCount * (room.betAmount || 0);
+        const totalPayout = totalBets * 0.85;
+        const payoutPerWinner = totalPayout / winnerCount;
+        const revenueAmount = totalBets * 0.15;
+  
+        const roomRef = ref(rtdb, `rooms/${roomId}`);
+  
+        // Pay each winner
+        for (const winner of newWinners) {
+          const balanceRef = ref(rtdb, `users/${winner.userId}/balance`);
+          await runTransaction(balanceRef, (current) => (current || 0) + payoutPerWinner);
+  
+          const winRef = ref(rtdb, `winningHistory/${uuidv4()}`);
+          await set(winRef, {
+            playerId: winner.userId,
+            gameId: room.gameId,
+            roomId,
+            payout: payoutPerWinner,
+            cardId: winner.cardId,
+            date: Date.now(),
+          });
+        }
+  
+        // Log revenue
         const revenueRef = ref(rtdb, `revenue/${room.gameId}`);
         await set(revenueRef, {
           gameId: room.gameId,
@@ -830,40 +856,38 @@ const gameData = {
           amount: revenueAmount,
           drawned: false,
         });
-
-        // ✅ Mark room payout metadata
+  
+        // Update room
         update(roomRef, {
-          winner: userId,
-          payout: payoutAmount,
+          winnerCount,
+          winners: newWinners.map((w) => w.userId),
+          payoutPerWinner,
+          totalPayout,
           payed: true,
         });
+  
+        // Broadcast final results
+        if (this.io) {
+          this.io.to(roomId).emit("multiWinnersConfirmed", {
+            roomId,
+            gameId: room.gameId,
+            winners: newWinners.map((w) => w.userId),
+            count: winnerCount,
+            message: `🎉 ${winnerCount} Winner${winnerCount > 1 ? "s" : ""}!`,
+          });
+        }
+  
+        await new Promise((res) => setTimeout(res, 800));
+        this.endGame(roomId, room.gameId, "bingo");
       }
-
-
-      update(gameRef, { winners: [], winnersChecked: true });
-
-      // 🔊 Final guaranteed broadcast before endGame
-      if (this.io) {
-        this.io.to(roomId).emit("bingoChecked", {
-          roomId,
-          gameId: room.gameId,
-          winnerId: userId,
-          message: "Bingo confirmed! Game ending soon...",
-        });
-      }
-
-      // Small delay to ensure all sockets receive events
-      await new Promise((res) => setTimeout(res, 500));
-
-
-      this.endGame(roomId, room.gameId, "bingo");
-
-      return { success: true, message: "Bingo confirmed!" };
+  
+      return { success: true, message: `Bingo confirmed for ${userId}` };
     } catch (error) {
       console.error("Error checking bingo:", error);
       return { success: false, message: "Server error" };
     }
   }
+  
 
 
   // Validate bingo pattern

@@ -265,7 +265,7 @@ async function setCommands() {
 }
 
 // ✅ Run once during startup (not on every game or user event)
-if (process.env.NODE_ENV !== "production") {
+if (process.env.NODE_ENV === "production") {
   setCommands();
 }
 

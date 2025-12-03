@@ -26,7 +26,18 @@ app.get('/health', (req, res) => {
 });
 
 // Telegram webhook endpoint
-app.all('/api/bot', (req, res) => botHandler(req, res));
+import { bot } from './bot.js';
+
+app.post("/api/bot", async (req, res) => {
+  try {
+    await bot.processUpdate(req.body); // <---- This FIXES EVERYTHING
+    res.sendStatus(200);
+  } catch (err) {
+    console.error("Webhook error:", err);
+    res.sendStatus(500);
+  }
+});
+
 
 // API routes
 app.get('/api/verifyUser', (req, res) => verifyUserHandler(req, res));

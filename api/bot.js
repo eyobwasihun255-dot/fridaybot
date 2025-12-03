@@ -1955,12 +1955,9 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
 
 
 // ====================== MAIN HANDLER (Webhook mode) ======================
-export const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
-  polling: process.env.NODE_ENV !== "production"
-});
 
 
-export default async function botHandler(req, res) {
+export default async function handler(req, res) {
   if (req.method === "POST") {
     const update = req.body;
     if (update.message) await handleUserMessage(update.message);
@@ -2069,3 +2066,7 @@ if (process.env.BOT_POLLING === "true" && process.env.NODE_ENV !== "production")
   pollingActive = true;
   pollUpdates();
 }
+export const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
+  polling: process.env.NODE_ENV !== "production"
+});
+export { bot };

@@ -5,10 +5,17 @@ import { gameManager } from "./game-manager.js";
 export default function createSocketServer(app) {
   const server = createServer(app);
 
+  // Default to localhost for development
+  const CLIENT_URL = process.env.CLIENT_URL || 
+    (process.env.NODE_ENV === 'production' 
+      ? undefined 
+      : 'http://localhost:5173'); // Vite default port
+
   const io = new Server(server, {
     cors: {
-      origin: process.env.CLIENT_URL ,
+      origin: CLIENT_URL,
       methods: ["GET", "POST"],
+      credentials: true,
     },
   });
 

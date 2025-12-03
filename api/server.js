@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { rtdb } from '../bot/firebaseConfig.js';
-import { ref, get, onValue } from 'firebase/database';
+import { ref, get } from 'firebase/database';
 import createSocketServer from './socket-server.js';
 import { gameManager } from './game-manager.js';
 import botHandler from './bot.js';
@@ -11,10 +11,10 @@ import verifyUserHandler from './verifyUser.js';
 import startGameHandler from './start-game.js';
 import endGameHandler from './end-game.js';
 import resetRoomHandler from './reset-room.js';
-import checkbingohandler from './check-bingo.js'
-import autodelete from './autodelete.js';
+import checkbingohandler from './check-bingo.js';
+import playerHandler from './player.js';
 const app = express();
-const PORT = process.env.PORT ;
+const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors());
@@ -34,6 +34,7 @@ app.post('/api/start-game', (req, res) => startGameHandler(req, res));
 app.post('/api/end-game', (req, res) => endGameHandler(req, res));
 app.post('/api/reset-room', (req, res) => resetRoomHandler(req, res));
 app.post('/api/check-bingo', (req, res) => checkbingohandler(req, res));
+app.post('/api/player', (req, res) => playerHandler(req, res));
 // Revenue summary
 app.get('/api/revenue', async (req, res) => {
   try {

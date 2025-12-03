@@ -1,44 +1,21 @@
 import { ref, get, set, update, push , remove, runTransaction } from "firebase/database";
 import { rtdb } from "../bot/firebaseConfig.js"; 
 import fetch from "node-fetch";
-import GameManager, { gameManager } from "./game-manager.js"; // adjust path as needed
-// or for CommonJS: const gameManager = require("./game-manager.js");
+import { gameManager } from "./game-manager.js";
 
 
 const ADMIN_PASSCODE = "19991999"; // Ideally move to process.env.ADMIN_PASSCODE
-const CLEANUP_HOURS = 6;
-const CLEANUP_MS = CLEANUP_HOURS * 60 * 60 * 1000;
 
-// Utility: Cleanup old deposits & withdrawals
-async function cleanupOldTransactions() {
-  const now = Date.now();
-  const deleteIfOld = async (nodePath) => {
-    try {
-      const nodeRef = ref(rtdb, nodePath);
-      const snap = await get(nodeRef);
-
-      if (snap.exists()) {
-        const data = snap.val();
-        let deletedCount = 0;
-
-        for (const [id, record] of Object.entries(data)) {
-          if (record.date && now - record.date > CLEANUP_MS) {
-            await remove(ref(rtdb, `${nodePath}/${id}`));
-            deletedCount++;
-          }
-        }
-
-        if (deletedCount > 0) {
-          console.log(`🧹 Deleted ${deletedCount} old records from ${nodePath}`);
-        }
-      }
-    } catch (err) {
-      console.error(`❌ Cleanup error in ${nodePath}:`, err);
-    }
-  };
-  await deleteIfOld("winningHistory");
-  await deleteIfOld("withdrawals");
+// Helper function to get webapp URL (defaults to localhost for development)
+function getWebappUrl() {
+  return process.env.WEBAPP_URL || 
+    (process.env.NODE_ENV === 'production' 
+      ? "https://fridaybot-9jrb.onrender.com"
+      : `http://localhost:${process.env.PORT || 5000}`);
 }
+
+
+
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ADMIN_IDS = (process.env.ADMIN_IDS || "")
   .split(",")
@@ -332,7 +309,8 @@ async function handlePlaygame(message) {
   // ✅ If phone number exists, continue to web app
   const secret = process.env.TELEGRAM_BOT_TOKEN;
   const sig = crypto.createHmac("sha256", secret).update(telegramId).digest("hex");
-  const baseUrl = process.env.WEBAPP_URL || "https://fridaybot-9jrb.onrender.com/";
+  
+  const baseUrl = getWebappUrl();
   const webAppUrl = `${baseUrl}?id=${telegramId}&sig=${sig}`;
 
   const keyboard = {
@@ -638,7 +616,7 @@ if (pending?.type === "awaiting_player_lookup") {
   const id = text.replace("@", "").trim();
 
   try {
-    const response = await fetch(`${process.env.WEBAPP_URL}/api/player`, {
+    const response = await fetch(`${getWebappUrl()}/api/player`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
@@ -682,7 +660,7 @@ if (text === "/revenue") {
   }
 
   try {
-    const response = await fetch(`${process.env.WEBAPP_URL}/api/revenue`);
+    const response = await fetch(`${getWebappUrl()}/api/revenue`);
     if (!response.ok) throw new Error("Failed to fetch revenue");
 
     const data = await response.json();
@@ -741,7 +719,7 @@ if (pending?.type === "awaiting_revenue_amount") {
   }
 
   try {
-    const response = await fetch(`${process.env.WEBAPP_URL}/api/revenue`);
+    const response = await fetch(`${getWebappUrl()}/api/revenue`);
     if (!response.ok) throw new Error("Failed to fetch revenue");
 
     const data = await response.json();
@@ -780,7 +758,6 @@ if (pending?.type === "awaiting_revenue_amount") {
     const revenueRef = ref(rtdb);
     await update(revenueRef, updates);
 
-    await cleanupOldTransactions();
 
     sendMessage(chatId, `✅ Revenue withdrawal of $${actualWithdrawn} successful!`);
     console.log(`💸 Admin ${userId} withdrew $${actualWithdrawn}`);
@@ -1758,9 +1735,7 @@ if (text === "/transaction") {
 
   try {
     // Fetch transaction data
-    const response = await fetch(
-      (process.env.WEBAPP_URL || "https://fridaybot-9jrb.onrender.com") + "/api/transaction"
-    );
+    const response = await fetch(`${getWebappUrl()}/api/transaction`);
     if (!response.ok) throw new Error("Failed to fetch transaction data");
 
     const data = await response.json();
@@ -1979,9 +1954,8 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
  // check every 1 minute
 
 
-// ====================== MAIN HANDLER ======================
+// ====================== MAIN HANDLER (Webhook mode) ======================
 export default async function handler(req, res) {
-  
   if (req.method === "POST") {
     const update = req.body;
     if (update.message) await handleUserMessage(update.message);
@@ -1989,4 +1963,104 @@ export default async function handler(req, res) {
     return res.json({ ok: true });
   }
   res.status(200).json({ status: "Bot running" });
+}
+
+// ====================== POLLING MODE (DEV ONLY) ======================
+let pollingActive = false;
+let pollOffset = 0;
+let consecutiveErrors = 0;
+const MAX_CONSECUTIVE_ERRORS = 5;
+const BASE_RETRY_DELAY = 2000; // 2 seconds
+
+async function pollUpdates() {
+  if (!pollingActive) return;
+
+  try {
+    const url = `${API}/getUpdates`;
+    
+    // Add timeout to fetch request
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        timeout: 20,
+        offset: pollOffset,
+        allowed_updates: ["message", "callback_query"],
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+
+    const data = await res.json();
+    
+    if (data.ok && Array.isArray(data.result)) {
+      // Reset error counter on success
+      consecutiveErrors = 0;
+      
+      for (const update of data.result) {
+        pollOffset = update.update_id + 1;
+        try {
+          if (update.message) await handleUserMessage(update.message);
+          if (update.callback_query) await handleCallback(update.callback_query);
+        } catch (e) {
+          console.error("❌ Error handling polled update:", e);
+        }
+      }
+      
+      // Normal polling delay (1 second)
+      if (pollingActive) {
+        setTimeout(pollUpdates, 1000);
+      }
+    } else if (!data.ok) {
+      console.error("⚠️ getUpdates API error:", data.description || data);
+      consecutiveErrors++;
+      
+      // Exponential backoff on API errors
+      const delay = Math.min(BASE_RETRY_DELAY * Math.pow(2, consecutiveErrors - 1), 30000);
+      if (pollingActive) {
+        setTimeout(pollUpdates, delay);
+      }
+    }
+  } catch (err) {
+    consecutiveErrors++;
+    
+    // Handle different error types
+    if (err.name === 'AbortError') {
+      console.warn("⏱️ Polling request timeout, retrying...");
+    } else if (err.code === 'ETIMEDOUT' || err.errno === 'ETIMEDOUT') {
+      console.warn("🌐 Network timeout connecting to Telegram API, retrying...");
+    } else {
+      console.error("⚠️ Polling error:", err.message || err);
+    }
+    
+    // Stop polling if too many consecutive errors
+    if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+      console.error(`❌ Too many consecutive polling errors (${consecutiveErrors}). Stopping polling.`);
+      console.error("💡 Check your internet connection and TELEGRAM_BOT_TOKEN.");
+      pollingActive = false;
+      return;
+    }
+    
+    // Exponential backoff for network errors
+    const delay = Math.min(BASE_RETRY_DELAY * Math.pow(2, consecutiveErrors - 1), 30000);
+    console.log(`🔄 Retrying polling in ${delay / 1000}s... (error count: ${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS})`);
+    
+    if (pollingActive) {
+      setTimeout(pollUpdates, delay);
+    }
+  }
+}
+
+if (process.env.BOT_POLLING === "true" && process.env.NODE_ENV !== "production") {
+  console.log("🚀 Starting Telegram bot in long-polling mode (dev)...");
+  pollingActive = true;
+  pollUpdates();
 }

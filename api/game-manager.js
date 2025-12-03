@@ -1,6 +1,6 @@
 import { rtdb } from "../bot/firebaseConfig.js";
-import { ref, get, set, update, runTransaction, onValue } from "firebase/database";
-import { platform } from "os";
+import { ref, get, set, update, runTransaction } from "firebase/database";
+import redis from "./redisClient.js";
 import { v4 as uuidv4 } from "uuid";
 class GameManager {
   constructor() {
@@ -13,6 +13,48 @@ class GameManager {
 
 
     this.io = null; // Will be set when Socket.IO is initialized
+  }
+
+  // -------- Redis helpers (ephemeral state) --------
+  async getRoomState(roomId) {
+    try {
+      const raw = await redis.get(`room:${roomId}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      console.error("⚠️ getRoomState Redis error:", e);
+      return null;
+    }
+  }
+
+  async setRoomState(roomId, patch) {
+    try {
+      const current = (await this.getRoomState(roomId)) || {};
+      const next = { ...current, ...patch };
+      await redis.set(`room:${roomId}`, JSON.stringify(next));
+      // Optional TTL so old rooms are cleaned automatically
+      await redis.expire(`room:${roomId}`, 60 * 60); // 1 hour
+    } catch (e) {
+      console.error("⚠️ setRoomState Redis error:", e);
+    }
+  }
+
+  async getGameState(gameId) {
+    try {
+      const raw = await redis.get(`game:${gameId}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      console.error("⚠️ getGameState Redis error:", e);
+      return null;
+    }
+  }
+
+  async setGameState(gameId, state) {
+    try {
+      await redis.set(`game:${gameId}`, JSON.stringify(state));
+      await redis.expire(`game:${gameId}`, 60 * 60); // 1 hour
+    } catch (e) {
+      console.error("⚠️ setGameState Redis error:", e);
+    }
   }
 
   // Singleton pattern
@@ -52,11 +94,10 @@ class GameManager {
       }
 
       const countdownEndAt = Date.now() + durationMs;
-      const roomRef = ref(rtdb, `rooms/${roomId}`);
 
-      // --- Start countdown in Firebase ---
-      await update(roomRef, {
-        gameStatus: "countdown",
+      // --- Start countdown in Redis (ephemeral room state) ---
+      await this.setRoomState(roomId, {
+        roomStatus: "countdown",
         countdownEndAt,
         countdownStartedBy: startedBy,
       });
@@ -66,13 +107,12 @@ class GameManager {
       if (this.countdownTimers.has(roomId)) clearTimeout(this.countdownTimers.get(roomId));
       const tid = setTimeout(async () => {
         try {
-          const snap = await get(roomRef);
-          const latest = snap.val();
-          if (latest?.gameStatus === "countdown") {
+          const latest = await this.getRoomState(roomId);
+          if (latest?.roomStatus === "countdown") {
             console.log(`🎮 Countdown ended → starting game for room ${roomId}`);
             await this.startGame(roomId, latest);
           } else {
-            console.log(`⚠️ Skipping startGame for room ${roomId}, state changed to ${latest?.gameStatus}`);
+            console.log(`⚠️ Skipping startGame for room ${roomId}, state changed to ${latest?.roomStatus}`);
           }
         } catch (err) {
           console.error(`❌ Auto startGame error for room ${roomId}:`, err);
@@ -235,9 +275,8 @@ class GameManager {
         clearTimeout(this.countdownTimers.get(roomId));
         this.countdownTimers.delete(roomId);
       }
-      const roomRef = ref(rtdb, `rooms/${roomId}`);
-      update(roomRef, {
-        gameStatus: 'waiting',
+      await this.setRoomState(roomId, {
+        roomStatus: "waiting",
         countdownEndAt: null,
         countdownStartedBy: null,
       });
@@ -294,31 +333,28 @@ class GameManager {
       const gameId = uuidv4();
       console.log("🎲 New gameId:", gameId);
 
-      // ✅ Run transaction safely
-      console.log("✅ startGame(): before runTransaction");
-      await Promise.race([
-        runTransaction(roomRef, (currentRoom) => {
-          console.log("🌀 runTransaction executing for", roomId);
-          if (!currentRoom || currentRoom.gameStatus !== "countdown") {
-            console.log("❌ runTransaction abort: not in countdown");
-            return currentRoom;
-          }
-
-          currentRoom.gameStatus = "playing";
-          currentRoom.gameId = gameId;
-          currentRoom.calledNumbers = [];
-          currentRoom.countdownEndAt = null;
-          currentRoom.countdownStartedBy = null;
-          currentRoom.currentWinner = null;
-          currentRoom.payed = false;
-
-          return currentRoom;
-        }),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("🔥 runTransaction timeout")), 5000)
+      // ✅ Minimal RTDB snapshot for crash-safety
+      console.log("✅ startGame(): writing minimal snapshot to RTDB");
+      await set(ref(rtdb, `games/${gameId}`), {
+        id: gameId,
+        roomId,
+        startedAt: Date.now(),
+        status: "active",
+        totalPayout: Math.floor(
+          (Object.keys(room.players || {}).length - 1) *
+            (room.betAmount || 0) *
+            0.85 +
+            (room.betAmount || 0)
         ),
-      ]);
-      console.log("✅ startGame(): after runTransaction");
+      });
+
+      await this.setRoomState(roomId, {
+        roomStatus: "playing",
+        currentGameId: gameId,
+        calledNumbers: [],
+        countdownEndAt: null,
+        countdownStartedBy: null,
+      });
 
       // ✅ Prepare players
      // ✅ Prepare players with valid cards
@@ -372,11 +408,9 @@ const gameData = {
   })),
   gameStatus: "playing",
 };
-
-      console.log("💾 Writing game data to Firebase...");
-      const gameRef = ref(rtdb, `games/${gameId}`);
-      await set(gameRef, gameData);
-      console.log("✅ Game data saved.");
+      console.log("💾 Writing full game data to Redis (ephemeral)...");
+      await this.setGameState(gameId, gameData);
+      console.log("✅ Game data cached in Redis.");
 
       // ✅ Deduct player bets
       console.log("💰 Deducting bets...");
@@ -409,7 +443,6 @@ const gameData = {
 
   // Start number drawing process
   startNumberDrawing(roomId, gameId, room) {
-    const gameRef = ref(rtdb, `games/${gameId}`);
     if (this.numberDrawIntervals.has(roomId)) {
 
       if (room.gameStatus !== "playing") {
@@ -420,8 +453,7 @@ const gameData = {
     const drawInterval = setInterval(() => {
         setImmediate(async () => {
       try {
-        const gameSnap = await get(gameRef);
-        const gameData = gameSnap.val();
+        let gameData = await this.getGameState(gameId);
 
         if (!gameData || gameData.status !== "active") {
           this.stopNumberDrawing(roomId);
@@ -454,13 +486,20 @@ const gameData = {
         const newDrawnNumbers = drawnNumbers.slice(0, currentNumberIndex + 1);
 
         // Update game data
-        Promise.allSettled([
+        // Persist in Redis
+        gameData.currentDrawnNumbers = newDrawnNumbers;
+        gameData.currentNumberIndex = currentNumberIndex + 1;
+        await this.setGameState(gameId, gameData);
+
+        // Periodically sync a minimal snapshot back to RTDB for crash safety
+        if ((currentNumberIndex + 1) % 10 === 0) {
+          const gameRef = ref(rtdb, `games/${gameId}`);
+          const lastTen = newDrawnNumbers.slice(-10);
           update(gameRef, {
-            currentDrawnNumbers: newDrawnNumbers,
             currentNumberIndex: currentNumberIndex + 1,
-          }),
-          update(ref(rtdb, `rooms/${roomId}`), { calledNumbers: newDrawnNumbers }),
-        ]).catch(console.error);
+            lastDrawnNumbers: lastTen,
+          }).catch(console.error);
+        }
 
         // Notify clients
         if (this.io) {
@@ -625,21 +664,24 @@ const gameData = {
 
       this.resetRoomTimers.set(roomId, resetTimer);
 
-      // Fetch game data
+      // Fetch game data (prefer Redis, fall back to RTDB snapshot)
+      let gameData = await this.getGameState(gameId);
+      if (!gameData) {
       const gameRef = ref(rtdb, `games/${gameId}`);
       const gameSnap = await get(gameRef);
-      const gameData = gameSnap.val();
+        gameData = gameSnap.val();
+      }
       if (!gameData) return;
 
       // Mark game as ended
-      await update(gameRef, {
+      await update(ref(rtdb, `games/${gameId}`), {
         status: "ended",
         endedAt: Date.now(),
         endReason: reason,
       });
 
-      await update(roomRef, {
-        gameStatus: "ended",
+      await this.setRoomState(roomId, {
+        roomStatus: "ended",
         nextGameCountdownEndAt,
         countdownEndAt: null,
         countdownStartedBy: null,
@@ -1251,15 +1293,22 @@ const gameData = {
         }
       }
 
-      // Reset room state
-      update(roomRef, {
+      // Reset room state (RTDB minimal, Redis full runtime)
+      await update(roomRef, {
         gameStatus: "waiting",
         gameId: null,
-        calledNumbers: [],
         winner: null,
         payout: null,
         payed: false,
-        nextGameCountdownEndAt: null
+        nextGameCountdownEndAt: null,
+      });
+
+      await this.setRoomState(roomId, {
+        roomStatus: "waiting",
+        currentGameId: null,
+        calledNumbers: [],
+        countdownEndAt: null,
+        nextGameCountdownEndAt: null,
       });
 
       // Reset attemptedBingo for remaining players

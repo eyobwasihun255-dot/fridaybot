@@ -1,9 +1,10 @@
 
   import { create } from 'zustand';
   import { rtdb } from '../firebase/config';
-  import { ref, onValue, get as fbget, set as fbset, update, remove,off, push, query, orderByChild, equalTo, runTransaction } from 'firebase/database';
+  import { ref, onValue, get as fbget, set as fbset, update, remove, off, runTransaction } from 'firebase/database';
   import { useAuthStore } from '../store/authStore';
   import { io, Socket } from 'socket.io-client';
+  import { getSocketUrl, getApiUrl } from '../config/api';
 
   interface BingoCard {
     id: string;
@@ -79,8 +80,8 @@
     checkBingo: (pattern: number[]) => Promise<{ success: boolean; message: string }>;
   }
 
-  // Server configuration
-  const SERVER_URL = 'https://fridaybot-9jrb.onrender.com/';
+  // Server configuration - uses environment variable
+  const SERVER_URL = getSocketUrl();
 
 
   export const useGameStore = create<GameState>((set, get) => ({
@@ -133,9 +134,10 @@ autoReconnectToServer: () => {
 
   // after short delay, re-sync current room if user was in one
   setTimeout(async () => {
-    if (get().currentRoom?.id) {
-      console.log('[autoReconnect] Re-syncing room state:', get().currentRoom?.id);
-      await syncRoomState(get().currentRoom.id);
+    const currentRoom = get().currentRoom;
+    if (currentRoom?.id) {
+      console.log('[autoReconnect] Re-syncing room state:', currentRoom.id);
+      await syncRoomState(currentRoom.id);
     }
   }, 3000);
 },
@@ -165,15 +167,21 @@ autoReconnectToServer: () => {
       const room = snap.val();
       if (!room) return;
     
+      // ✅ Read calledNumbers from RTDB (synced from Redis by backend)
+      // Fallback to empty array if not present
+      const calledNumbers = Array.isArray(room.calledNumbers) 
+        ? room.calledNumbers 
+        : (room.drawnNumbers ? Object.values(room.drawnNumbers) : []);
+    
       set({
         currentRoom: { id: roomId, ...room },
         displayedCalledNumbers: {
           ...get().displayedCalledNumbers,
-          [roomId]: Object.values(room.drawnNumbers || {}),
+          [roomId]: calledNumbers,
         },
       });
     
-      console.log("🔄 Room synced:", room.gameStatus);
+      console.log("🔄 Room synced:", room.gameStatus, "calledNumbers:", calledNumbers.length);
     },
     
     
@@ -339,7 +347,7 @@ autoReconnectToServer: () => {
     // Server-side bingo check
     checkBingo: async (pattern: number[]) => {
       try {
-        const { currentRoom, selectedCard, socket } = get();
+        const { currentRoom, selectedCard } = get();
         const { user } = useAuthStore.getState();
         if (!currentRoom || !user) {
           return { success: false, message: 'Missing required data' };
@@ -350,20 +358,20 @@ autoReconnectToServer: () => {
       const snap = await fbget(cardsRef);
       const cards = snap.exists() ? Object.values(snap.val()) : [];
       const userCard = cards.find(
-        (card: any) => card.claimed && card.claimedBy === user.telegramId
-      );
+        (card: any) => card?.claimed && card?.claimedBy === user.telegramId
+      ) as BingoCard | undefined;
 
         // If no claimed card found, use selected card
         const cardToUse = userCard || selectedCard;
         
-        if (!cardToUse) {
+        if (!cardToUse || !cardToUse.id) {
           console.log('❌ No valid card found for bingo check');
           return { success: false, message: 'No valid card found' };
         }
 
         console.log('🎯 Checking bingo with server...');
 
-        const response = await fetch(`/api/check-bingo`, {
+        const response = await fetch(getApiUrl('/check-bingo'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -374,7 +382,7 @@ autoReconnectToServer: () => {
             userId: user.telegramId,
             pattern: pattern,
             room: currentRoom,
-            player: currentRoom?.players[user.telegramId],
+            player: currentRoom?.players?.[user.telegramId],
           }),
         });
 
@@ -400,7 +408,7 @@ autoReconnectToServer: () => {
       try {
         console.log('🔚 Requesting server to end game...');
         
-        const response = await fetch(`/api/end-game`, {
+        const response = await fetch(getApiUrl('/end-game'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

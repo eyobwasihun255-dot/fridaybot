@@ -3,8 +3,10 @@ services:
     name: friday-bingo-server
     env: node
     plan: starter
-    buildCommand: npm install && npm run build && npm install socket.io-client
-    startCommand: npm run server
+    # Build: Install dependencies and build frontend
+    buildCommand: npm install && npm run build
+    # Start: Run the Express server (which serves the built frontend)
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
@@ -12,10 +14,28 @@ services:
         value: 10000
       - key: CLIENT_URL
         value: https://fridaybot-9jrb.onrender.com
+      - key: WEBAPP_URL
+        value: https://fridaybot-9jrb.onrender.com
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: ADMIN_IDS
         sync: false
-      - key: WEBAPP_URL
-        value: https://fridaybot-9jrb.onrender.com
+      # Firebase Configuration
+      - key: FIREBASE_API_KEY
+        sync: false
+      - key: FIREBASE_AUTH_DOMAIN
+        sync: false
+      - key: FIREBASE_DATABASE_URL
+        sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_STORAGE_BUCKET
+        sync: false
+      - key: FIREBASE_MESSAGING_SENDER_ID
+        sync: false
+      - key: FIREBASE_APP_ID
+        sync: false
+      # Redis Configuration (Cloud Redis)
+      - key: REDIS_URL
+        sync: false
     healthCheckPath: /health

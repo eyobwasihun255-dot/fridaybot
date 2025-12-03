@@ -2,7 +2,7 @@ import { ref, get, set, update, push , remove, runTransaction } from "firebase/d
 import { rtdb } from "../bot/firebaseConfig.js"; 
 import fetch from "node-fetch";
 import { gameManager } from "./game-manager.js";
-
+import TelegramBot from "node-telegram-bot-api";
 
 const ADMIN_PASSCODE = "19991999"; // Ideally move to process.env.ADMIN_PASSCODE
 
@@ -1955,7 +1955,12 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
 
 
 // ====================== MAIN HANDLER (Webhook mode) ======================
-export default async function handler(req, res) {
+export const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
+  polling: process.env.NODE_ENV !== "production"
+});
+
+
+export default async function botHandler(req, res) {
   if (req.method === "POST") {
     const update = req.body;
     if (update.message) await handleUserMessage(update.message);

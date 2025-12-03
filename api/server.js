@@ -26,18 +26,38 @@ app.get('/health', (req, res) => {
 });
 
 // Telegram webhook endpoint
-import { bot } from './bot.js';
-
-app.post("/api/bot", async (req, res) => {
+app.all('/api/bot', async (req, res) => {
   try {
-    await bot.processUpdate(req.body); // <---- This FIXES EVERYTHING
-    res.sendStatus(200);
+    await botHandler(req, res);
   } catch (err) {
-    console.error("Webhook error:", err);
-    res.sendStatus(500);
+    console.error('❌ Error in bot handler:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ ok: false, error: 'Internal server error' });
+    }
   }
 });
 
+// Webhook status endpoint (for debugging)
+app.get('/api/bot/status', async (req, res) => {
+  try {
+    const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+    if (!TOKEN) {
+      return res.status(500).json({ error: 'TELEGRAM_BOT_TOKEN not set' });
+    }
+    
+    const response = await fetch(`https://api.telegram.org/bot${TOKEN}/getWebhookInfo`);
+    const data = await response.json();
+    
+    res.json({
+      webhookInfo: data,
+      mode: process.env.BOT_POLLING === "true" ? "polling" : "webhook",
+      nodeEnv: process.env.NODE_ENV,
+      webappUrl: process.env.WEBAPP_URL || 'not set',
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // API routes
 app.get('/api/verifyUser', (req, res) => verifyUserHandler(req, res));

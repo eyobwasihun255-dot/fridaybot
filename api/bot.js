@@ -2,15 +2,15 @@ import { ref, get, set, update, push , remove, runTransaction } from "firebase/d
 import { rtdb } from "../bot/firebaseConfig.js"; 
 import fetch from "node-fetch";
 import { gameManager } from "./game-manager.js";
-import TelegramBot from "node-telegram-bot-api";
+
 
 const ADMIN_PASSCODE = "19991999"; // Ideally move to process.env.ADMIN_PASSCODE
 
 // Helper function to get webapp URL (defaults to localhost for development)
 function getWebappUrl() {
   return process.env.WEBAPP_URL || 
-    (process.env.NODE_ENV === 'production' 
-      ? "https://fridaybot-c47n.onrender.com"
+      (process.env.NODE_ENV === 'production' 
+        ? "https://fridaybot-9jrb.onrender.com"
       : `http://localhost:${process.env.PORT || 5000}`);
 }
 
@@ -1955,16 +1955,49 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
 
 
 // ====================== MAIN HANDLER (Webhook mode) ======================
-
-
 export default async function handler(req, res) {
-  if (req.method === "POST") {
-    const update = req.body;
-    if (update.message) await handleUserMessage(update.message);
-    if (update.callback_query) await handleCallback(update.callback_query);
-    return res.json({ ok: true });
+  try {
+    // Log incoming requests for debugging
+    if (process.env.NODE_ENV === 'production') {
+      console.log(`📥 Webhook received: ${req.method} ${req.path}`);
+    }
+
+    if (req.method === "POST") {
+      const update = req.body;
+      
+      if (!update) {
+        console.warn("⚠️ Empty webhook body received");
+        return res.status(400).json({ ok: false, error: "Empty body" });
+      }
+
+      // Log update type for debugging
+      if (process.env.NODE_ENV === 'production') {
+        if (update.message) {
+          console.log(`💬 Message from ${update.message.from?.id}: ${update.message.text || '[media/other]'}`);
+        }
+        if (update.callback_query) {
+          console.log(`🔘 Callback from ${update.callback_query.from?.id}: ${update.callback_query.data}`);
+        }
+      }
+
+      try {
+        if (update.message) await handleUserMessage(update.message);
+        if (update.callback_query) await handleCallback(update.callback_query);
+      } catch (err) {
+        console.error("❌ Error processing webhook update:", err);
+        // Still return ok: true to prevent Telegram from retrying
+        return res.json({ ok: true, error: err.message });
+      }
+
+      return res.json({ ok: true });
+    }
+    
+    // GET request - return status
+    res.status(200).json({ status: "Bot running", mode: process.env.BOT_POLLING === "true" ? "polling" : "webhook" });
+  } catch (err) {
+    console.error("❌ Webhook handler error:", err);
+    res.status(500).json({ ok: false, error: err.message });
   }
-  res.status(200).json({ status: "Bot running" });
 }
 
 // ====================== POLLING MODE (DEV ONLY) ======================
@@ -2061,11 +2094,55 @@ async function pollUpdates() {
   }
 }
 
-if (process.env.BOT_POLLING === "true" && process.env.NODE_ENV !== "production") {
-  console.log("🚀 Starting Telegram bot in long-polling mode (dev)...");
-  pollingActive = true;
-  pollUpdates();
+// ====================== AUTO-CONFIGURE WEBHOOK/POLLING ======================
+async function setupBotMode() {
+  const isProduction = process.env.NODE_ENV === "production";
+  const usePolling = process.env.BOT_POLLING === "true" && !isProduction;
+
+  if (usePolling) {
+    // Development: Use polling
+    console.log("🚀 Starting Telegram bot in long-polling mode (dev)...");
+    pollingActive = true;
+    pollUpdates();
+  } else if (isProduction) {
+    // Production: Set webhook automatically
+    const webappUrl = getWebappUrl();
+    const webhookUrl = `${webappUrl}/api/bot`;
+    
+    try {
+      console.log(`🔗 Setting Telegram webhook to: ${webhookUrl}`);
+      const response = await fetch(`${API}/setWebhook`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: webhookUrl,
+          allowed_updates: ["message", "callback_query"],
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.ok) {
+        console.log("✅ Webhook set successfully!");
+        
+        // Verify webhook info
+        const infoResponse = await fetch(`${API}/getWebhookInfo`);
+        const info = await infoResponse.json();
+        if (info.ok) {
+          console.log(`📋 Webhook info: ${JSON.stringify(info.result, null, 2)}`);
+        }
+      } else {
+        console.error("❌ Failed to set webhook:", data);
+      }
+    } catch (err) {
+      console.error("❌ Error setting webhook:", err);
+      console.error("💡 You may need to set webhook manually:");
+      console.error(`   curl -X POST "${API}/setWebhook?url=${webhookUrl}"`);
+    }
+  } else {
+    console.log("ℹ️ Bot handler ready (webhook mode). Set webhook manually or enable polling with BOT_POLLING=true");
+  }
 }
-export const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
-  polling: process.env.NODE_ENV !== "production"
-});
+
+// Run setup when module loads
+setupBotMode();

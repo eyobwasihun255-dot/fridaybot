@@ -10,7 +10,7 @@ const ADMIN_PASSCODE = "19991999"; // Ideally move to process.env.ADMIN_PASSCODE
 function getWebappUrl() {
   return process.env.WEBAPP_URL || 
     (process.env.NODE_ENV === 'production' 
-      ? "https://fridaybot-9jrb.onrender.com"
+      ? "https://fridaybot-c47n.onrender.com"
       : `http://localhost:${process.env.PORT || 5000}`);
 }
 
@@ -265,7 +265,7 @@ async function setCommands() {
 }
 
 // ✅ Run once during startup (not on every game or user event)
-if (process.env.NODE_ENV === "production") {
+if (process.env.NODE_ENV !== "production") {
   setCommands();
 }
 

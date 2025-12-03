@@ -2069,4 +2069,3 @@ if (process.env.BOT_POLLING === "true" && process.env.NODE_ENV !== "production")
 export const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
   polling: process.env.NODE_ENV !== "production"
 });
-export { bot };

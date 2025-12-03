@@ -7,7 +7,7 @@ export const API_CONFIG = {
   SERVER_URL: import.meta.env.VITE_SERVER_URL || 
               (import.meta.env.DEV 
                 ? 'http://localhost:5000'  // Default backend port for development
-                : (typeof window !== 'undefined' ? window.location.origin : 'https://fridaybot-9jrb.onrender.com')),
+                : (typeof window !== 'undefined' ? window.location.origin : 'https://fridaybot-c47n.onrender.com')),
   
   // API base path (relative or absolute)
   API_BASE: import.meta.env.VITE_API_BASE || '/api',

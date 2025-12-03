@@ -13,9 +13,9 @@ services:
       - key: PORT
         value: 10000
       - key: CLIENT_URL
-        value: https://fridaybot-9jrb.onrender.com
+        value: https://fridaybot-c47n.onrender.com/
       - key: WEBAPP_URL
-        value: https://fridaybot-9jrb.onrender.com
+        value: https://fridaybot-c47n.onrender.com/
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: ADMIN_IDS

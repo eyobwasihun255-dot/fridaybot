@@ -118,7 +118,7 @@ The following new dependencies have been added:
 ### Debug Commands
 ```bash
 # Check server status
-curl https://fridaybot-9jrb.onrender.com/health
+curl https://fridaybot-c47n.onrender.com/health
 
 # View server logs
 # Check Render dashboard logs

@@ -371,7 +371,7 @@ autoReconnectToServer: () => {
 
         console.log('🎯 Checking bingo with server...');
 
-        const response = await fetch(getApiUrl('/check-bingo'), {
+        const response = await fetch(getApiUrl('/api/check-bingo'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -408,7 +408,7 @@ autoReconnectToServer: () => {
       try {
         console.log('🔚 Requesting server to end game...');
         
-        const response = await fetch(getApiUrl('/end-game'), {
+        const response = await fetch(getApiUrl('/api/end-game'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -580,7 +580,7 @@ autoReconnectToServer: () => {
       }
 
       try {
-        const response = await fetch(getApiUrl("/cancel-bet"), {
+        const response = await fetch(getApiUrl("/api/cancel-bet"), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

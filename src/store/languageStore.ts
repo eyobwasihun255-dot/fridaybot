@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type Language = 'am' | 'en';
+type Language = 'am' | 'en' | 'om';
 
 interface LanguageState {
   language: Language;
@@ -182,6 +182,84 @@ const translations = {
     'bingo_not_allowed': 'No Bingo allowed now.',
     'cancel_failed': 'Cancel failed.',
     'game_in_progress': 'Game is currently in progress',
+  },
+  om: {
+    'loser_bingo': 'Hin moʼanne',
+    'bingo_winner': 'Moʼataa Bingo!',
+    'etb': 'ETB',
+    'auto_bet_en': 'Auto Bet kaardii kanaaf hojjete',
+    'auto_bet_dis': 'Auto Bet kaardii kana irraa haqame',
+    'set_auto_bet': 'Auto Bet qindeessi',
+    'remove_auto_bet': 'Auto Bet haqi',
+    'home': 'Deebiʼi',
+    'cards': 'Kaardii',
+    'friday_bingo': 'Friday Bingo',
+    'balance': 'Baalaansii',
+    bingo_rules_countdown: [
+      "Lakkoofsota waamaman kaardii kee irratti mallatteessi.",
+      "'Bingo' jedhu yeroo fakkii guutuu qabdu qofa cuqaasi.",
+      "Namni fakkii hin guutne irratti Bingo cuqaase haqama.",
+      "Taphaan jalqabamee booda saayeen cufama.",
+      "Moʼattoonni mirkaneeffannoo booda ofumaan kaffalamu."
+    ],
+    bingo_rules_ended: [
+      "Kaardii kee ilaali, yoo guutame 'Bingo' cuqaasi."
+    ],
+    'players_in_room': 'Taphaʼattoota kutaa kana',
+    'no_card_selected': 'Kaardiin filatame hin jiru...',
+    'game_already_in_progress': 'Taphaan amma deemaa jira',
+    'bet': 'Saayee',
+    'pattern': 'Fakkeenyota moʼataa',
+    'welcome': 'Baga gara Friday Bingo dhuftan!',
+    'available_rooms': 'Kutaa jiran',
+    'demo_room': 'Kutaa Demo',
+    'free_play': 'Tapha bilisaa',
+    'bet_amount': 'Harkisni saayee',
+    'players': 'Taphaʼattoota',
+    'status': 'Haala',
+    'active': 'Dalagaa',
+    'waiting': 'Eeggachaa jira',
+    'in_progress': 'Deemaa jira',
+    'join_room': 'Kutaa seeni',
+    'cancel_bet': 'Saayee haqi',
+    'place_bet': 'Saayee kenni',
+    'you_lost': 'Dhiifama! Hin moʼanne!',
+    'winner_pattern': 'Kaardii moʼataa',
+    'room_details': 'Odeeffannoo kutaa',
+    'payout': 'Mindaa',
+    'max_players': 'Lakkoofsa taphaʼattoota olʼaanaa',
+    'game_area': 'Iddoo taphaa',
+    'select_card': 'Kaardii kee filadhu',
+    'card_number': 'Kaardii #',
+    'bingo': 'BINGO!',
+    'numbers_called': 'Lakkoofsotni waamaman',
+    'waiting_players': 'Taphaʼattoota eeggachaa...',
+    'game_starts_in': 'Taphaan jalqabamee',
+    'seconds': 'sekoondii',
+    'time_left': 'gaaffii hafe',
+    'you_won': 'Baga gammaddan! Moʼatte!',
+    'not_a_winner': 'Ammaaf hin moʼanne.',
+    'card': 'Kaardii',
+    'winner': 'moʼataa',
+    'game_ended': 'Taphaan xumurame. Marsaan haaraan jalqabama...',
+    'b_column': 'B (1-15)',
+    'i_column': 'I (16-30)',
+    'n_column': 'N (31-45)',
+    'g_column': 'G (46-60)',
+    'o_column': 'O (61-75)',
+    'enter_room': 'Kutaa seeni',
+    'loading': 'Eegaa jira...',
+    'error': 'Dogoggorri mulʼate',
+    'success': 'Milkaaʼe!',
+    'confirm': 'Mirkaneessi',
+    'cancel': 'Haqi',
+    'insufficient_balance': 'Baalaansiin gahaa miti!',
+    'bet_placed': 'Saayee kennite! Taphaʼattoota biraa eegi...',
+    'error_player_card': 'Dogoggora: taphaʼaa/kaardii hin argamne',
+    'already_attempted_bingo': 'Bingo duraan yaalte!',
+    'bingo_not_allowed': 'Amma Bingo hin hayyamamu.',
+    'cancel_failed': 'Haqinsi hin milkoofne.',
+    'game_in_progress': 'Taphaan deemaa jira'
   }
 };
 

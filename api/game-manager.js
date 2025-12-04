@@ -38,6 +38,90 @@ class GameManager {
     }
   }
 
+  // Get room players from Redis (runtime data)
+  async getRoomPlayers(roomId) {
+    try {
+      const roomState = await this.getRoomState(roomId);
+      return roomState?.players || {};
+    } catch (e) {
+      console.error("⚠️ getRoomPlayers Redis error:", e);
+      return {};
+    }
+  }
+
+  // Set room players in Redis (runtime data)
+  async setRoomPlayers(roomId, players) {
+    try {
+      await this.setRoomState(roomId, { players });
+    } catch (e) {
+      console.error("⚠️ setRoomPlayers Redis error:", e);
+    }
+  }
+
+  // Add/update a player in Redis
+  async addRoomPlayer(roomId, playerId, playerData) {
+    try {
+      const players = await this.getRoomPlayers(roomId);
+      players[playerId] = playerData;
+      await this.setRoomPlayers(roomId, players);
+    } catch (e) {
+      console.error("⚠️ addRoomPlayer Redis error:", e);
+    }
+  }
+
+  // Remove a player from Redis
+  async removeRoomPlayer(roomId, playerId) {
+    try {
+      const players = await this.getRoomPlayers(roomId);
+      delete players[playerId];
+      await this.setRoomPlayers(roomId, players);
+    } catch (e) {
+      console.error("⚠️ removeRoomPlayer Redis error:", e);
+    }
+  }
+
+  // Get claimed cards (non-auto) from Redis
+  async getClaimedCards(roomId) {
+    try {
+      const roomState = await this.getRoomState(roomId);
+      return roomState?.claimedCards || {};
+    } catch (e) {
+      console.error("⚠️ getClaimedCards Redis error:", e);
+      return {};
+    }
+  }
+
+  // Set claimed cards (non-auto) in Redis
+  async setClaimedCards(roomId, claimedCards) {
+    try {
+      await this.setRoomState(roomId, { claimedCards });
+    } catch (e) {
+      console.error("⚠️ setClaimedCards Redis error:", e);
+    }
+  }
+
+  // Claim a card in Redis (non-auto only)
+  async claimCard(roomId, cardId, userId) {
+    try {
+      const claimedCards = await this.getClaimedCards(roomId);
+      claimedCards[cardId] = { claimed: true, claimedBy: userId, claimedAt: Date.now() };
+      await this.setClaimedCards(roomId, claimedCards);
+    } catch (e) {
+      console.error("⚠️ claimCard Redis error:", e);
+    }
+  }
+
+  // Unclaim a card in Redis (non-auto only)
+  async unclaimCard(roomId, cardId) {
+    try {
+      const claimedCards = await this.getClaimedCards(roomId);
+      delete claimedCards[cardId];
+      await this.setClaimedCards(roomId, claimedCards);
+    } catch (e) {
+      console.error("⚠️ unclaimCard Redis error:", e);
+    }
+  }
+
   async getGameState(gameId) {
     try {
       const raw = await redis.get(`game:${gameId}`);

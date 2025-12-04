@@ -12,6 +12,9 @@ import startGameHandler from './start-game.js';
 import endGameHandler from './end-game.js';
 import resetRoomHandler from './reset-room.js';
 import checkbingohandler from './check-bingo.js';
+import placeBetHandler from './place-bet.js';
+import cancelBetHandler from './cancel-bet.js';
+import roomStateHandler from './room-state.js';
 import playerHandler from './player.js';
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -66,6 +69,9 @@ app.post('/api/end-game', (req, res) => endGameHandler(req, res));
 app.post('/api/reset-room', (req, res) => resetRoomHandler(req, res));
 app.post('/api/check-bingo', (req, res) => checkbingohandler(req, res));
 app.post('/api/player', (req, res) => playerHandler(req, res));
+app.post('/api/place-bet', (req, res) => placeBetHandler(req, res));
+app.post('/api/cancel-bet', (req, res) => cancelBetHandler(req, res));
+app.get('/api/room-state', (req, res) => roomStateHandler(req, res));
 // Revenue summary
 app.get('/api/revenue', async (req, res) => {
   try {
@@ -221,15 +227,15 @@ const autoCountdownCheck = async () => {
     
     // Use cache if still valid, otherwise refresh
     if (now - lastCacheUpdate > CACHE_TTL) {
-      const roomsSnap = await get(ref(rtdb, 'rooms'));
+      const roomsSnap = await get(ref(rtdb, "rooms"));
       const rooms = roomsSnap.val() || {};
-      
-      // Update cache
+
+      // Update cache with base RTDB config only; runtime state comes from Redis.
       roomCache.clear();
       Object.entries(rooms).forEach(([roomId, room]) => {
         roomCache.set(roomId, {
           ...room,
-          lastChecked: now
+          lastChecked: now,
         });
       });
       lastCacheUpdate = now;
@@ -255,10 +261,13 @@ const autoCountdownCheck = async () => {
 };
 
 const processRoomCountdown = async (roomId, room, now) => {
-  // Quick validation
-  if (!room || !room.players) return;
+  if (!room) return;
 
-  const players = Object.values(room.players).filter((p) => {
+  // Players list is now stored in Redis runtime state
+  const runtimeState = await gameManager.getRoomState(roomId);
+  const playersObj = runtimeState?.players || {};
+
+  const players = Object.values(playersObj).filter((p) => {
     if (!p.cardId) return false;
     if (room.isDemoRoom) return true;
 
@@ -270,9 +279,12 @@ const processRoomCountdown = async (roomId, room, now) => {
     return hasBet || hasAuto;
   });
 
+  const roomStatus = runtimeState?.roomStatus || room.gameStatus;
+  const countdownEndAt = runtimeState?.countdownEndAt || room.countdownEndAt;
+
   const hasEnoughPlayers = players.length >= 2;
-  const isWaiting = room.gameStatus === "waiting";
-  const countdownActive = room.countdownEndAt && room.countdownEndAt > now;
+  const isWaiting = roomStatus === "waiting";
+  const countdownActive = countdownEndAt && countdownEndAt > now;
 
   // Start countdown if conditions are met
   if (isWaiting && hasEnoughPlayers && !countdownActive) {
@@ -285,7 +297,7 @@ const processRoomCountdown = async (roomId, room, now) => {
   }
 
   // Cancel countdown if not enough players remain (only if auto)
-  if (room.gameStatus === "countdown" && !hasEnoughPlayers && room.countdownStartedBy === "auto") {
+  if (roomStatus === "countdown" && !hasEnoughPlayers && (runtimeState?.countdownStartedBy || room.countdownStartedBy) === "auto") {
     console.log(`❌ Cancelling countdown for room ${roomId} (not enough players)`);
     await gameManager.cancelCountdown(roomId);
   }

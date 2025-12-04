@@ -22,12 +22,12 @@ const Room: React.FC = () => {
   const {
     winnerCard, showWinnerPopup, closeWinnerPopup, setWinnerCard,
     currentRoom, bingoCards, joinRoom, selectCard,
-    placeBet, selectedCard, remaining,
+    placeBet, selectedCard,
     showLoserPopup, setShowLoserPopup,
-    connectToServer, checkBingo,enteredRoom, setEnteredRoom,
+    connectToServer, checkBingo, setEnteredRoom,
     setShowWinnerPopup
   } = useGameStore();
-  const { user, updateBalance } = useAuthStore();
+  const { user } = useAuthStore();
 
   const userCard = bingoCards.find(
     (card) => // ✅ make sure it's the same room
@@ -90,7 +90,8 @@ const Room: React.FC = () => {
   const storeIsBetActive = useGameStore((s) => s.isBetActive);
 
   // Flatten current card once for quick lookups
-  const flatCard = React.useMemo(() => cardNumbers.flat(), [cardNumbers]);
+  // Flatten current card once for quick lookups (reserved for future use)
+  // const flatCard = React.useMemo(() => cardNumbers.flat(), [cardNumbers]);
 
 
 
@@ -180,7 +181,7 @@ const Room: React.FC = () => {
     const calledSet = new Set(displayedCalledNumbers);
     return patternNumbers.every((n) => n === 0 || calledSet.has(n));
   }
-  const formatTime = (seconds) => {
+  const formatTime = (seconds: number) => {
     const m = String(Math.floor(seconds / 60)).padStart(2, "0");
     const s = String(seconds % 60).padStart(2, "0");
     return `${m}:${s}`;
@@ -235,12 +236,7 @@ const Room: React.FC = () => {
   // Start countdown if 2+ players bet
   React.useEffect(() => {
     if (!currentRoom || !currentRoom.players) return; // ✅ guard against null
-
-    const activePlayers = Object.values(currentRoom.players).filter(
-      (p: any) => p.betAmount && p.betAmount > 0
-    );
-
-
+    // kept for potential future UI that depends on activePlayers
   }, [currentRoom]);
   // At the top inside Room.tsx
 
@@ -289,15 +285,10 @@ const Room: React.FC = () => {
 
     const success = await placeBet();
 
-    if (success) {
-      setHasBet(true); // ✅ mark bet placed
-      if (!currentRoom.isDemoRoom) {
-        await updateBalance(-currentRoom.betAmount);
+      if (success) {
+        setHasBet(true); // ✅ mark bet placed
+        setGameMessage(t('bet_placed'));
       }
-      setGameMessage(t('bet_placed'));
-
-
-    }
   };
   React.useEffect(() => {
     const { socket } = useGameStore.getState();
@@ -307,7 +298,7 @@ const Room: React.FC = () => {
     }
     console.log("✅ Socket connection available, setting up winnerConfirmed listener");
 
-    socket.on("winnerConfirmed", async ({ roomId, gameId, userId, cardId, patternIndices }: any) => {
+    socket.on("winnerConfirmed", async ({ roomId, gameId: _gameId, userId, cardId, patternIndices }: any) => {
       if (!currentRoom || currentRoom.id !== roomId) return;
 
       if (userId === user?.telegramId) {
@@ -412,10 +403,8 @@ const Room: React.FC = () => {
     );
   };
   const CardSelectionGrid = () => {
-    const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
-  
+
     const handleSelectCard = (cardId: string) => {
-      setSelectedCardId(cardId);
       if (!bingoCards.find((c) => c.id === cardId)?.claimed) {
         selectCard(cardId);
       }
@@ -1112,7 +1101,7 @@ const Room: React.FC = () => {
 
               // ✅ Determine background color
               let bgColor = "bg-theme-light/20"; // default
-              if (currentRoom.winners?.some((w: any) => w.telegramId === player.telegramId)) {
+              if ((currentRoom as any).winners?.some((w: any) => w.telegramId === player.telegramId)) {
                 bgColor = "bg-theme-primary"; // winner
               } else if (player.attemptedBingo) {
                 bgColor = "bg-theme-secondary"; // attempted bingo

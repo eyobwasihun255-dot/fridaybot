@@ -26,6 +26,19 @@ class GameManager {
     }
   }
 
+  /**
+   * Merge permanent room config from RTDB with ephemeral runtime state from Redis.
+   * - RTDB: permanent data (id, name, betAmount, bingoCards, isDemoRoom, etc.)
+   * - Redis: roomStatus, countdowns, players, calledNumbers, currentGameId, etc.
+   */
+  async getFullRoom(roomId) {
+    const roomRef = ref(rtdb, `rooms/${roomId}`);
+    const snap = await get(roomRef);
+    const baseRoom = snap.exists() ? snap.val() : {};
+    const runtime = (await this.getRoomState(roomId)) || {};
+    return { ...baseRoom, ...runtime };
+  }
+
   async setRoomState(roomId, patch) {
     try {
       const current = (await this.getRoomState(roomId)) || {};
@@ -119,6 +132,87 @@ class GameManager {
       await this.setClaimedCards(roomId, claimedCards);
     } catch (e) {
       console.error("⚠️ unclaimCard Redis error:", e);
+    }
+  }
+
+  /**
+   * Place bet: record player + claimed card in Redis only.
+   * RTDB is used only to read permanent room/card data and financial operations elsewhere.
+   */
+  async placeBet(roomId, cardId, user) {
+    try {
+      const roomRef = ref(rtdb, `rooms/${roomId}`);
+      const roomSnap = await get(roomRef);
+      if (!roomSnap.exists()) {
+        return { success: false, message: "Room not found" };
+      }
+      const room = roomSnap.val();
+      const betAmount = room.betAmount || 0;
+
+      // Basic validation
+      if (!room.bingoCards || !room.bingoCards[cardId]) {
+        return { success: false, message: "Invalid card" };
+      }
+
+      // Auto cards remain in RTDB; Redis only tracks per-game manual claims
+      const existingClaims = await this.getClaimedCards(roomId);
+      if (existingClaims[cardId]?.claimed) {
+        return { success: false, message: "Card already claimed" };
+      }
+
+      const playerId = user.telegramId;
+      const players = await this.getRoomPlayers(roomId);
+
+      // If player already has a bet, prevent double-bet for now
+      if (players[playerId]?.betAmount && players[playerId].betAmount > 0) {
+        return { success: false, message: "Bet already placed" };
+      }
+
+      // Record in Redis
+      await this.claimCard(roomId, cardId, playerId);
+      await this.addRoomPlayer(roomId, playerId, {
+        telegramId: playerId,
+        username: user.username,
+        betAmount,
+        cardId,
+        attemptedBingo: false,
+      });
+
+      // Notify clients in this room
+      if (this.io) {
+        this.io.to(roomId).emit("playerBetPlaced", {
+          roomId,
+          playerId,
+          cardId,
+          betAmount,
+          username: user.username,
+        });
+      }
+
+      return { success: true };
+    } catch (e) {
+      console.error("❌ placeBet error:", e);
+      return { success: false, message: "Server error" };
+    }
+  }
+
+  async cancelBetForPlayer(roomId, cardId, playerId) {
+    try {
+      await this.unclaimCard(roomId, cardId);
+      await this.removeRoomPlayer(roomId, playerId);
+
+      if (this.io) {
+        this.io.to(roomId).emit("playerBetCancelled", {
+          roomId,
+          playerId,
+          cardId,
+        });
+      }
+
+      return { success: true };
+    } catch (e) {
+      console.error("❌ cancelBetForPlayer error:", e);
+      return { success: false, message: "Server error" };
     }
   }
 
@@ -401,14 +495,18 @@ class GameManager {
         return { success: false, message: "Room not found" };
       }
 
-      const room = roomSnap.val();
+      // Merge with runtime state from Redis (players, roomStatus, etc.)
+      const runtime = (await this.getRoomState(roomId)) || {};
+      const room = { ...roomSnap.val(), ...runtime };
       console.log("🧩 Room data:", {
         status: room.gameStatus,
         players: Object.keys(room.players || {}).length,
         cards: Object.keys(room.bingoCards || {}).length,
       });
 
-      if (room.gameStatus !== "countdown") {
+      const currentStatus = room.roomStatus || room.gameStatus;
+
+      if (currentStatus !== "countdown") {
         console.log("⚠️ Room not in countdown, aborting startGame()");
         return { success: false, message: "Room not in countdown state" };
       }
@@ -711,8 +809,8 @@ const gameData = {
 
   // End game
   async endGame(roomId, gameId, reason = "manual") {
-    const roomRef = ref(rtdb, `rooms/${roomId}`);
-    const nextGameCountdownMs = 3000; // 5 seconds before reset
+      const roomRef = ref(rtdb, `rooms/${roomId}`);
+      const nextGameCountdownMs = 3000; // 5 seconds before reset
     const nextGameCountdownEndAt = Date.now() + nextGameCountdownMs;
 
     try {

@@ -537,38 +537,28 @@ autoReconnectToServer: () => {
       }
 
       try {
-        const cardRef = ref(rtdb, `rooms/${currentRoom.id}/bingoCards/${selectedCard.id}`);
-
-        // Transaction ensures atomic update
-        const result = await runTransaction(cardRef, (card: any) => {
-          if (card) {
-            if (card.claimed) {
-              return; // Already taken
-            }
-            card.claimed = true;
-            card.claimedBy = userId;
-          }
-          return card;
+        const response = await fetch(getApiUrl("/place-bet"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            roomId: currentRoom.id,
+            cardId: selectedCard.id,
+            userId,
+          }),
         });
 
-        if (!result.committed) {
-          alert("❌ This card was already claimed by another player!");
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          alert(result.message || "Failed to place bet");
           return false;
         }
 
-        // Add player to room if card claim succeeded
-        const playerRef = ref(rtdb, `rooms/${currentRoom.id}/players/${userId}`);
-        await fbset(playerRef, {
-          telegramId: userId,
-          username: user.username,
-          betAmount: currentRoom.betAmount,
-          cardId: selectedCard.id,
-        });
-        
         set({ isBetActive: true });
         return true;
       } catch (err) {
-        console.error("❌ Error placing bet:", err);
+        console.error("❌ Error placing bet (API):", err);
         return false;
       }
     },
@@ -584,21 +574,34 @@ autoReconnectToServer: () => {
         return false;
       }
 
-      try {
-        // Remove player from room
-        const playerRef = ref(rtdb, `rooms/${currentRoom.id}/players/${userId}`);
-        await remove(playerRef);
+      if (!cardId) {
+        console.error("❌ cancelBet requires a cardId");
+        return false;
+      }
 
-        // Unclaim card if cardId is provided
-        if (cardId) {
-          const cardRef = ref(rtdb, `rooms/${currentRoom.id}/bingoCards/${cardId}`);
-          await update(cardRef, { claimed: false, claimedBy: null });
+      try {
+        const response = await fetch(getApiUrl("/cancel-bet"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            roomId: currentRoom.id,
+            cardId,
+            userId,
+          }),
+        });
+
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          console.error("❌ Failed to cancel bet:", result);
+          return false;
         }
 
         set({ isBetActive: false, selectedCard: null });
         return true;
       } catch (err) {
-        console.error("❌ Error canceling bet:", err);
+        console.error("❌ Error canceling bet (API):", err);
         return false;
       }
     },

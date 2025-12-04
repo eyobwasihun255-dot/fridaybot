@@ -1,7 +1,5 @@
 
   import { create } from 'zustand';
-  import { rtdb } from '../firebase/config';
-  import { ref, onValue, get as fbget, set as fbset, update, remove, off, runTransaction } from 'firebase/database';
   import { useAuthStore } from '../store/authStore';
   import { io, Socket } from 'socket.io-client';
   import { getSocketUrl, getApiUrl } from '../config/api';
@@ -11,9 +9,11 @@
     numbers: number[][];
     serialNumber: number;
     claimed: boolean;
-    claimedBy?: string;
+    claimedBy?: string | null;
     roomId?: string;
     winningPatternIndices?: number[]; // For displaying winning pattern in loser popup
+    auto?: boolean;
+    autoUntil?: number | null;
   }
 
   interface Room {
@@ -35,6 +35,8 @@
     players?: { [id: string]: { id: string; username: string; betAmount: number; cardId: string ;attemptedBingo: boolean} };
     gameId?: string;
     nextGameCountdownEndAt?: number;
+    bingoCards?: Record<string, any>;
+    roomStatus?: 'waiting' | 'countdown' | 'playing' | 'ended';
   }
 
   interface GameState {
@@ -62,7 +64,6 @@
     setShowWinnerPopup: (show: boolean) => void;
     setShowLoserPopup: (show: boolean) => void;
     endGame: (roomId: string) => void;
-    fetchBingoCards: () => void;
     cancelBet: (cardId?: string) => Promise<boolean>;
     isBetActive: boolean;
     drawIntervalId: ReturnType<typeof setInterval> | null;
@@ -122,7 +123,7 @@
     },
     // inside useGameStore
 autoReconnectToServer: () => {
-  const { socket, connectToServer, currentRoom, syncRoomState } = get();
+  const { socket, connectToServer, syncRoomState } = get();
 
   // if already connected, skip
   if (socket && socket.connected) return;
@@ -163,25 +164,47 @@ autoReconnectToServer: () => {
       set({ countdownInterval: timer });
     },
     syncRoomState: async (roomId: string) => {
-      const snap = await fbget(ref(rtdb, `rooms/${roomId}`));
-      const room = snap.val();
-      if (!room) return;
-    
-      // ✅ Read calledNumbers from RTDB (synced from Redis by backend)
-      // Fallback to empty array if not present
-      const calledNumbers = Array.isArray(room.calledNumbers) 
-        ? room.calledNumbers 
-        : (room.drawnNumbers ? Object.values(room.drawnNumbers) : []);
-    
-      set({
-        currentRoom: { id: roomId, ...room },
-        displayedCalledNumbers: {
-          ...get().displayedCalledNumbers,
-          [roomId]: calledNumbers,
-        },
-      });
-    
-      console.log("🔄 Room synced:", room.gameStatus, "calledNumbers:", calledNumbers.length);
+      try {
+        const response = await fetch(
+          getApiUrl(`/api/room-state?roomId=${encodeURIComponent(roomId)}`)
+        );
+        if (!response.ok) {
+          console.error("❌ Failed to fetch room state", roomId);
+          return;
+        }
+        const data = await response.json();
+        const room = data.room;
+        if (!room) return;
+
+        const normalizedStatus =
+          room.roomStatus || room.gameStatus || "waiting";
+
+        const calledNumbers = Array.isArray(room.calledNumbers)
+          ? room.calledNumbers
+          : [];
+
+        const cardsObject = room.bingoCards || {};
+        const cardsArray: BingoCard[] = Object.entries(cardsObject).map(
+          ([id, value]: [string, any]) => ({
+            id,
+            ...value,
+            roomId,
+          })
+        );
+
+        const normalizedRoom = { ...room, gameStatus: normalizedStatus };
+
+        set({
+          currentRoom: { id: roomId, ...normalizedRoom },
+          bingoCards: cardsArray,
+          displayedCalledNumbers: {
+            ...get().displayedCalledNumbers,
+            [roomId]: calledNumbers,
+          },
+        });
+      } catch (err) {
+        console.error("❌ Error syncing room state:", err);
+      }
     },
     
     
@@ -208,15 +231,23 @@ autoReconnectToServer: () => {
 
       newSocket.on('gameStarted', (data: any) => {
         console.log('🎮 Game started:', data);
-        const { currentRoom } = get();
+        set((state) => {
+          if (!state.currentRoom || data.roomId !== state.currentRoom.id) {
+            return state;
+          }
+          return {
+            ...state,
+            currentRoom: {
+              ...state.currentRoom,
+              gameStatus: 'playing',
+              roomStatus: 'playing',
+              currentGameId: data.gameId,
+            },
+          };
+        });
 
-      // ✅ Ignore events not from current room
-      if (!currentRoom || data.roomId !== currentRoom.id) return;
-        if (currentRoom && data.roomId === currentRoom.id) {
-          
-          const { startBalanceListener } = useAuthStore.getState() as any;
-          if (startBalanceListener) startBalanceListener();
-        }
+        const { startBalanceListener } = useAuthStore.getState() as any;
+        if (startBalanceListener) startBalanceListener();
       });
       newSocket.on("countdownStarted", ({ roomId, countdownEndAt }) => {
         console.log("⏰ countdownStarted", roomId);
@@ -225,6 +256,18 @@ autoReconnectToServer: () => {
         set({ remaining: remainingSec > 0 ? remainingSec : 0 });
       
         get().startCountdownTicker(); // ✅ start ticking locally
+        set((state) => {
+          if (!state.currentRoom || state.currentRoom.id !== roomId) return state;
+          return {
+            ...state,
+            currentRoom: {
+              ...state.currentRoom,
+              gameStatus: 'countdown',
+              roomStatus: 'countdown',
+              countdownEndAt,
+            },
+          };
+        });
       });
       
         newSocket.on('numberDrawn', (data: any) => {
@@ -234,53 +277,71 @@ autoReconnectToServer: () => {
 
         // ✅ Ignore events not from current room
         if (!currentRoom || roomId !== currentRoom.id) return;
-          if (currentRoom && roomId === currentRoom.id) {
-          set((state) => ({
-            displayedCalledNumbers: {
-              ...state.displayedCalledNumbers,
-              [roomId]: drawnNumbers,
-            },
-          }));}
+        if (currentRoom && roomId === currentRoom.id) {
+        set((state) => ({
+          displayedCalledNumbers: {
+            ...state.displayedCalledNumbers,
+            [roomId]: drawnNumbers,
+          },
+          currentRoom: state.currentRoom
+            ? { ...state.currentRoom, calledNumbers: drawnNumbers }
+            : state.currentRoom,
+        }));}
         });
 
       newSocket.on('gameEnded', (data: any) => {
-        const { currentRoom } = get();
-
-      // ✅ Ignore events not from current room
-      if (!currentRoom || data.roomId !== currentRoom.id) return;
-        console.log('🔚 Game ended:', data);
-       
-        
+        set((state) => {
+          if (!state.currentRoom || data.roomId !== state.currentRoom.id) {
+            return state;
+          }
+          return {
+            ...state,
+            currentRoom: {
+              ...state.currentRoom,
+              gameStatus: 'ended',
+              roomStatus: 'ended',
+              nextGameCountdownEndAt: data.nextGameCountdownEndAt,
+            },
+          };
+        });
         // Keep live balance listener; it will reflect payout automatically
       });
 
       // Winner confirmed immediately after server validates bingo
       newSocket.on('winnerConfirmed', async (data: any) => {
         const { currentRoom } = get();
-      
-      // ✅ Ignore events not from current room
-      if (!currentRoom || data.roomId !== currentRoom.id) return;
+        if (!currentRoom || data.roomId !== currentRoom.id) return;
         try {
           const { roomId, userId, cardId, patternIndices } = data as any;
           const { user } = useAuthStore.getState();
 
           if (user?.telegramId === userId) {
-            // Winner
             get().safeSetShowPopup('winner');
             return;
           }
 
-          // Loser: fetch winner card and show highlighted pattern
-          const cardRef = ref(rtdb, `rooms/${roomId}/bingoCards/${cardId}`);
-          const snap = await fbget(cardRef);
-          const card = snap.val();
+          let card =
+            get().bingoCards.find((c) => c.id === cardId) || null;
+
+          if (!card) {
+            const resp = await fetch(
+              getApiUrl(
+                `/api/card?roomId=${encodeURIComponent(
+                  roomId
+                )}&cardId=${encodeURIComponent(cardId)}`
+              )
+            );
+            if (resp.ok) {
+              const payload = await resp.json();
+              card = payload.card ? { id: cardId, ...payload.card } : null;
+            }
+          }
+
           if (!card) return;
-          
-          // Store the original numbers and winning pattern indices
-          get().setWinnerCard({ 
-            ...card, 
-            numbers: card.numbers, // Keep original numbers
-            winningPatternIndices: patternIndices // Store pattern indices separately
+
+          get().setWinnerCard({
+            ...card,
+            winningPatternIndices: patternIndices,
           });
           get().safeSetShowPopup('loser');
         } catch (e) {
@@ -308,11 +369,79 @@ autoReconnectToServer: () => {
       
       newSocket.on('roomReset', () => {
         console.log('♻️ Room reset');
-        // Refresh room data
         const { currentRoom } = get();
-        if (currentRoom) {
-          get().joinRoom(currentRoom.id);
+        if (currentRoom?.id) {
+          get().syncRoomState(currentRoom.id);
         }
+      });
+
+      newSocket.on('playerBetPlaced', (payload: any) => {
+        set((state) => {
+          if (!state.currentRoom || payload.roomId !== state.currentRoom.id) {
+            return state;
+          }
+          const updatedPlayers = {
+            ...(state.currentRoom.players || {}),
+            [payload.playerId]: {
+              telegramId: payload.playerId,
+              username: payload.username,
+              betAmount: payload.betAmount,
+              cardId: payload.cardId,
+              attemptedBingo: false,
+            },
+          };
+          const updatedCards = state.bingoCards.map((card) =>
+            card.id === payload.cardId
+              ? { ...card, claimed: true, claimedBy: payload.playerId }
+              : card
+          );
+          return {
+            ...state,
+            currentRoom: { ...state.currentRoom, players: updatedPlayers },
+            bingoCards: updatedCards,
+          };
+        });
+      });
+
+      newSocket.on('playerBetCancelled', (payload: any) => {
+        set((state) => {
+          if (!state.currentRoom || payload.roomId !== state.currentRoom.id) {
+            return state;
+          }
+          const updatedPlayers = { ...(state.currentRoom.players || {}) };
+          delete updatedPlayers[payload.playerId];
+          const updatedCards = state.bingoCards.map((card) =>
+            card.id === payload.cardId
+              ? { ...card, claimed: false, claimedBy: null }
+              : card
+          );
+          return {
+            ...state,
+            currentRoom: { ...state.currentRoom, players: updatedPlayers },
+            bingoCards: updatedCards,
+          };
+        });
+      });
+
+      newSocket.on('cardAutoUpdated', (payload: any) => {
+        set((state) => {
+          if (!state.currentRoom || payload.roomId !== state.currentRoom.id) {
+            return state;
+          }
+          const updatedCards = state.bingoCards.map((card) =>
+            card.id === payload.cardId
+              ? {
+                  ...card,
+                  auto: payload.auto,
+                  autoUntil: payload.autoUntil || null,
+                }
+              : card
+          );
+          return {
+            ...state,
+            bingoCards: updatedCards,
+          };
+        });
       });
 
       set({ socket: newSocket });
@@ -354,12 +483,10 @@ autoReconnectToServer: () => {
         }
 
             
-      const cardsRef = ref(rtdb, `rooms/${currentRoom.id}/bingoCards`);
-      const snap = await fbget(cardsRef);
-      const cards = snap.exists() ? Object.values(snap.val()) : [];
+      const cards = get().bingoCards;
       const userCard = cards.find(
-        (card: any) => card?.claimed && card?.claimedBy === user.telegramId
-      ) as BingoCard | undefined;
+        (card: BingoCard) => card?.claimed && card?.claimedBy === user.telegramId
+      );
 
         // If no claimed card found, use selected card
         const cardToUse = userCard || selectedCard;
@@ -381,8 +508,6 @@ autoReconnectToServer: () => {
             cardId: cardToUse.id,
             userId: user.telegramId,
             pattern: pattern,
-            room: currentRoom,
-            player: currentRoom?.players?.[user.telegramId],
           }),
         });
 
@@ -431,83 +556,57 @@ autoReconnectToServer: () => {
       }
     },
 
-    fetchRooms: () => {
-      const roomsRef = ref(rtdb, 'rooms');
-      onValue(roomsRef, (snapshot) => {
-        const data = snapshot.val();
-        const rooms: Room[] = data
-          ? Object.entries(data).map(([id, value]: [string, any]) => ({ id, ...value }))
+    fetchRooms: async () => {
+      try {
+        const response = await fetch(getApiUrl('/api/rooms'));
+        if (!response.ok) {
+          console.error('❌ Failed to fetch rooms list');
+          return;
+        }
+        const data = await response.json();
+        const rooms: Room[] = Array.isArray(data.rooms)
+          ? data.rooms.map((room: any) => ({
+              id: room.id,
+              ...room,
+              gameStatus: room.roomStatus || room.gameStatus || 'waiting',
+            }))
           : [];
         set({ rooms });
-      });
+      } catch (err) {
+        console.error('❌ Error fetching rooms:', err);
+      }
     },
 
     joinRoom: (roomId: string) => {
       const { socket, currentRoom } = get();
-    
+
       if (!socket?.connected) {
         get().connectToServer();
       }
-    
+
       if (socket) {
         if (currentRoom?.id && currentRoom.id !== roomId) {
           socket.emit("leaveRoom", currentRoom.id);
           console.log("➡️ Leaving room", currentRoom.id);
-          get().setEnteredRoom(false)
-          // ✅ Remove old Firebase listeners
-          const oldRoomRef = ref(rtdb, "rooms/" + currentRoom.id);
-          off(ref(rtdb, `rooms/${currentRoom.id}`));
-          off(ref(rtdb, `rooms/${currentRoom.id}/bingoCards`));
-          off(oldRoomRef);
+          get().setEnteredRoom(false);
         }
         socket.emit("joinRoom", roomId);
         console.log("➡️ Joining room", roomId);
       }
+
       set({
         selectedCard: null,
         isBetActive: false,
         bingoCards: [],
-        displayedCalledNumbers: { ...get().displayedCalledNumbers, [roomId]: [] },
-        currentRoom: null, // will be updated below
+        displayedCalledNumbers: {
+          ...get().displayedCalledNumbers,
+          [roomId]: [],
+        },
+        currentRoom: null,
       });
-      const roomRef = ref(rtdb, "rooms/" + roomId);
-    
-      // ✅ Remove any old listener on this room before re-attaching
-      off(roomRef);
-      get().startAutoReconnectMonitor();
 
-      onValue(roomRef, (snapshot) => {
-        if (!snapshot.exists()) {
-          set({ currentRoom: null, isBetActive: false, selectedCard: null });
-          return;
-        }
-      
-        const prevRoom = get().currentRoom;
-        const updatedRoom = { id: roomId, ...snapshot.val() } as Room;
-        set({ currentRoom: updatedRoom });
-      
-        // ✅ Detect transition from ENDED → WAITING
-        if (
-          prevRoom?.gameStatus === "ended" &&
-          updatedRoom.gameStatus === "waiting"
-        ) {
-          console.log("♻️ Room restarted, resetting enteredRoom state");
-          get().setEnteredRoom(false);
-        }
-      
-        // Continue with your existing logic
-        get().fetchBingoCards();
-      
-        if (updatedRoom.calledNumbers?.length > 0) {
-          set((state) => ({
-            displayedCalledNumbers: {
-              ...state.displayedCalledNumbers,
-              [roomId]: updatedRoom.calledNumbers,
-            },
-          }));
-        }
-      });
-      
+      get().startAutoReconnectMonitor();
+      get().syncRoomState(roomId);
     },
     
     
@@ -556,6 +655,7 @@ autoReconnectToServer: () => {
         }
 
         set({ isBetActive: true });
+        await get().syncRoomState(currentRoom.id);
         return true;
       } catch (err) {
         console.error("❌ Error placing bet (API):", err);
@@ -599,32 +699,12 @@ autoReconnectToServer: () => {
         }
 
         set({ isBetActive: false, selectedCard: null });
+        await get().syncRoomState(currentRoom.id);
         return true;
       } catch (err) {
         console.error("❌ Error canceling bet (API):", err);
         return false;
       }
     },
-
-    fetchBingoCards: () => {
-      const { currentRoom } = get();
-      if (!currentRoom) {
-        set({ bingoCards: [] });
-        return;
-      }
-      off(ref(rtdb, `rooms/${currentRoom.id}/bingoCards`));
-      const cardsRef = ref(rtdb, `rooms/${currentRoom.id}/bingoCards`);
-      onValue(cardsRef, (snapshot) => {
-        const data = snapshot.val();
-        const cards: BingoCard[] = data
-          ? Object.entries(data).map(([id, value]: [string, any]) => ({ id, ...value, roomId:currentRoom.id }))
-          : [];
-        set({ bingoCards: cards });
-      });
-    },
-    
-
-    // Firebase listener for room updates
-    // This is handled within joinRoom now
   }));
 

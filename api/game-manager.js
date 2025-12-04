@@ -1,5 +1,5 @@
 import { rtdb } from "../bot/firebaseConfig.js";
-import { ref, get, set, update, runTransaction } from "firebase/database";
+import { ref, get, update } from "firebase/database";
 import redis from "./redisClient.js";
 import { v4 as uuidv4 } from "uuid";
 class GameManager {
@@ -27,16 +27,46 @@ class GameManager {
   }
 
   /**
+   * Fetch permanent room config stored in RTDB (allowed by requirements).
+   */
+  async getRoomConfig(roomId) {
+    const roomRef = ref(rtdb, `rooms/${roomId}`);
+    const snap = await get(roomRef);
+    return snap.exists() ? snap.val() : null;
+  }
+
+  hydrateCards(baseCards = {}, claimedCards = {}) {
+    const hydrated = {};
+    for (const [cardId, card] of Object.entries(baseCards)) {
+      const claim = claimedCards[cardId];
+      hydrated[cardId] = {
+        ...card,
+        claimed: !!claim,
+        claimedBy: claim?.claimedBy || null,
+        auto: claim?.auto || false,
+        autoUntil: claim?.autoUntil || null,
+      };
+    }
+    return hydrated;
+  }
+
+  /**
    * Merge permanent room config from RTDB with ephemeral runtime state from Redis.
    * - RTDB: permanent data (id, name, betAmount, bingoCards, isDemoRoom, etc.)
    * - Redis: roomStatus, countdowns, players, calledNumbers, currentGameId, etc.
    */
   async getFullRoom(roomId) {
-    const roomRef = ref(rtdb, `rooms/${roomId}`);
-    const snap = await get(roomRef);
-    const baseRoom = snap.exists() ? snap.val() : {};
+    const baseRoom = (await this.getRoomConfig(roomId)) || {};
     const runtime = (await this.getRoomState(roomId)) || {};
-    return { ...baseRoom, ...runtime };
+    const players = runtime.players || {};
+    const claimedCards = runtime.claimedCards || {};
+    const bingoCards = this.hydrateCards(baseRoom.bingoCards || {}, claimedCards);
+    return {
+      ...baseRoom,
+      ...runtime,
+      players,
+      bingoCards,
+    };
   }
 
   async setRoomState(roomId, patch) {
@@ -93,6 +123,17 @@ class GameManager {
     }
   }
 
+  async updateRoomPlayer(roomId, playerId, patch) {
+    try {
+      const players = await this.getRoomPlayers(roomId);
+      if (!players[playerId]) return;
+      players[playerId] = { ...players[playerId], ...patch };
+      await this.setRoomPlayers(roomId, players);
+    } catch (e) {
+      console.error("⚠️ updateRoomPlayer Redis error:", e);
+    }
+  }
+
   // Get claimed cards (non-auto) from Redis
   async getClaimedCards(roomId) {
     try {
@@ -114,10 +155,16 @@ class GameManager {
   }
 
   // Claim a card in Redis (non-auto only)
-  async claimCard(roomId, cardId, userId) {
+  async claimCard(roomId, cardId, userId, extras = {}) {
     try {
       const claimedCards = await this.getClaimedCards(roomId);
-      claimedCards[cardId] = { claimed: true, claimedBy: userId, claimedAt: Date.now() };
+      claimedCards[cardId] = {
+        claimed: true,
+        claimedBy: userId,
+        claimedAt: Date.now(),
+        auto: extras.auto || false,
+        autoUntil: extras.autoUntil || null,
+      };
       await this.setClaimedCards(roomId, claimedCards);
     } catch (e) {
       console.error("⚠️ claimCard Redis error:", e);
@@ -135,18 +182,145 @@ class GameManager {
     }
   }
 
+  async setCardAutoState(roomId, cardId, options = {}) {
+    try {
+      const claimedCards = await this.getClaimedCards(roomId);
+      if (!claimedCards[cardId]) {
+        console.warn(`setCardAutoState: card ${cardId} not claimed in room ${roomId}`);
+        return { success: false, message: "Card not claimed" };
+      }
+      claimedCards[cardId] = {
+        ...claimedCards[cardId],
+        auto: !!options.auto,
+        autoUntil: options.auto ? options.autoUntil || Date.now() + 24 * 60 * 60 * 1000 : null,
+      };
+      await this.setClaimedCards(roomId, claimedCards);
+      return { success: true };
+    } catch (e) {
+      console.error("⚠️ setCardAutoState error:", e);
+      return { success: false, message: "Server error" };
+    }
+  }
+
+  async applyBalanceAdjustments(adjustments = {}) {
+    const entries = Object.entries(adjustments);
+    if (entries.length === 0) return;
+
+    const updates = {};
+    await Promise.all(
+      entries.map(async ([userId, delta]) => {
+        const balanceRef = ref(rtdb, `users/${userId}/balance`);
+        const snap = await get(balanceRef);
+        const current = snap.exists() ? snap.val() : 0;
+        updates[`users/${userId}/balance`] = current + delta;
+      })
+    );
+
+    if (Object.keys(updates).length > 0) {
+      await update(ref(rtdb), updates);
+    }
+  }
+
+  async getMultiWinStats() {
+    try {
+      const raw = await redis.get("global:multiWinStats");
+      return raw ? JSON.parse(raw) : { lastMultiGame: 0, gameCount: 0 };
+    } catch (e) {
+      console.error("⚠️ getMultiWinStats error:", e);
+      return { lastMultiGame: 0, gameCount: 0 };
+    }
+  }
+
+  async setMultiWinStats(stats) {
+    try {
+      await redis.set("global:multiWinStats", JSON.stringify(stats));
+    } catch (e) {
+      console.error("⚠️ setMultiWinStats error:", e);
+    }
+  }
+
+  async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
+    try {
+      const roomConfig = baseRoom || (await this.getRoomConfig(roomId)) || {};
+      const players = await this.getRoomPlayers(roomId);
+      const claimedCards = await this.getClaimedCards(roomId);
+      const bingoCards = roomConfig.bingoCards || {};
+
+      const demoPlayers = Object.entries(players).filter(([id, p]) =>
+        (p?.telegramId || id)?.toLowerCase().startsWith("demo")
+      );
+      if (demoPlayers.length === 0) return { done: false, reason: "no-demo" };
+      const demoIds = new Set(demoPlayers.map(([id]) => id));
+
+      const demoClaimedCards = Object.entries(claimedCards)
+        .filter(
+          ([, card]) =>
+            card?.claimed &&
+            card?.auto &&
+            card?.claimedBy &&
+            demoIds.has(card.claimedBy)
+        )
+        .map(([cardId, card]) => ({ cardId, ...card }));
+
+      if (demoClaimedCards.length === 0) {
+        return { done: false, reason: "none" };
+      }
+
+      const unclaimedPool = Object.keys(bingoCards).filter(
+        (cardId) => !claimedCards[cardId]?.claimed
+      );
+      if (unclaimedPool.length === 0) {
+        return { done: false, reason: "no-unclaimed" };
+      }
+
+      const numToReshuffle = Math.min(3, demoClaimedCards.length);
+      const selected = demoClaimedCards
+        .sort(() => 0.5 - Math.random())
+        .slice(0, numToReshuffle);
+
+      for (const card of selected) {
+        const demoId = card.claimedBy;
+        const username = players[demoId]?.username || `demo_${demoId}`;
+
+        await this.unclaimCard(roomId, card.cardId);
+        await this.removeRoomPlayer(roomId, demoId);
+
+        if (unclaimedPool.length === 0) break;
+        const randomIndex = Math.floor(Math.random() * unclaimedPool.length);
+        const newCardId = unclaimedPool.splice(randomIndex, 1)[0];
+        if (!newCardId) continue;
+
+        await this.claimCard(roomId, newCardId, demoId, {
+          auto: true,
+          autoUntil: Date.now() + 24 * 60 * 60 * 1000,
+        });
+
+        await this.addRoomPlayer(roomId, demoId, {
+          telegramId: demoId,
+          username,
+          betAmount: roomConfig.betAmount || 0,
+          cardId: newCardId,
+          attemptedBingo: false,
+        });
+      }
+
+      return { done: true };
+    } catch (err) {
+      console.error(`❌ Demo reshuffle error for ${roomId}:`, err);
+      return { done: false, reason: "error", err };
+    }
+  }
+
   /**
    * Place bet: record player + claimed card in Redis only.
    * RTDB is used only to read permanent room/card data and financial operations elsewhere.
    */
   async placeBet(roomId, cardId, user) {
     try {
-      const roomRef = ref(rtdb, `rooms/${roomId}`);
-      const roomSnap = await get(roomRef);
-      if (!roomSnap.exists()) {
+      const room = await this.getRoomConfig(roomId);
+      if (!room) {
         return { success: false, message: "Room not found" };
       }
-      const room = roomSnap.val();
       const betAmount = room.betAmount || 0;
 
       // Basic validation
@@ -304,130 +478,7 @@ class GameManager {
 
 
 
-      const performDemoReshuffle = async () => {
-        const STOP_THRESHOLD_MS = 2000;
-        const INTERVAL_MS = 400; // delay between demo reshuffles
-
-        try {
-          const snap = await get(roomRef);
-          const current = snap.val();
-          if (!current) {
-            console.log(`⚠️ No room data for ${roomId}`);
-            return { done: false, reason: "no-room" };
-          }
-
-          let cards = current.bingoCards || {};
-          let players = current.players || {};
-
-          // 1️⃣ Identify demo players currently having auto-claimed cards
-          const demoPlayers = Object.entries(players)
-            .filter(([_, p]) => p?.telegramId?.toLowerCase().startsWith("demo"))
-            .map(([id, p]) => ({ id, ...p }));
-
-          const demoCards = Object.entries(cards)
-            .filter(([_, c]) => c?.claimed && c?.auto && c?.claimedBy)
-            .filter(([_, c]) => demoPlayers.some(dp => dp.id === c.claimedBy))
-            .map(([id, c]) => ({ id, ...c }));
-
-          if (demoCards.length === 0) {
-            console.log(`⚠️ No demo players with auto-claimed cards to reshuffle in ${roomId}`);
-            return { done: false, reason: "none" };
-          }
-
-          // 2️⃣ Select a few demo players to reshuffle
-          const numToReshuffle = Math.min(3, demoCards.length);
-          const selected = demoCards
-            .sort(() => 0.5 - Math.random())
-            .slice(0, numToReshuffle);
-
-          console.log(`🎲 Selected ${selected.length} demo players to reshuffle:`, selected.map(d => d.claimedBy));
-
-          // Helper delay function
-          const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-          // 3️⃣ Process each demo player one-by-one
-          for (const demo of selected) {
-            const demoId = demo.claimedBy;
-            const oldCardId = demo.id;
-
-            console.log(`♻️ Reshuffling demo player: ${demoId}`);
-
-            // 🔹 Step 1: Unclaim old card
-            if (cards[oldCardId]) {
-              cards[oldCardId] = {
-                ...cards[oldCardId],
-                claimed: false,
-                claimedBy: null,
-                auto: false,
-                autoUntil: null,
-              };
-            }
-            const username = players[demoId].username
-            // 🔹 Step 2: Temporarily remove demo player from the room
-            delete players[demoId];
-
-            // 🔹 Step 3: Pick a random new unclaimed card
-            const unclaimedList = Object.entries(cards)
-              .filter(([_, c]) => !c.claimed)
-              .map(([id, c]) => ({ id, ...c }));
-
-            if (unclaimedList.length === 0) {
-              console.log(`⚠️ No unclaimed cards available for demo ${demoId}`);
-              continue;
-            }
-
-            const newCard = unclaimedList[Math.floor(Math.random() * unclaimedList.length)];
-
-            // 🔹 Step 4: Claim the new card
-            cards[newCard.id] = {
-              ...cards[newCard.id],
-              claimed: true,
-              claimedBy: demoId,
-              auto: true,
-              autoUntil: Date.now() + 24 * 60 * 60 * 1000,
-
-            };
-
-            // 🔹 Step 5: Re-add demo player to the room with updated card
-            const oldInfo = current.players?.[demoId] || {};
-            players[demoId] = {
-              ...oldInfo,
-              cardId: newCard.id,
-              attemptedBingo: false,
-              betAmount: current.betAmount,
-              telegramId: demoId,
-              username: username,
-            };
-
-            console.log(`✅ Demo ${demoId} moved from ${oldCardId} → ${newCard.id}`);
-
-            // 🔹 Step 6: Update RTDB incrementally (after each demo reshuffle)
-            await update(roomRef, {
-              bingoCards: cards,
-              players: players,
-            });
-
-            // 🔹 Step 7: Wait before next reshuffle
-            await delay(INTERVAL_MS);
-          }
-
-          console.log(`🎯 Demo reshuffle complete for ${roomId}`);
-          return { done: true };
-
-        } catch (err) {
-          console.error(`❌ Demo reshuffle error for ${roomId}:`, err);
-          return { done: false, reason: "error", err };
-        }
-      };
-
-
-
-
-
-      // Kick off the demo reshuffle but ensure it completes before countdownEndAt - STOP_THRESHOLD_MS
-      // We'll await it now (synchronous for the rest of the function) so it stops before return.
-      // If you prefer this to run in background, remove the await and handle cancellations differently.
-      const reshuffleResult = await performDemoReshuffle();
+      const reshuffleResult = await this.reshuffleDemoAutoPlayers(roomId, room);
       if (!reshuffleResult.done) {
         console.log(`ℹ️ Demo reshuffle for ${roomId} did not complete:`, reshuffleResult.reason || reshuffleResult);
       }
@@ -486,20 +537,26 @@ class GameManager {
     console.log("➡️ startGame(): entered for", roomId);
 
     try {
-      const roomRef = ref(rtdb, `rooms/${roomId}`);
-      const roomSnap = await get(roomRef);
-      console.log("✅ startGame(): roomSnap fetched");
-
-      if (!roomSnap.exists()) {
+      const roomConfig = await this.getRoomConfig(roomId);
+      if (!roomConfig) {
         console.log("❌ startGame(): room not found");
         return { success: false, message: "Room not found" };
       }
-
-      // Merge with runtime state from Redis (players, roomStatus, etc.)
       const runtime = (await this.getRoomState(roomId)) || {};
-      const room = { ...roomSnap.val(), ...runtime };
+      const players = runtime.players || {};
+      const claimedCards = runtime.claimedCards || {};
+      const bingoCards = this.hydrateCards(
+        roomConfig.bingoCards || {},
+        claimedCards
+      );
+      const room = {
+        ...roomConfig,
+        ...runtime,
+        players,
+        bingoCards,
+      };
       console.log("🧩 Room data:", {
-        status: room.gameStatus,
+        status: room.roomStatus || room.gameStatus,
         players: Object.keys(room.players || {}).length,
         cards: Object.keys(room.bingoCards || {}).length,
       });
@@ -514,21 +571,6 @@ class GameManager {
       // Generate a new gameId
       const gameId = uuidv4();
       console.log("🎲 New gameId:", gameId);
-
-      // ✅ Minimal RTDB snapshot for crash-safety
-      console.log("✅ startGame(): writing minimal snapshot to RTDB");
-      await set(ref(rtdb, `games/${gameId}`), {
-        id: gameId,
-        roomId,
-        startedAt: Date.now(),
-        status: "active",
-        totalPayout: Math.floor(
-          (Object.keys(room.players || {}).length - 1) *
-            (room.betAmount || 0) *
-            0.85 +
-            (room.betAmount || 0)
-        ),
-      });
 
       await this.setRoomState(roomId, {
         roomStatus: "playing",
@@ -562,7 +604,7 @@ const { drawnNumbers, winners } = this.generateDrawnNumbersMultiWinner(roomId,ca
 
 if (!drawnNumbers || drawnNumbers.length === 0) {
   console.error(`❌ Invalid drawnNumbers generated for room ${roomId}`);
-  await update(roomRef, { gameStatus: "waiting" });
+  await this.setRoomState(roomId, { roomStatus: "waiting", currentGameId: null });
   return { success: false, message: "No valid drawn numbers generated" };
 }
 
@@ -673,16 +715,6 @@ const gameData = {
         gameData.currentNumberIndex = currentNumberIndex + 1;
         await this.setGameState(gameId, gameData);
 
-        // Periodically sync a minimal snapshot back to RTDB for crash safety
-        if ((currentNumberIndex + 1) % 10 === 0) {
-          const gameRef = ref(rtdb, `games/${gameId}`);
-          const lastTen = newDrawnNumbers.slice(-10);
-          update(gameRef, {
-            currentNumberIndex: currentNumberIndex + 1,
-            lastDrawnNumbers: lastTen,
-          }).catch(console.error);
-        }
-
         // Notify clients
         if (this.io) {
           this.io.to(roomId).emit('numberDrawn', {
@@ -694,9 +726,8 @@ const gameData = {
 
         // Auto-bingo for auto players
         try {
-          const roomSnap = await get(ref(rtdb, `rooms/${roomId}`));
-          const room = roomSnap.val() || {};
-          const bingoCards = room.bingoCards || {};
+          const roomData = await this.getFullRoom(roomId);
+          const bingoCards = roomData?.bingoCards || {};
           const calledSet = new Set(newDrawnNumbers);
           const patterns = this.generateValidPatterns();
 
@@ -708,20 +739,23 @@ const gameData = {
 
             const flat = card.numbers.flat();
 
-            // find first winning pattern
             let winningPattern = null;
             for (const pat of patterns) {
-              const ok = pat.every((idx) => flat[idx] === 0 || calledSet.has(flat[idx]));
-              if (ok) { winningPattern = pat; break; }
+              const ok = pat.every(
+                (idx) => flat[idx] === 0 || calledSet.has(flat[idx])
+              );
+              if (ok) {
+                winningPattern = pat;
+                break;
+              }
             }
             if (winningPattern) {
-              // Trigger server bingo
-              this.checkBingo(roomId, cardId, card.claimedBy, winningPattern, room, room.players[card.claimedBy]);
-              break; // stop loop after first auto-winner
+              this.checkBingo(roomId, cardId, card.claimedBy, winningPattern);
+              break;
             }
           }
         } catch (e) {
-          console.error('Auto-bingo error:', e);
+          console.error("Auto-bingo error:", e);
         }
 
         console.log(`🎲 Room ${roomId}: Drew number ${currentNumber}`);
@@ -763,20 +797,20 @@ const gameData = {
       const total = demoUsers.reduce((sum, u) => sum + u.balance, 0);
 
       // 🧹 3️⃣ Reset their balances to zero
-      for (const demo of demoUsers) {
-        await update(ref(rtdb, `users/${demo.id}`), { balance: 0 });
-      }
+      const zeroAdjustments = {};
+      demoUsers.forEach((demo) => {
+        zeroAdjustments[demo.id] = -demo.balance;
+      });
+      await this.applyBalanceAdjustments(zeroAdjustments);
 
       console.log(`♻️ Collected total demo pool: ${total} from ${demoUsers.length} demo users`);
 
       // 👥 4️⃣ Get all players in this room
-      const playersSnap = await get(ref(rtdb, `rooms/${roomId}/players`));
-      if (!playersSnap.exists()) {
+      const roomPlayers = await this.getRoomPlayers(roomId);
+      if (!roomPlayers || Object.keys(roomPlayers).length === 0) {
         console.log("⚠️ No players in room");
         return;
       }
-
-      const roomPlayers = playersSnap.val();
 
       // 🎯 5️⃣ Filter only demo players currently in the room
       const demoPlayersInRoom = Object.entries(roomPlayers)
@@ -791,10 +825,11 @@ const gameData = {
       // 💸 6️⃣ Divide total equally among demo players in this room
       const perPlayer = Math.floor(total / demoPlayersInRoom.length);
 
+      const payouts = {};
       for (const pid of demoPlayersInRoom) {
-        const balRef = ref(rtdb, `users/${pid}/balance`);
-        await runTransaction(balRef, (current) => (current || 0) + perPlayer);
+        payouts[pid] = perPlayer;
       }
+      await this.applyBalanceAdjustments(payouts);
 
       console.log(
         `💰 Distributed total ${total} equally (${perPlayer} each) among ${demoPlayersInRoom.length} demo players in room ${roomId}`
@@ -809,7 +844,6 @@ const gameData = {
 
   // End game
   async endGame(roomId, gameId, reason = "manual") {
-      const roomRef = ref(rtdb, `rooms/${roomId}`);
       const nextGameCountdownMs = 3000; // 5 seconds before reset
     const nextGameCountdownEndAt = Date.now() + nextGameCountdownMs;
 
@@ -846,21 +880,9 @@ const gameData = {
 
       this.resetRoomTimers.set(roomId, resetTimer);
 
-      // Fetch game data (prefer Redis, fall back to RTDB snapshot)
-      let gameData = await this.getGameState(gameId);
-      if (!gameData) {
-      const gameRef = ref(rtdb, `games/${gameId}`);
-      const gameSnap = await get(gameRef);
-        gameData = gameSnap.val();
-      }
+      // Fetch game data from Redis
+      const gameData = await this.getGameState(gameId);
       if (!gameData) return;
-
-      // Mark game as ended
-      await update(ref(rtdb, `games/${gameId}`), {
-        status: "ended",
-        endedAt: Date.now(),
-        endReason: reason,
-      });
 
       await this.setRoomState(roomId, {
         roomStatus: "ended",
@@ -872,24 +894,11 @@ const gameData = {
       // Handle payout or revenue recording
       const hasConfirmedWinner = !!gameData.winner;
       if (reason === "allNumbersDrawn" && !hasConfirmedWinner) {
-        try {
-          const revenueRef = ref(rtdb, `revenue/${gameId}`);
-          await set(revenueRef, {
-            gameId,
-            roomId,
-            datetime: Date.now(),
-            amount: gameData.totalPayout || 0,
-            drawned: false,
-          });
-
-          await update(roomRef, {
-            winner: null,
-            payout: gameData.totalPayout || 0,
-            payed: true,
-          });
-        } catch (e) {
-          console.error("Error recording revenue on no-winner case:", e);
-        }
+        await this.setRoomState(roomId, {
+          winner: null,
+          payout: gameData.totalPayout || 0,
+          payed: true,
+        });
       } else if (gameData.winners && gameData.winners.length > 0) {
         this.processWinners(roomId, gameData);
       }
@@ -917,55 +926,19 @@ const gameData = {
     try {
       const { winners, totalPayout } = gameData;
       const payoutPerWinner = Math.floor(totalPayout / winners.length);
-
-      // Get room data for revenue calculation
-      const roomRef = ref(rtdb, `rooms/${roomId}`);
-      const roomSnap = await get(roomRef);
-      const room = roomSnap.val();
-
+      const adjustments = {};
       for (const winner of winners) {
         if (winner.userId) {
-          // Update user balance
-          const userRef = ref(rtdb, `users/${winner.userId}`);
-          await runTransaction(userRef, (currentBalance) => {
-            return (currentBalance || 0) + payoutPerWinner;
-          });
-
-          // Record winning
-          const winningRef = ref(rtdb, `winningHistory/${uuidv4()}`);
-          await set(winningRef, {
-            playerId: winner.userId,
-            gameId: gameData.id,
-            roomId,
-            payout: payoutPerWinner,
-            cardId: winner.cardId,
-            date: Date.now()
-          });
+          adjustments[winner.userId] =
+            (adjustments[winner.userId] || 0) + payoutPerWinner;
         }
       }
-
-      // Calculate and record revenue
-      if (room && winners.length > 0) {
-        const playerCount = Object.keys(room.players || {}).length;
-        const roomAmount = room.betAmount || 0;
-        const totalBets = playerCount * roomAmount;
-        const revenueAmount = totalBets - totalPayout;
-
-        const revenueRef = ref(rtdb, `revenue/${gameData.id}`);
-        await set(revenueRef, {
-          gameId: gameData.id,
-          roomId,
-          datetime: Date.now(),
-          amount: revenueAmount,
-          drawned: false,
-        });
-      }
-
-      // Update room with winner info
-      update(roomRef, {
-        winner: winners[0]?.userId,
+      await this.applyBalanceAdjustments(adjustments);
+      await this.setRoomState(roomId, {
         payout: totalPayout,
-        payed: true
+        payed: true,
+        winner: winners[0]?.userId || null,
+        winners: winners.map((w) => w.userId),
       });
 
       console.log(`🏆 Processed ${winners.length} winners in room ${roomId}`);
@@ -975,136 +948,106 @@ const gameData = {
   }
 
   // Check bingo claim
-  async checkBingo(roomId, cardId, userId, pattern, room, player) {
+  async checkBingo(roomId, cardId, userId, pattern) {
     try {
-      if (!room || room.gameStatus !== "playing") {
+      const room = await this.getFullRoom(roomId);
+      if (!room || (room.roomStatus || room.gameStatus) !== "playing") {
         return { success: false, message: "Game not in playing state" };
       }
-  
+
+      const players = room.players || {};
+      const player = players[userId];
       if (player?.attemptedBingo) {
         return { success: false, message: "Already attempted bingo" };
       }
-  
-      const playerRef = ref(rtdb, `rooms/${roomId}/players/${userId}`);
-  
+
       const isValidBingo = this.validateBingoPattern(
         cardId,
         room,
         pattern,
-        room.calledNumbers
+        room.calledNumbers || []
       );
-  
+
       if (!isValidBingo) {
-        update(playerRef, { attemptedBingo: true });
+        await this.updateRoomPlayer(roomId, userId, { attemptedBingo: true });
         return { success: false, message: "Invalid bingo pattern" };
       }
-  
-      // ✅ Calculate number of winners for this game
-      const playerCount = Object.keys(room.players || {}).length;
-      const multiWinDataRef = ref(rtdb, "global/multiWinStats");
-      const multiWinDataSnap = await get(multiWinDataRef);
-      const multiWinData = multiWinDataSnap.val() || { lastMultiGame: 0, gameCount: 0 };
-  
+
+      const playerCount = Object.keys(players).length;
+      const multiWinData = await this.getMultiWinStats();
       const currentGameNumber = multiWinData.gameCount + 1;
-      const gamesSinceLastMulti = currentGameNumber - (multiWinData.lastMultiGame || 0);
-  
+      const gamesSinceLastMulti =
+        currentGameNumber - (multiWinData.lastMultiGame || 0);
+
       let winnerCount = 1;
-      let forceMulti = false;
-  
       if (playerCount > 180) {
-        // 3 winners possible, with ~30% chance
         if (Math.random() < 0.3) winnerCount = 3;
         else if (Math.random() < 0.5) winnerCount = 2;
       } else if (playerCount > 80) {
-        // 2 winners possible, with ~40% chance
         if (Math.random() < 0.4) winnerCount = 2;
       }
-  
-      // Force 2 winners if none occurred in last 5 games
+
       if (gamesSinceLastMulti >= 5 && winnerCount === 1) {
         winnerCount = 2;
-        forceMulti = true;
       }
-  
-      // Update stats
-      await set(multiWinDataRef, {
+
+      await this.setMultiWinStats({
         gameCount: currentGameNumber,
-        lastMultiGame: winnerCount > 1 ? currentGameNumber : multiWinData.lastMultiGame,
+        lastMultiGame:
+          winnerCount > 1 ? currentGameNumber : multiWinData.lastMultiGame,
       });
-  
-      // ✅ Add this player as confirmed winner
-      const gameRef = ref(rtdb, `games/${room.gameId}`);
-      const existingWinnersSnap = await get(child(gameRef, "winnerList"));
-      const existingWinners = existingWinnersSnap.val() || [];
-  
-      // If already enough winners, reject new ones
+
+      const gameId = room.currentGameId || room.gameId;
+      if (!gameId) return { success: false, message: "Game not found" };
+      const gameData = await this.getGameState(gameId);
+      if (!gameData) return { success: false, message: "Game not found" };
+
+      const existingWinners = gameData.winnerList || [];
       if (existingWinners.length >= winnerCount) {
         return { success: false, message: "Winners already confirmed" };
       }
-  
-      // Add winner
+
       const newWinners = [...existingWinners, { userId, cardId, pattern }];
-      await update(gameRef, { winnerList: newWinners });
-  
-      // ✅ If we reached the allowed winner count → proceed to payout
+      gameData.winnerList = newWinners;
+      if (gameData.winners) {
+        const target = gameData.winners.find((w) => w.cardId === cardId);
+        if (target) target.checked = true;
+      }
+      await this.setGameState(gameId, gameData);
+
       if (newWinners.length === winnerCount) {
         const totalBets = playerCount * (room.betAmount || 0);
         const totalPayout = totalBets * 0.85;
         const payoutPerWinner = totalPayout / winnerCount;
-        const revenueAmount = totalBets * 0.15;
-  
-        const roomRef = ref(rtdb, `rooms/${roomId}`);
-  
-        // Pay each winner
+        const adjustments = {};
         for (const winner of newWinners) {
-          const balanceRef = ref(rtdb, `users/${winner.userId}/balance`);
-          await runTransaction(balanceRef, (current) => (current || 0) + payoutPerWinner);
-  
-          const winRef = ref(rtdb, `winningHistory/${uuidv4()}`);
-          await set(winRef, {
-            playerId: winner.userId,
-            gameId: room.gameId,
-            roomId,
-            payout: payoutPerWinner,
-            cardId: winner.cardId,
-            date: Date.now(),
-          });
+          adjustments[winner.userId] =
+            (adjustments[winner.userId] || 0) + payoutPerWinner;
         }
-  
-        // Log revenue
-        const revenueRef = ref(rtdb, `revenue/${room.gameId}`);
-        await set(revenueRef, {
-          gameId: room.gameId,
-          roomId,
-          datetime: Date.now(),
-          amount: revenueAmount,
-          drawned: false,
-        });
-  
-        // Update room
-        update(roomRef, {
+        await this.applyBalanceAdjustments(adjustments);
+
+        await this.setRoomState(roomId, {
           winnerCount,
           winners: newWinners.map((w) => w.userId),
           payoutPerWinner,
           totalPayout,
           payed: true,
         });
-  
-        // Broadcast final results
+
         if (this.io) {
           this.io.to(roomId).emit("multiWinnersConfirmed", {
             roomId,
-            gameId: room.gameId,
+            gameId,
             winners: newWinners.map((w) => w.userId),
             count: winnerCount,
             message: `🎉 ${winnerCount} Winner${winnerCount > 1 ? "s" : ""}!`,
           });
         }
-  
+
         await new Promise((res) => setTimeout(res, 800));
-        this.endGame(roomId, room.gameId, "bingo");
+        this.endGame(roomId, gameId, "bingo");
       }
-  
+
       return { success: true, message: `Bingo confirmed for ${userId}` };
     } catch (error) {
       console.error("Error checking bingo:", error);
@@ -1177,36 +1120,22 @@ const gameData = {
   // Deduct bets from players
   async deductBets(roomId, gameData) {
     try {
-      const roomRef = ref(rtdb, `rooms/${roomId}`);
-      const roomSnap = await get(roomRef);
-      const room = roomSnap.val();
+      const roomConfig = await this.getRoomConfig(roomId);
+      const players = await this.getRoomPlayers(roomId);
+      if (!roomConfig || !players) return;
 
-      if (!room?.players) return;
-
-      for (const playerId of Object.keys(room.players)) {
-        const betAmount = room.betAmount || 0;
-        const balanceRef = ref(rtdb, `users/${playerId}/balance`);
-
-        // Deduct balance
-        const snap = await get(balanceRef);
-        const current = snap.val() || 0;
-        await set(balanceRef, current - betAmount);
-
-
-        // Record deduction
-        const deductRef = ref(rtdb, `deductRdbs/${uuidv4()}`);
-        await set(deductRef, {
-          id: uuidv4(),
-          username: room.players[playerId].username,
-          userId: playerId,
-          amount: betAmount,
-          gameId: gameData.id,
-          roomId,
-          date: Date.now()
-        });
+      const betAmount = roomConfig.betAmount || 0;
+      const adjustments = {};
+      for (const playerId of Object.keys(players)) {
+        adjustments[playerId] = (adjustments[playerId] || 0) - betAmount;
       }
+      await this.applyBalanceAdjustments(adjustments);
 
-      update(ref(rtdb, `games/${gameData.id}`), { betsDeducted: true });
+      const storedGame = await this.getGameState(gameData.id);
+      if (storedGame) {
+        storedGame.betsDeducted = true;
+        await this.setGameState(gameData.id, storedGame);
+      }
     } catch (error) {
       console.error("Error deducting bets:", error);
     }
@@ -1405,85 +1334,58 @@ const gameData = {
   // Reset room for next game
   async resetRoom(roomId) {
     try {
-      // Clear any scheduled reset timer for this room
       if (this.resetRoomTimers && this.resetRoomTimers.has(roomId)) {
         clearTimeout(this.resetRoomTimers.get(roomId));
         this.resetRoomTimers.delete(roomId);
       }
-      // Also clear any countdown timer if present
       if (this.countdownTimers && this.countdownTimers.has(roomId)) {
         clearTimeout(this.countdownTimers.get(roomId));
         this.countdownTimers.delete(roomId);
       }
 
-      const roomRef = ref(rtdb, `rooms/${roomId}`);
-      const snap = await get(roomRef);
-
-      if (!snap.exists()) {
+      const roomConfig = await this.getRoomConfig(roomId);
+      if (!roomConfig) {
         console.error(`❌ Room ${roomId} not found`);
         return;
       }
 
-      const room = snap.val() || {};
-      const { bingoCards = {}, players = {}, betAmount = 0 } = room;
-
-      // Track players that should be kept
+      const betAmount = roomConfig.betAmount || 0;
+      const players = await this.getRoomPlayers(roomId);
+      const claimedCards = await this.getClaimedCards(roomId);
       const keepPlayers = new Set();
 
-      // First pass: check each card
-      for (const [cardId, card] of Object.entries(bingoCards)) {
+      for (const [cardId, card] of Object.entries(claimedCards)) {
+        if (!card?.claimed) continue;
         const claimedBy = card.claimedBy;
         let keepClaimed = false;
-
-        if (claimedBy && card?.auto === true) {
-          const autoUntil = card?.autoUntil || 0;
-          const balanceRef = ref(rtdb, `users/${claimedBy}/balance`);
-          const balanceSnap = await get(balanceRef);
+        if (claimedBy && card.auto) {
+          const autoUntil = card.autoUntil || 0;
+          const balanceSnap = await get(
+            ref(rtdb, `users/${claimedBy}/balance`)
+          );
           const balance = balanceSnap.val() || 0;
-          // ✅ keep only if auto is still active, less than 24h, and player has enough balance
-          const autoActive = autoUntil > Date.now() && autoUntil - Date.now() <= 24 * 60 * 60 * 1000;
+          const autoActive =
+            autoUntil > Date.now() &&
+            autoUntil - Date.now() <= 24 * 60 * 60 * 1000;
           const hasEnoughBalance = balance >= betAmount;
-
           if (autoActive && hasEnoughBalance) {
-            const playerRef = ref(
-              rtdb,
-              `rooms/${roomId}/players/${claimedBy}`
-            );
-            update(playerRef, { attemptedBingo: false });
+            await this.updateRoomPlayer(roomId, claimedBy, {
+              attemptedBingo: false,
+            });
             keepClaimed = true;
             keepPlayers.add(claimedBy);
           }
         }
-
         if (!keepClaimed) {
-          // Reset the card if not valid auto-bet
-          update(ref(rtdb, `rooms/${roomId}/bingoCards/${cardId}`), {
-            claimed: false,
-            claimedBy: null,
-            auto: false,
-            autoUntil: null,
-          });
+          await this.unclaimCard(roomId, cardId);
         }
       }
 
-      // Second pass: remove players not in keepPlayers
-      for (const [playerId] of Object.entries(players)) {
+      for (const playerId of Object.keys(players)) {
         if (!keepPlayers.has(playerId)) {
-          update(roomRef, {
-            [`players/${playerId}`]: null
-          });
+          await this.removeRoomPlayer(roomId, playerId);
         }
       }
-
-      // Reset room state (RTDB minimal, Redis full runtime)
-      await update(roomRef, {
-        gameStatus: "waiting",
-        gameId: null,
-        winner: null,
-        payout: null,
-        payed: false,
-        nextGameCountdownEndAt: null,
-      });
 
       await this.setRoomState(roomId, {
         roomStatus: "waiting",
@@ -1491,23 +1393,18 @@ const gameData = {
         calledNumbers: [],
         countdownEndAt: null,
         nextGameCountdownEndAt: null,
+        winner: null,
+        payout: null,
+        payed: false,
       });
 
-      // Reset attemptedBingo for remaining players
-      const updates = {};
-      keepPlayers.forEach(pid => {
-        updates[`players/${pid}/attemptedBingo`] = false;
-      });
-      if (Object.keys(updates).length > 0) {
-        update(roomRef, updates);
-      }
-
-      // Notify clients
       if (this.io) {
         this.io.to(roomId).emit("roomReset", { roomId });
       }
 
-      console.log(`♻️ Room ${roomId} reset for next game (kept ${keepPlayers.size} players with valid auto-bet & balance)`);
+      console.log(
+        `♻️ Room ${roomId} reset for next game (kept ${keepPlayers.size} players with valid auto-bet & balance)`
+      );
     } catch (error) {
       console.error("Error resetting room:", error);
     }

@@ -3,8 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useLanguageStore } from '../store/languageStore';
 import { useGameStore } from '../store/gameStore';
 import { useAuthStore } from '../store/authStore';
-import { rtdb } from '../firebase/config';
-import { ref, update, get, onValue } from 'firebase/database';
+import { getApiUrl } from '../config/api';
 
 
 
@@ -20,11 +19,11 @@ const Room: React.FC = () => {
   };
 
   const {
-    winnerCard, showWinnerPopup, closeWinnerPopup, setWinnerCard,
+    winnerCard, showWinnerPopup, closeWinnerPopup,
     currentRoom, bingoCards, joinRoom, selectCard,
     placeBet, selectedCard,
     showLoserPopup, setShowLoserPopup,
-    connectToServer, checkBingo, setEnteredRoom,
+    connectToServer, checkBingo, setEnteredRoom, syncRoomState,
     setShowWinnerPopup
   } = useGameStore();
   const { user } = useAuthStore();
@@ -95,51 +94,19 @@ const Room: React.FC = () => {
 
 
 
-  const [claimed, setClaimed] = useState(false);
+  const claimed = displayedCard?.claimed ?? false;
+  const autoCard = displayedCard
+    ? {
+        auto: displayedCard.auto ?? false,
+        autoUntil: displayedCard.autoUntil ?? null,
+      }
+    : null;
+
   // 👇 New useEffect inside Room.tsx
   // Connect socket once
   React.useEffect(() => {
     connectToServer();
   }, [connectToServer]);
-
-
-  React.useEffect(() => {
-    if (!displayedCard || !currentRoom) return;
-    const cardRef = ref(rtdb, `rooms/${currentRoom.id}/bingoCards/${displayedCard.id}`);
-
-    const unsubscribe = onValue(cardRef, (snap) => {
-      if (snap.exists()) {
-        setClaimed(!!snap.val().claimed);
-      }
-    });
-
-    return () => unsubscribe();
-  }, [displayedCard?.id, currentRoom?.id]);
-
-  const [autoCard, setAutoCard] = useState<{
-    auto: boolean;
-    autoUntil: number | null;
-  } | null>(null);
-
-  React.useEffect(() => {
-    if (!displayedCard) return;
-    const cardRef = ref(
-      rtdb,
-      `rooms/${currentRoom?.id}/bingoCards/${displayedCard.id}`
-    );
-
-    const unsubscribe = onValue(cardRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        setAutoCard({
-          auto: data.auto ?? false,
-          autoUntil: data.autoUntil ?? null,
-        });
-      }
-    });
-
-    return () => unsubscribe();
-  }, [displayedCard, currentRoom?.id]);
   // Auto Bingo: checks every time called numbers update
   // Auto Bingo with visual marking
 
@@ -290,45 +257,7 @@ const Room: React.FC = () => {
         setGameMessage(t('bet_placed'));
       }
   };
-  React.useEffect(() => {
-    const { socket } = useGameStore.getState();
-    if (!socket) {
-      console.log("❌ No socket connection available");
-      return;
-    }
-    console.log("✅ Socket connection available, setting up winnerConfirmed listener");
-
-    socket.on("winnerConfirmed", async ({ roomId, gameId: _gameId, userId, cardId, patternIndices }: any) => {
-      if (!currentRoom || currentRoom.id !== roomId) return;
-
-      if (userId === user?.telegramId) {
-        // 🎉 I am the winner
-        const myCard = bingoCards.find((c) => c.id === cardId);
-        if (myCard) {
-          setWinnerCard(myCard);
-          setShowWinnerPopup(true);
-        }
-      } else {
-        // ❌ I lost → show winner’s card
-        const cardSnap = await get(ref(rtdb, `rooms/${roomId}/bingoCards/${cardId}`));
-        const cardData = cardSnap.val();
-        if (!cardData) return;
-
-        // Store the original numbers and winning pattern indices
-        setWinnerCard({
-          ...cardData,
-          numbers: cardData.numbers, // Keep original numbers
-          winningPatternIndices: patternIndices // Store pattern indices separately
-        });
-        setShowLoserPopup(true);
-      }
-    });
-
-
-    return () => {
-      socket?.off("winnerConfirmed");
-    };
-  }, [currentRoom?.id, user?.telegramId]);
+  
 
   // Auto Bingo is now handled server-side
 
@@ -381,6 +310,35 @@ const Room: React.FC = () => {
       setGameMessage('Bet canceled');
     } else {
       console.error("❌ Failed to cancel bet");
+    }
+  };
+
+  const handleToggleAuto = async () => {
+    if (!displayedCard || !currentRoom || !autoCard) return;
+    try {
+      const response = await fetch(getApiUrl('/api/toggle-auto'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          roomId: currentRoom.id,
+          cardId: displayedCard.id,
+          auto: !autoCard.auto,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        setPopupMessage(result.message || t('error'));
+        return;
+      }
+      await syncRoomState(currentRoom.id);
+      setPopupMessage(
+        `${autoCard.auto ? t('auto_bet_dis') : t('auto_bet_en')} ${displayedCard.serialNumber}`
+      );
+    } catch (err) {
+      console.error('❌ Failed to toggle auto bet', err);
+      setPopupMessage(t('error'));
     }
   };
 
@@ -536,12 +494,6 @@ const Room: React.FC = () => {
 
     const covered = findCoveredPatternByMarks();
     if (!covered || !patternExistsInCalled(covered.patternNumbers)) {
-      const playerRef = ref(
-        rtdb,
-        `rooms/${currentRoom.id}/players/${user?.telegramId}`
-      );
-      await update(playerRef, { attemptedBingo: true });
-
       setGameMessage(t('not_a_winner'));
       setIsDisqualified(true);
       return;
@@ -550,11 +502,6 @@ const Room: React.FC = () => {
     try {
       const result = await checkBingo(covered.patternIndices);
       if (!result.success) {
-        const playerRef = ref(
-          rtdb,
-          `rooms/${currentRoom.id}/players/${user?.telegramId}`
-        );
-        await update(playerRef, { attemptedBingo: true });
         setGameMessage(result.message || t('not_a_winner'));
         setHasAttemptedBingo(true);
       }
@@ -990,25 +937,7 @@ const Room: React.FC = () => {
               {/* Auto Bet Toggle Button → only visible if bet is active */}
               {autoCard && isBetActive && claimed && (
                 <button
-                  onClick={async () => {
-                    if (!displayedCard || !currentRoom) return;
-
-                    const cardRef = ref(
-                      rtdb,
-                      `rooms/${currentRoom.id}/bingoCards/${displayedCard.id}`
-                    );
-
-                    if (autoCard.auto) {
-                      // Turn off auto
-                      await update(cardRef, { auto: false, autoUntil: null });
-                      setPopupMessage(`${t("auto_bet_dis")} ${displayedCard.serialNumber}`);
-                    } else {
-                      // Turn on auto for 24h
-                      const expireAt = Date.now() + 24 * 60 * 60 * 1000;
-                      await update(cardRef, { auto: true, autoUntil: expireAt });
-                      setPopupMessage(`${t("auto_bet_en")} ${displayedCard.serialNumber}`);
-                    }
-                  }}
+                  onClick={handleToggleAuto}
                   className={`w-full px-4 py-2 rounded-lg shadow font-semibold ${autoCard.auto
                       ? "bg-theme-red hover:bg-theme-secondary text-white"
                       : "bg-theme-green hover:bg-theme-primary text-white"

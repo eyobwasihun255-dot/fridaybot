@@ -781,7 +781,7 @@ const Room: React.FC = () => {
                   const previouslyCalledNumbers = lastCalled
                     ? displayedCalledNumbers.slice(0, -1)
                     : [];
-
+                  
                   const isLastCalled = num === lastCalled;
                   const isPreviouslyCalled = previouslyCalledNumbers.includes(num);
 

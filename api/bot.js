@@ -10,7 +10,7 @@ const ADMIN_PASSCODE = "19991999"; // Ideally move to process.env.ADMIN_PASSCODE
 function getWebappUrl() {
   return process.env.WEBAPP_URL || 
       (process.env.NODE_ENV === 'production' 
-        ? "https://fridaybot-9jrb.onrender.com"
+        ? "https://fridaybot-c47n.onrender.com"
       : `http://localhost:${process.env.PORT || 5000}`);
 }
 
@@ -1832,8 +1832,8 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
 
   // Account details
   const accountDetails = method === "CBE"
-    ? { accNumber: "በቅርቡ ይጠብቁ", accHolder: "Friday Bingo" }
-    : { phone: "0948404314", holder: "Mare" };
+    ? { accNumber: process.env.CBE_ACCOUNT_NUMBER, accHolder: "Friday Bingo" }
+    : { phone: process.env.TELEBIRR_PHONE, holder: "Mare" };
 
   // Escape Markdown special chars
   const escapeMD = (text) => text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");

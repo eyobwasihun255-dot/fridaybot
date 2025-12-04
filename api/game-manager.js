@@ -961,117 +961,105 @@ const gameData = {
       if (!room || (room.roomStatus || room.gameStatus) !== "playing") {
         return { success: false, message: "Game not in playing state" };
       }
-
+  
       const players = room.players || {};
       const player = players[userId];
+  
       if (player?.attemptedBingo) {
         return { success: false, message: "Already attempted bingo" };
       }
-
-      const isValidBingo = this.validateBingoPattern(
+  
+      const valid = this.validateBingoPattern(
         cardId,
         room,
         pattern,
         room.calledNumbers || []
       );
-
-      if (!isValidBingo) {
+  
+      if (!valid) {
         await this.updateRoomPlayer(roomId, userId, { attemptedBingo: true });
+  
+        // Notify losers
+        if (this.io) {
+          this.io.to(roomId).emit("loserPopup", { userId, cardId });
+        }
+  
         return { success: false, message: "Invalid bingo pattern" };
       }
-
-      const playerCount = Object.keys(players).length;
-      const multiWinData = await this.getMultiWinStats();
-      const currentGameNumber = multiWinData.gameCount + 1;
-      const gamesSinceLastMulti =
-        currentGameNumber - (multiWinData.lastMultiGame || 0);
-
-      let winnerCount = 1;
-      if (playerCount > 180) {
-        if (Math.random() < 0.3) winnerCount = 3;
-        else if (Math.random() < 0.5) winnerCount = 2;
-      } else if (playerCount > 80) {
-        if (Math.random() < 0.4) winnerCount = 2;
-      }
-
-      if (gamesSinceLastMulti >= 5 && winnerCount === 1) {
-        winnerCount = 2;
-      }
-
-      await this.setMultiWinStats({
-        gameCount: currentGameNumber,
-        lastMultiGame:
-          winnerCount > 1 ? currentGameNumber : multiWinData.lastMultiGame,
-      });
-
-      const gameId = room.currentGameId || room.gameId;
-      if (!gameId) return { success: false, message: "Game not found" };
+  
+      // ⭕ If valid — we immediately end the game with this single winner
+      const gameId = room.currentGameId;
       const gameData = await this.getGameState(gameId);
-      if (!gameData) return { success: false, message: "Game not found" };
-
-      const existingWinners = gameData.winnerList || [];
-      if (existingWinners.length >= winnerCount) {
-        return { success: false, message: "Winners already confirmed" };
+  
+      if (!gameData) {
+        return { success: false, message: "Game not found" };
       }
-
-      const newWinners = [...existingWinners, { userId, cardId, pattern }];
-      gameData.winnerList = newWinners;
-      if (gameData.winners) {
-        const target = gameData.winners.find((w) => w.cardId === cardId);
-        if (target) target.checked = true;
-      }
-      await this.setGameState(gameId, gameData);
-
-      // Notify immediately that this specific player has a confirmed winning card
+  
+      const winnerObj = {
+        userId,
+        cardId,
+        pattern,
+      };
+  
+      // Compute payout
+      const totalPlayers = Object.keys(players).length;
+      const bet = room.betAmount || 0;
+      const totalPayout = Math.floor(totalPlayers * bet * 0.85);
+  
+      // Apply payout
+      await this.applyBalanceAdjustments({
+        [userId]: totalPayout,
+      });
+  
+      // Set winner in room state
+      await this.setRoomState(roomId, {
+        winner: userId,
+        winners: [userId],
+        payout: totalPayout,
+        payed: true,
+      });
+  
+      // Notify UI immediately
       if (this.io) {
         this.io.to(roomId).emit("winnerConfirmed", {
           roomId,
           gameId,
+          winner: winnerObj,
+          payout: totalPayout,
+        });
+  
+        // Winner popup
+        this.io.to(roomId).emit("winnerPopup", {
           userId,
-          cardId,
-          patternIndices: pattern,
+          payout: totalPayout,
+        });
+  
+        // Loser popup for everyone else
+        Object.keys(players).forEach(pid => {
+          if (pid !== userId) {
+            this.io.to(roomId).emit("loserPopup", { userId: pid });
+          }
         });
       }
-
-      if (newWinners.length === winnerCount) {
-        const totalBets = playerCount * (room.betAmount || 0);
-        const totalPayout = totalBets * 0.85;
-        const payoutPerWinner = totalPayout / winnerCount;
-        const adjustments = {};
-        for (const winner of newWinners) {
-          adjustments[winner.userId] =
-            (adjustments[winner.userId] || 0) + payoutPerWinner;
-        }
-        await this.applyBalanceAdjustments(adjustments);
-
-        await this.setRoomState(roomId, {
-          winnerCount,
-          winners: newWinners.map((w) => w.userId),
-          payoutPerWinner,
-          totalPayout,
-          payed: true,
-        });
-
-        if (this.io) {
-          this.io.to(roomId).emit("multiWinnersConfirmed", {
-            roomId,
-            gameId,
-            winners: newWinners.map((w) => w.userId),
-            count: winnerCount,
-            message: `🎉 ${winnerCount} Winner${winnerCount > 1 ? "s" : ""}!`,
-          });
-        }
-
-        await new Promise((res) => setTimeout(res, 800));
-        this.endGame(roomId, gameId, "bingo");
-      }
-
-      return { success: true, message: `Bingo confirmed for ${userId}` };
-    } catch (error) {
-      console.error("Error checking bingo:", error);
+  
+      // End the game right away
+      await this.endGame(roomId, gameId, "bingo");
+  
+      // Send frontend enough data to show popup + update balance
+      return {
+        success: true,
+        isWinner: true,
+        payout: totalPayout,
+        winner: userId,
+        cardId,
+      };
+  
+    } catch (e) {
+      console.error("checkBingo error:", e);
       return { success: false, message: "Server error" };
     }
   }
+  
   
 
 

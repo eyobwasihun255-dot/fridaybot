@@ -5,7 +5,7 @@ import { useGameStore } from '../store/gameStore';
 import { useAuthStore } from '../store/authStore';
 import { getApiUrl } from '../config/api';
 
-
+import { useMemo } from 'react';
 
 const Room: React.FC = () => {
   const { roomId } = useParams();
@@ -28,11 +28,14 @@ const Room: React.FC = () => {
   } = useGameStore();
   const { user } = useAuthStore();
 
-  const userCard = bingoCards.find(
-    (card) => // ✅ make sure it's the same room
-      card.claimed &&
-      card.claimedBy === user?.telegramId
-  );
+  const userCard = useMemo(() => {
+    return bingoCards.find(
+      (card) =>
+        card.claimed &&
+        String(card.claimedBy) === String(user?.telegramId)
+    );
+  }, [bingoCards, user?.telegramId]);
+  
   const displayedCard = selectedCard || userCard;
   const cardNumbers = userCard?.numbers ?? [];
   const [hasBet, setHasBet] = useState(false);

@@ -437,42 +437,24 @@ const Room: React.FC = () => {
   
         {/* 🟩 Selected Card Preview (shown below grid) */}
         {displayedCard && (
-  <div className="mb-6 p-3 bg-white/10 rounded-lg shadow-inner flex flex-col items-center w-full max-w-[180px]">
-    <div className="text-xs mb-2 font-semibold text-theme-light">
-      {t("selected_card")} #{displayedCard.serialNumber}
-    </div>
-
-    {/* B I N G O header letters */}
-    <div className="grid grid-cols-5 gap-1 mb-1">
-      {["B", "I", "N", "G", "O"].map(letter => (
-        <div key={letter} className="text-xs font-bold text-white text-center">
-          {letter}
-        </div>
-      ))}
-    </div>
-
-    {/* Bingo numbers displayed vertically */}
-    <div className="grid grid-cols-5 gap-0.5">
-      {Array.from({ length: 5 }).map((_, colIdx) => (
-        <div key={colIdx} className="flex flex-col gap-0.5">
-          {Array.from({ length: 5 }).map((_, rowIdx) => {
-            const num = displayedCard.numbers[rowIdx][colIdx]; // <-- TRANSPOSED ACCESS
-
-            return (
-              <div
-                key={`${rowIdx}-${colIdx}`}
-                className="w-5 h-5 flex items-center justify-center text-[10px] rounded bg-theme-primary text-white font-bold border border-white/20"
-              >
-                {num === 0 && rowIdx === 2 && colIdx === 2 ? "★" : num}
-              </div>
-            );
-          })}
-        </div>
-      ))}
-    </div>
-  </div>
-)}
-
+          <div className="mb-6 p-3 bg-white/10 rounded-lg shadow-inner flex flex-col items-center w-full max-w-[180px]">
+            <div className="text-xs mb-2 font-semibold text-theme-light">
+              {t("selected_card")} #{displayedCard.serialNumber}
+            </div>
+            <div className="grid grid-cols-5 gap-0.5">
+              {displayedCard.numbers.slice(0, 5).map((row, rowIdx) =>
+                row.map((num, colIdx) => (
+                  <div
+                    key={`${rowIdx}-${colIdx}`}
+                    className="w-5 h-5 flex items-center justify-center text-[10px] rounded bg-gradient-to-br bg-theme-primary text-white font-bold border border-white/20"
+                  >
+                    {num === 0 && rowIdx === 2 && colIdx === 2 ? "★" : num}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
   
         {/* 🎯 Place Bet Button */}
         <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">

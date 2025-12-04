@@ -914,6 +914,13 @@ const gameData = {
         });
       }
 
+      // Clean up per-game Redis state
+      try {
+        await redis.del(`game:${gameId}`);
+      } catch (e) {
+        console.error(`⚠️ Failed to delete game state for ${gameId} from Redis:`, e);
+      }
+
       console.log(`🔚 Game ended in room ${roomId}: ${reason}. Room will reset in 5s.`);
     } catch (error) {
       console.error("Error ending game:", error);
@@ -1014,6 +1021,17 @@ const gameData = {
         if (target) target.checked = true;
       }
       await this.setGameState(gameId, gameData);
+
+      // Notify immediately that this specific player has a confirmed winning card
+      if (this.io) {
+        this.io.to(roomId).emit("winnerConfirmed", {
+          roomId,
+          gameId,
+          userId,
+          cardId,
+          patternIndices: pattern,
+        });
+      }
 
       if (newWinners.length === winnerCount) {
         const totalBets = playerCount * (room.betAmount || 0);

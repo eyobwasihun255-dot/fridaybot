@@ -537,7 +537,7 @@ autoReconnectToServer: () => {
       }
 
       try {
-        const response = await fetch(getApiUrl("/place-bet"), {
+        const response = await fetch(getApiUrl("/api/place-bet"), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

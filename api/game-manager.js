@@ -1030,7 +1030,8 @@ const gameData = {
         payed: true,
       });
   
-      // ✅ Notify UI with correct payload structure
+      // ✅ Notify UI with correct payload structure FIRST
+      // Give frontend time to show popups before ending game
       if (this.io) {
         this.io.to(roomId).emit("winnerConfirmed", {
           roomId,
@@ -1042,8 +1043,16 @@ const gameData = {
         });
       }
   
-      // ✅ End the game (this will emit gameEnded and schedule reset)
-      await this.endGame(roomId, gameId, "bingo");
+      // ✅ Reset attemptedBingo for ALL players when game ends
+      const allPlayers = await this.getRoomPlayers(roomId);
+      for (const playerId of Object.keys(allPlayers || {})) {
+        await this.updateRoomPlayer(roomId, playerId, { attemptedBingo: false });
+      }
+  
+      // ✅ Delay endGame to allow popups to display (5 seconds)
+      setTimeout(async () => {
+        await this.endGame(roomId, gameId, "bingo");
+      }, 5000);
   
       return {
         success: true,

@@ -123,6 +123,57 @@ approved_withdraw: (amt, acc) => `✅ መክፈያ ተከናውኗል!\n-${amt} 
 declined_withdraw: "❌ request declined",
 fallback: "Send /playgame or /deposit or /withdraw to start.",
 },
+om: {
+  welcome:
+"🎯 Baga nagaan dhufte Friday Bingo!\nGaaffii yoo qabaattan @Natii4545\n\nAjajawwan:\n/playgame - Tapha eegalu\n/deposit - Maallaqa dabaluu\n/withdraw - Galii baasuu",
+
+  choose_lang: "🌍 Afaan filadhu:",
+  receipt_used :"Lakkoofsi kana duraan fayyadame!",
+  play: "🎉 Tapha Bingo haa eegallu!",
+  enter_deposit_amount : "Maallaqa itti dabaluu barbaaddu galchi:",
+  deposit_method: "Karaa kaffaltii filadhu:",
+  deposit_amount: (method) => `Maallaqa ${method} ittiin dabaluu barbaaddu galchi:`,
+  deposit_sms: (method) => `📩 Mee ergaa ${method} ergame nuuf ergaa.`,
+  withdraw_amount: "💵 Maallaqa baasuu barbaaddu galchi:",
+  select_withdraw_method : "Karaa baasuu filadhu:",
+  withdraw_method: "Karaa baasuu filadhu:",
+  withdraw_cbe: "🏦 Lakk. herrega CBE galchi:",
+  withdraw_telebirr: "📱 Lakk. Telebirr galchi:",
+  invalid_amount: "❌ Maallaqa sirrii galchi.",
+  insufficient_balance: "❌ Maallaqa sirrii hin qabdu.",
+  enter_cbe :"Lakk. Herrega CBE galchi:",
+  enter_telebirr : "Lakk. Telebirr galchi:",
+  no_link: "❌ Link hin argamne. Mee irra deebi'ii ergaa.",
+  link_used: "⚠️ Ergaan/link kun duraan fayyadame.",
+  wait_admin: "⏳ Itti aanee eeggadhu, admin ni ilaala.",
+  approved_deposit: (amt) => `✅ Dabalataan sirriitti galmaa'e!\n+${amt} birri siif dabalame.`,
+  declined_deposit: "❌ Dabalataan ni haquame.",
+  approved_withdraw: (amt, acc) => `✅ Maallaqa baasuu milkaa'e!\n-${amt} birri gara ${acc} tti ergame.`,
+  declined_withdraw: "❌ Gaafatiin siif hin eeyyamamne.",
+  fallback: "Taphachuuf /playgame ykn /deposit ykn /withdraw fayyadami.",
+  withdraw_pending :"Eeggachaa jira…",
+  admin_declined_withdraw : "❌ Admin hin eeyyamne!",
+  admin_approved_withdraw :  "✅ Admin eeyyame!",
+  admin_approved_deposit:  "✅ Admin eeyyame!",
+  admin_declined_deposit : "❌ Admin hin eeyyamne!",
+  star_bingo:"Bingo eegaluu",
+  withdraw : "Maallaqa baasuu",
+  deposit : "Maallaqa dabaluu",
+  help : "Gargaarsa",
+  help_text: `
+🎮 *Bingo akkamitti taphatan*
+
+1️⃣ /deposit fayyadamuun maallaqa galchaa  
+2️⃣ /playgame fayyadamuun gara taphatti seenaa  
+3️⃣ Taphattoonni guutuu eeggadhaa  
+4️⃣ Lakkoofsi ofumaan ni baha  
+5️⃣ Lakkoofsa card keessan irratti argamtuu cuqaasaa  
+6️⃣ Fakkii mo’ichaa guuttanii moo’attu  
+7️⃣ /withdraw fayyadamuun baasuu dandeessu  
+
+Baga taphattan 🎉`,
+},
+
 };
  const value = texts[lang]?.[key];
   if (typeof value === "function") {
@@ -232,8 +283,10 @@ async function handleStart(message) {
       inline_keyboard: [
         [{ text: "English 🇬🇧", callback_data: "lang_en" }],
         [{ text: "አማርኛ 🇪🇹", callback_data: "lang_am" }],
+        [{ text: "Afaan Oromoo 🇪🇹", callback_data: "lang_om" }],
       ],
     };
+    
     sendMessage(chatId, t("en", "choose_lang"), { reply_markup: keyboard });
   }
 }
@@ -1818,12 +1871,16 @@ async function handleCallback(callbackQuery) {
   const lang = user?.lang || "en";
 
   // ================== LANGUAGE TOGGLE ==================
-  if (data === "lang_en" || data === "lang_am") {
-    const lang = data === "lang_en" ? "en" : "am";
+  if (data === "lang_en" || data === "lang_am" || data === "lang_om") {
+    let lang = "en";
+    if (data === "lang_am") lang = "am";
+    if (data === "lang_om") lang = "om";
+  
     await update(userRef, { lang });
     sendMessage(chatId, t(lang, "welcome"));
     return;
   }
+  
 if (data === "deposit_cbe" || data === "deposit_telebirr") {
   const method = data === "deposit_cbe" ? "CBE" : "Telebirr";
 

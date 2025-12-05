@@ -235,7 +235,7 @@ const autoCountdownCheck = async () => {
     if (now - lastCacheUpdate > CACHE_TTL) {
       const roomsSnap = await get(ref(rtdb, "rooms"));
       const rooms = roomsSnap.val() || {};
-
+      
       // Update cache with base RTDB config only; runtime state comes from Redis.
       roomCache.clear();
       Object.entries(rooms).forEach(([roomId, room]) => {

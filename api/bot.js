@@ -1832,8 +1832,8 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
 
   // Account details
   const accountDetails = method === "CBE"
-    ? { accNumber: process.env.CBE_ACCOUNT_NUMBER, accHolder: "Friday Bingo" }
-    : { phone: process.env.TELEBIRR_PHONE, holder: "Mare" };
+    ? { accNumber: process.env.CBE_ACCOUNT_NUMBER, accHolder: "Balisa Banti Bayana" }
+    : { phone: process.env.TELEBIRR_PHONE, holder: "Teshoma Sileshi" };
 
   // Escape Markdown special chars
   const escapeMD = (text) => text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");

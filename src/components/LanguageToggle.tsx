@@ -28,7 +28,7 @@ const LanguageToggle: React.FC = () => {
         }`}
       >
         <img
-          src="/download.png"
+          src="/images/download.png"
           alt="Oromia Flag"
           className="inline-block w-4 h-3 mr-1 rounded-sm object-cover"
         />

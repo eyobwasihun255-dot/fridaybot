@@ -884,6 +884,10 @@ const gameData = {
       const gameData = await this.getGameState(gameId);
       if (!gameData) return;
 
+      // ✅ Get current room state to check if already paid
+      const currentRoomState = await this.getRoomState(roomId);
+      const alreadyPaid = currentRoomState?.payed === true;
+
       await this.setRoomState(roomId, {
         roomStatus: "ended",
         nextGameCountdownEndAt,
@@ -891,16 +895,20 @@ const gameData = {
         countdownStartedBy: null,
       });
 
-      // Handle payout or revenue recording
-      const hasConfirmedWinner = !!gameData.winner;
-      if (reason === "allNumbersDrawn" && !hasConfirmedWinner) {
-        await this.setRoomState(roomId, {
-          winner: null,
-          payout: gameData.totalPayout || 0,
-          payed: true,
-        });
-      } else if (gameData.winners && gameData.winners.length > 0) {
-        this.processWinners(roomId, gameData);
+      // ✅ Only process winners if not already paid (bingo winner was already paid in checkBingo)
+      if (!alreadyPaid) {
+        const hasConfirmedWinner = !!gameData.winner || (gameData.winners && gameData.winners.length > 0);
+        if (reason === "allNumbersDrawn" && !hasConfirmedWinner) {
+          // No winner - record revenue
+          await this.setRoomState(roomId, {
+            winner: null,
+            payout: gameData.totalPayout || 0,
+            payed: true,
+          });
+        } else if (gameData.winners && gameData.winners.length > 0 && reason !== "bingo") {
+          // Multi-winner case (if not already handled in checkBingo)
+          await this.processWinners(roomId, gameData);
+        }
       }
 
       // Notify connected clients
@@ -978,40 +986,43 @@ const gameData = {
   
       if (!valid) {
         await this.updateRoomPlayer(roomId, userId, { attemptedBingo: true });
-  
-        // Notify losers
-        if (this.io) {
-          this.io.to(roomId).emit("loserPopup", { userId, cardId });
-        }
-  
         return { success: false, message: "Invalid bingo pattern" };
       }
   
+      // ✅ STOP NUMBER DRAWING IMMEDIATELY
+      this.stopNumberDrawing(roomId);
+  
       // ⭕ If valid — we immediately end the game with this single winner
       const gameId = room.currentGameId;
-      const gameData = await this.getGameState(gameId);
+      let gameData = await this.getGameState(gameId);
   
       if (!gameData) {
         return { success: false, message: "Game not found" };
       }
-  
-      const winnerObj = {
-        userId,
-        cardId,
-        pattern,
-      };
   
       // Compute payout
       const totalPlayers = Object.keys(players).length;
       const bet = room.betAmount || 0;
       const totalPayout = Math.floor(totalPlayers * bet * 0.85);
   
-      // Apply payout
+      // ✅ Update game state with winner BEFORE endGame
+      gameData.winners = [{
+        id: uuidv4(),
+        cardId,
+        userId,
+        username: player?.username || "Unknown",
+        checked: true,
+      }];
+      gameData.totalPayout = totalPayout;
+      gameData.winner = userId;
+      await this.setGameState(gameId, gameData);
+  
+      // ✅ Apply payout (batched)
       await this.applyBalanceAdjustments({
         [userId]: totalPayout,
       });
   
-      // Set winner in room state
+      // ✅ Update room state with winner info
       await this.setRoomState(roomId, {
         winner: userId,
         winners: [userId],
@@ -1019,33 +1030,21 @@ const gameData = {
         payed: true,
       });
   
-      // Notify UI immediately
+      // ✅ Notify UI with correct payload structure
       if (this.io) {
         this.io.to(roomId).emit("winnerConfirmed", {
           roomId,
           gameId,
-          winner: winnerObj,
-          payout: totalPayout,
-        });
-  
-        // Winner popup
-        this.io.to(roomId).emit("winnerPopup", {
           userId,
+          cardId,
+          patternIndices: pattern,
           payout: totalPayout,
-        });
-  
-        // Loser popup for everyone else
-        Object.keys(players).forEach(pid => {
-          if (pid !== userId) {
-            this.io.to(roomId).emit("loserPopup", { userId: pid });
-          }
         });
       }
   
-      // End the game right away
+      // ✅ End the game (this will emit gameEnded and schedule reset)
       await this.endGame(roomId, gameId, "bingo");
   
-      // Send frontend enough data to show popup + update balance
       return {
         success: true,
         isWinner: true,

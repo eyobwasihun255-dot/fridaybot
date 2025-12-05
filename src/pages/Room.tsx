@@ -508,7 +508,6 @@ const Room: React.FC = () => {
         setGameMessage(result.message || t('not_a_winner'));
         setHasAttemptedBingo(true);
       }
-      setGameMessage(t('bingo_winner'))
     } catch (err) {
       console.error('❌ Error sending bingo claim:', err);
       setGameMessage('Network error');

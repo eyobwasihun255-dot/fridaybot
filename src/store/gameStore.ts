@@ -315,11 +315,7 @@ autoReconnectToServer: () => {
           const { roomId, userId, cardId, patternIndices } = data as any;
           const { user } = useAuthStore.getState();
 
-          if (user?.telegramId === userId) {
-            get().safeSetShowPopup('winner');
-            return;
-          }
-
+          // Find or fetch the winner's card
           let card =
             get().bingoCards.find((c) => c.id === cardId) || null;
 
@@ -339,13 +335,21 @@ autoReconnectToServer: () => {
 
           if (!card) return;
 
+          // Set winner card with pattern indices
           get().setWinnerCard({
             ...card,
             winningPatternIndices: patternIndices,
           });
-          get().safeSetShowPopup('loser');
+
+          if (user?.telegramId === userId) {
+            // Winner - show winner popup
+            get().safeSetShowPopup('winner');
+          } else {
+            // Loser - show loser popup
+            get().safeSetShowPopup('loser');
+          }
         } catch (e) {
-          console.error('Failed to show loser winner card:', e);
+          console.error('Failed to show winner/loser popup:', e);
         }
       });
       newSocket.on('bingoChecked', async (data: any) => {

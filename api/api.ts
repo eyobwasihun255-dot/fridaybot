@@ -7,10 +7,10 @@ export const API_CONFIG = {
 
   // API base path
   API_BASE: '/api',
-} as const;
+};
 
 // Helper to get full API URL
-export const getApiUrl = (endpoint: string): string => {
+export function getApiUrl(endpoint) {
   if (endpoint.startsWith('http')) return endpoint;
 
   if (endpoint.startsWith('/')) {
@@ -18,9 +18,9 @@ export const getApiUrl = (endpoint: string): string => {
   }
 
   return `${API_CONFIG.SERVER_URL}${API_CONFIG.API_BASE}/${endpoint}`;
-};
+}
 
 // Helper to get Socket.IO URL
-export const getSocketUrl = (): string => {
+export function getSocketUrl() {
   return API_CONFIG.SERVER_URL;
-};
+}

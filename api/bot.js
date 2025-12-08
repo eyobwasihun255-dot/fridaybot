@@ -1099,7 +1099,7 @@ if (pending?.type === "awaiting_random_room") {
     "Enter how many demo players to add:"
   );
 
-  await setPending(userId,{ type:"awaiting_random_count", roomId });
+  await pendingActions.set(userId,{ type:"awaiting_random_count", roomId });
   return;
 }
 
@@ -1114,7 +1114,7 @@ if (pending?.type === "awaiting_random_count") {
   }
 
   sendMessage(chatId,"⚙️ Auto mode for players? (true / false)");
-  await setPending(userId,{ type:"awaiting_random_auto", roomId: pending.roomId, count });
+  await pendingActions.set(userId,{ type:"awaiting_random_auto", roomId: pending.roomId, count });
   return;
 }
 
@@ -1191,7 +1191,7 @@ if (pending?.type === "awaiting_random_auto") {
     sendMessage(chatId,"❌ Error adding demo players");
   }
 
-  await clearPending(userId);
+  await pendingActions.delete(userId);
   return;
 }
 
@@ -1408,7 +1408,7 @@ if (text === "/removedemo") {
   }
 
   sendMessage(chatId, "🏷 Enter the Room ID to remove demo players from:");
-  await setPending(userId, { type: "awaiting_removedemo_room" });
+  await pendingActions.set(userId, { type: "awaiting_removedemo_room" });
   return;
 }
 
@@ -1434,7 +1434,7 @@ if (pending?.type === "awaiting_removedemo_room") {
     }
 
     sendMessage(chatId, `♻ Confirm to remove all demo users & reset balances in room *${roomId}*?\n\nReply: **yes** to proceed`);
-    await setPending(userId,{ type:"awaiting_removedemo_confirm", roomId });
+    await pendingActions.set(userId,{ type:"awaiting_removedemo_confirm", roomId });
     return;
 
   } catch (err) {
@@ -1447,7 +1447,7 @@ if (pending?.type === "awaiting_removedemo_room") {
 // Step 3 — confirmation & processing
 if (pending?.type === "awaiting_removedemo_confirm") {
   if (text.trim().toLowerCase() !== "yes") {
-    await clearPending(userId);
+    await pendingActions.delete(userId);
     return sendMessage(chatId,"❌ Operation cancelled.");
   }
 
@@ -1497,7 +1497,7 @@ if (pending?.type === "awaiting_removedemo_confirm") {
     sendMessage(chatId,"❌ Failed removing demo players.");
   }
 
-  await clearPending(userId);
+  await pendingActions.delete(userId);
   return;
 }
 
@@ -1510,7 +1510,7 @@ if (text === "/reset") {
   }
 
   sendMessage(chatId,"🌀 Enter Room ID to reset:");
-  await setPending(userId,{ type:"awaiting_room_reset" });
+  await pendingActions.set(userId,{ type:"awaiting_room_reset" });
   return;
 }
 
@@ -1533,7 +1533,7 @@ if (pending?.type === "awaiting_room_reset") {
       `Status: ${status}\n\nReply **yes** to confirm`
     );
 
-    await setPending(userId,{ type:"awaiting_room_reset_confirm", roomId, status, betAmount });
+    await pendingActions.set(userId,{ type:"awaiting_room_reset_confirm", roomId, status, betAmount });
     return;
 
   } catch(err){
@@ -1546,7 +1546,7 @@ if (pending?.type === "awaiting_room_reset") {
 // Step 3 — Confirm Reset
 if (pending?.type === "awaiting_room_reset_confirm") {
   if (text.trim().toLowerCase() !== "yes") {
-    await clearPending(userId);
+    await pendingActions.delete(userId);
     return sendMessage(chatId,"❌ Reset cancelled.");
   }
 
@@ -1604,7 +1604,7 @@ if (pending?.type === "awaiting_room_reset_confirm") {
     sendMessage(chatId,"❌ Reset failed.");
   }
 
-  await clearPending(userId);
+  await pendingActions.delete(userId);
   return;
 }
 

@@ -2,7 +2,7 @@ import { ref, get, set, update, push , remove, runTransaction } from "firebase/d
 import { rtdb } from "../bot/firebaseConfig.js"; 
 import fetch from "node-fetch";
 import { gameManager } from "./game-manager.js";
-
+import redis from "./redisClient.js";
 
 const ADMIN_PASSCODE = "19991999"; // Ideally move to process.env.ADMIN_PASSCODE
 
@@ -1071,274 +1071,130 @@ if (text === "/random") {
 }
 
 
-// Step 2: Get Room ID
 if (pending?.type === "awaiting_random_room") {
   const roomId = text.trim();
 
-  // ✅ Get room info
-  const roomRef = ref(rtdb, `rooms/${roomId}`);
-  const roomSnap = await get(roomRef);
+  const res = await fetch(getApiUrl(`/api/room-state?roomId=${roomId}`));
+  const data = await res.json();
 
-  if (!roomSnap.exists()) {
-    sendMessage(chatId, "❌ Room not found. Please enter a valid Room ID:");
-    return;
+  if (!res.ok || !data.room) {
+    return sendMessage(chatId, "❌ Room not found. Try again:");
   }
 
-  const room = roomSnap.val();
+  const room = data.room;
   const betAmount = room.betAmount || 0;
 
-  // ✅ Get current players
-  const playersSnap = await get(ref(rtdb, `rooms/${roomId}/players`));
-  const currentPlayers = playersSnap.exists() ? playersSnap.val() : {};
+  // extract bingo cards
+  const cards = data.room.bingoCards || {};
+  const unclaimedCards = Object.entries(cards).filter(([_, c]) => !c.claimed);
 
-  // ✅ Get all users to filter demo players
-  const usersSnap = await get(ref(rtdb, "users"));
-  const allUsers = usersSnap.exists() ? usersSnap.val() : {};
-
-  const eligibleDemoPlayers = Object.values(allUsers).filter(u =>
-    typeof u.telegramId === "string" &&
-    u.telegramId.startsWith("demo") &&
-    (u.balance || 0) >= betAmount
-  );
+  if (unclaimedCards.length === 0) {
+    return sendMessage(chatId,"⚠️ No unclaimed cards in this room.");
+  }
 
   sendMessage(
     chatId,
-    `🔢 Room ${roomId} info: There are ${eligibleDemoPlayers.length} demo players with balance >= ${betAmount}.\n` +
-    `Please enter how many new demo players to add:`
+    `🎯 Room ${roomId} found.\n`+
+    `Available unclaimed cards: ${unclaimedCards.length}\n`+
+    "Enter how many demo players to add:"
   );
 
-  pendingActions.set(userId, { type: "awaiting_random_count", roomId });
+  await setPending(userId,{ type:"awaiting_random_count", roomId });
   return;
 }
+
 
 
 // Step 3: Get quantity
 if (pending?.type === "awaiting_random_count") {
-  const count = parseInt(text.trim());
-  if (isNaN(count) || count <= 0) {
-    sendMessage(chatId, "❌ Invalid number. Please enter a positive number.");
-    return;
+  const count = Number(text.trim());
+
+  if (!count || count <= 0) {
+    return sendMessage(chatId,"❌ Invalid number. Enter a positive number.");
   }
 
-  sendMessage(chatId, "⚙️ Should the players be auto? (true / false):");
-  pendingActions.set(userId, { 
-    type: "awaiting_random_auto", 
-    roomId: pending.roomId, 
-    count 
-  });
+  sendMessage(chatId,"⚙️ Auto mode for players? (true / false)");
+  await setPending(userId,{ type:"awaiting_random_auto", roomId: pending.roomId, count });
   return;
 }
 
-// Step 4: Get auto option and add players
-// Step 4: Get auto option and add players
+
 if (pending?.type === "awaiting_random_auto") {
   const auto = text.trim().toLowerCase() === "true";
   const { roomId, count } = pending;
 
   try {
-    const roomRef = ref(rtdb, `rooms/${roomId}`);
-    const roomSnap = await get(roomRef);
+    // Fetch room state again to get fresh cards & players
+    const state = await fetch(getApiUrl(`/api/room-state?roomId=${roomId}`)).then(r=>r.json());
+    const room = state.room;
+    if (!room) return sendMessage(chatId,"Room not found.");
 
-    if (!roomSnap.exists()) {
-      sendMessage(chatId, "❌ Room not found.");
-      pendingActions.delete(userId);
-      return;
+    const cards = room.bingoCards || {};
+
+    // Eligible unclaimed cards
+    const unclaimedCards = Object.entries(cards)
+      .filter(([id,card])=>!card.claimed)
+      .sort(()=>Math.random()-0.5)
+      .slice(0,count);
+
+    if(unclaimedCards.length < count){
+      return sendMessage(chatId,`⚠ Only ${unclaimedCards.length} free cards available.`);
     }
 
-    const room = roomSnap.val();
+    // Fetch users for demo pick
+    const usersSnap = await get(ref(rtdb,"users"));
+    const users = usersSnap.val()||{};
 
-    // ✅ Check game status
-    if (room.gameStatus && room.gameStatus.toLowerCase() === "playing") {
-      sendMessage(chatId, "⚠️ You cannot add players while the game is currently playing.");
-      pendingActions.delete(userId);
-      return;
+    const demoUsers = Object.values(users)
+      .filter(u=>u.telegramId?.startsWith("demo") && (u.balance||0)>=room.betAmount)
+      .sort(()=>Math.random()-0.5)
+      .slice(0,count);
+
+    if(demoUsers.length < count){
+      return sendMessage(chatId,`⚠ Only ${demoUsers.length} demo users available`);
     }
 
-    const betAmount = room.betAmount || 0;
+    for (let i=0;i<count;i++){
+      const user = demoUsers[i];
+      const [cardId] = unclaimedCards[i]; // assign a card
 
-    // ✅ Get bingo cards
-    const cardsSnap = await get(ref(rtdb, `rooms/${roomId}/bingoCards`));
-    if (!cardsSnap.exists()) {
-      sendMessage(chatId, "⚠️ No bingo cards found for this room.");
-      pendingActions.delete(userId);
-      return;
-    }
-    const cards = cardsSnap.val();
-
-    // ✅ Get current players
-    const playersSnap = await get(ref(rtdb, `rooms/${roomId}/players`));
-    const currentPlayers = playersSnap.exists() ? playersSnap.val() : {};
-
-    // ✅ Find existing demo players already in this room
-    const existingDemoPlayers = Object.values(currentPlayers).filter(p =>
-      typeof p.telegramId === "string" && p.telegramId.startsWith("demo")
-    );
-
-    const existingDemoCount = existingDemoPlayers.length;
-    const neededCount = Math.max(0, count - existingDemoCount);
-
-    if (neededCount === 0) {
-      sendMessage(chatId, `✅ There are already ${existingDemoCount} demo players. No new players needed.`);
-      pendingActions.delete(userId);
-      return;
-    }
-
-    // ✅ Filter unclaimed cards (one card per new user)
-    const unclaimedCards = Object.entries(cards).filter(([_, c]) => !c.claimed);
-    if (unclaimedCards.length < neededCount) {
-      sendMessage(chatId, `⚠️ Not enough unclaimed cards (${unclaimedCards.length} available).`);
-      pendingActions.delete(userId);
-      return;
-    }
-    const shuffledCards = unclaimedCards.sort(() => 0.5 - Math.random());
-
-    // ✅ Get all users and filter available demo users (not already in the room)
-    const usersSnap = await get(ref(rtdb, "users"));
-    if (!usersSnap.exists()) {
-      sendMessage(chatId, "❌ No users found in the database.");
-      pendingActions.delete(userId);
-      return;
-    }
-
-    const allUsers = usersSnap.val();
-    const demoUsers = Object.entries(allUsers)
-  .filter(([key, u]) =>
-    key.startsWith("demo") &&
-    !currentPlayers[key] && // not already in the room
-    (u.balance || 0) >= betAmount
-  )
-  .map(([_, u]) => u);
-
-
-    if (demoUsers.length < neededCount) {
-      sendMessage(
-        chatId,
-        `⚠️ Not enough available demo users with sufficient balance. (${demoUsers.length}/${neededCount})`
-      );
-      pendingActions.delete(userId);
-      return;
-    }
-
-    // ✅ Randomly select needed demo users
-    const selectedUsers = demoUsers.sort(() => 0.5 - Math.random()).slice(0, neededCount);
-
-    // ✅ Generate unique usernames (not repeating)
-    const availableNames = [
-      "Abiti213", "Bubu_24", "temesgen2507", "bk52_2000", "blackii",
-      "ዘላለም", "kala11", "አንዱ00", "Teda_xx1", "Abeni_20",
-      "nattii1122", "Jonas_row", "shmew_GG", "Abebe_123", "Sultan_great",
-      "Rene_41", "mativiva", "Debeli_2023", "ሲሳይ_23", "Dereyew49", "Nahomx", "Biruk_101", "Miki_theOne", "KalebKing", "Eyobzz",
-      "Nati_real", "YoniLover", "Beki45", "KiduPro", "Solo_999",
-      "HenokD", "teddy21", "Luelx", "DawitZone", "AbelPrime",
-      "getu44", "KaluMan", "Yafet07", "EyasCool", "miki03",
-      "Tesfu88", "Sami47", "Kida_777", "dagi2025", "TekluW",
-      "EyuXx", "Isra_boy", "Girmz22", "Teshi14", "BiruBoss",
-      "MikiPro", "NahomFire", "jonny_Eth", "hailex", "Meru12",
-      "BekiZero", "YonasXD", "Kal_2025", "SoloETH", "Kidus10"
-    ];
-
-    const usedUsernames = new Set(Object.values(currentPlayers).map(p => p.username));
-    const uniqueNames = availableNames
-      .filter(name => !usedUsernames.has(name))
-      .sort(() => 0.5 - Math.random())
-      .slice(0, neededCount);
-
-    const now = Date.now();
-    const updates = {};
-
-    // ✅ Add new demo players and assign cards
-    for (let i = 0; i < selectedUsers.length; i++) {
-      const user = selectedUsers[i];
-      const username = uniqueNames[i];
-      const [cardId] = shuffledCards[i];
-    
-      // Step 1 – place bet (claims card in redis)
-      const betRes = await fetch(`${getWebappUrl()}/api/place-bet`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      // PLACE BET using YOUR API → stored in Redis automatically
+      const result = await fetch(getApiUrl("/api/place-bet"),{
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({
           roomId,
-          userId: user.telegramId,
-          username
-        }),
-      });
-    
-      const betResult = await betRes.json();
-      if (!betResult.success) {
-        console.error("❌ Failed to place bet for demo:", user.telegramId, betResult);
+          cardId,
+          userId:user.telegramId  // 👈 DEMO PLAYER BET LOGIC FIXED HERE
+        })
+      }).then(r=>r.json());
+
+      if(!result.success){
+        console.log("Bet failed:",user.telegramId, result.message);
         continue;
       }
-    
-      // Step 2 – toggle auto if requested
-      if (auto) {
-        const autoRes = await fetch(`${getWebappUrl()}/api/toggle-auto`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            roomId,
-            cardId,
-            auto: true,  // enable auto
-          }),
+
+      // AUTO MODE
+      if(auto){
+        await fetch(getApiUrl("/api/toggle-auto"),{
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body:JSON.stringify({ roomId, cardId, auto:true })
         });
-    
-        const autoResult = await autoRes.json();
-        if (!autoResult.success) {
-          console.error("❌ Failed to enable auto for card:", cardId);
-        }
-      }
-    }
-    
-    await update(ref(rtdb), updates);
-
-    // ✅ Balance redistribution among demo users
-    const rich = Object.entries(allUsers)
-      .filter(([_, u]) => u.telegramId?.startsWith("demo") && (u.balance || 0) > 50)
-      .map(([id, u]) => ({ id, ...u }))
-      .sort((a, b) => b.balance - a.balance);
-
-    const poor = Object.entries(allUsers)
-      .filter(([_, u]) => u.telegramId?.startsWith("demo") && (u.balance || 0) < 10)
-      .map(([id, u]) => ({ id, ...u }))
-      .sort((a, b) => a.balance - b.balance);
-
-    const balanceUpdates = {};
-    for (const donor of rich) {
-      if (poor.length === 0) break;
-      let donorBalance = donor.balance;
-
-      while (donorBalance > 100 && poor.length > 0) {
-        const receiver = poor[0];
-        const needed = 100 - (receiver.balance || 0);
-        const amountToGive = Math.min(needed, donorBalance - 100);
-
-        receiver.balance += amountToGive;
-        donorBalance -= amountToGive;
-
-        balanceUpdates[`users/${receiver.id}/balance`] = receiver.balance;
-        balanceUpdates[`users/${donor.id}/balance`] = donorBalance;
-
-        if (receiver.balance >= 100) poor.shift();
       }
     }
 
-    if (Object.keys(balanceUpdates).length > 0) {
-      await update(ref(rtdb), balanceUpdates);
-      console.log("💰 Redistributed balances among demo users.");
-    }
+    sendMessage(chatId,`🎉 Added ${count} demo players to room ${roomId}\nAUTO MODE: ${auto}`);
 
-    sendMessage(
-      chatId,
-      `✅ Added ${neededCount} new demo players (auto: ${auto}) to room ${roomId}.\n` +
-      `💰 Demo balances rebalanced successfully.`
-    );
-  } catch (err) {
-    console.error("Error adding random players:", err);
-    sendMessage(chatId, "❌ Failed to add random players. Check logs for details.");
+  } catch(err){
+    console.error(err);
+    sendMessage(chatId,"❌ Error adding demo players");
   }
 
-  pendingActions.delete(userId);
+  await clearPending(userId);
   return;
 }
+
 
 if (text === "/demo") {
   if (!ADMIN_IDS.includes(userId)) {
@@ -1482,41 +1338,7 @@ if (text === "/remove") {
   pendingActions.set(userId, { type: "awaiting_room_remove" });
   return;
 }
-if (text === "/removedemo") {
-  if (!ADMIN_IDS.includes(userId)) {
-    sendMessage(chatId, "❌ You are not authorized to use this command.");
-    return;
-  }
 
-  sendMessage(chatId, "♻️ Resetting balance for all demo users...");
-
-  try {
-    const usersRef = ref(rtdb, "users");
-    const usersSnap = await get(usersRef);
-
-    if (!usersSnap.exists()) {
-      sendMessage(chatId, "⚠️ No users found in database.");
-      return;
-    }
-
-    const users = usersSnap.val();
-
-    // Filter all demo users
-    const demoUserIds = Object.entries(users)
-      .filter(([_, u]) => u.telegramId?.startsWith("demo"))
-      .map(([id]) => id);
-
-    // Reset their balances
-    for (const id of demoUserIds) {
-      await update(ref(rtdb, `users/${id}`), { balance: 0 });
-    }
-
-    sendMessage(chatId, `✅ Reset balance for ${demoUserIds.length} demo users.`);
-  } catch (err) {
-    console.error("❌ Error resetting demo balances:", err);
-    sendMessage(chatId, "❌ An error occurred while resetting demo balances.");
-  }
-}
 
 // Step 2: Handle the room ID input after /reset
 if (pendingActions.has(userId)) {
@@ -1579,85 +1401,210 @@ if (pendingActions.has(userId)) {
   }
   
 }
-
-
-// ====================== /RESET COMMAND ======================
-if (text === "/reset") {
+// ====================== /REMOVEDEMO ======================
+if (text === "/removedemo") {
   if (!ADMIN_IDS.includes(userId)) {
-    sendMessage(chatId, "❌ You are not authorized to use this command.");
-    return;
+    return sendMessage(chatId, "❌ You are not authorized to use this command.");
   }
 
-  sendMessage(chatId, "🔁 Please enter the Room ID to reset:");
-  pendingActions.set(userId, { type: "awaiting_room_reset" });
+  sendMessage(chatId, "🏷 Enter the Room ID to remove demo players from:");
+  await setPending(userId, { type: "awaiting_removedemo_room" });
   return;
 }
 
-// Step 2: Handle room ID input
-if (pending?.type === "awaiting_room_reset") {
+
+// Step 2 — handle room input
+if (pending?.type === "awaiting_removedemo_room") {
   const roomId = text.trim();
-  pendingActions.delete(userId);
 
   try {
-    const roomRef = ref(rtdb, `rooms/${roomId}`);
-    const roomSnap = await get(roomRef);
+    // Fetch state from API instead of RTDB direct
+    const state = await fetch(getApiUrl(`/api/room-state?roomId=${roomId}`)).then(r=>r.json());
 
-    if (!roomSnap.exists()) {
-      sendMessage(chatId, `❌ Room with ID '${roomId}' not found.`);
-      return;
+    if (!state.room) {
+      return sendMessage(chatId, "❌ Room not found. Enter a valid Room ID:");
     }
 
-    const roomData = roomSnap.val();
-    const previousState = roomData.gameStatus || "unknown";
-    const betAmount = parseFloat(roomData.betAmount || 0);
-    const players = Object.values(roomData.players || {});
+    const room = state.room;
 
-    // 🛑 1) Stop number drawing if the room is currently playing
-    
-      try {
-        gameManager.stopNumberDrawing(roomId);
-        console.log(`🛑 Number drawing stopped for room ${roomId} before reset.`);
-      } catch (err) {
-        console.error(`⚠️ Failed to stop number drawing for ${roomId}:`, err);
-      }
-  
-
-    // 💰 2) Refund all players if game was playing
-    if (previousState === "playing" && players.length > 0 && betAmount > 0) {
-      for (const player of players) {
-        if (!player.telegramId) continue;
-
-        const userRef = ref(rtdb, `users/${player.telegramId}`);
-        const userSnap = await get(userRef);
-        if (!userSnap.exists()) continue;
-
-        const userData = userSnap.val();
-        const newBalance = (userData.balance || 0) + betAmount;
-        await update(userRef, { balance: newBalance });
-      }
-
-      sendMessage(
-        chatId,
-        `✅ Room '${roomId}' was in 'playing' state — refunded ${betAmount} birr to each player.`
-      );
+    // check status
+    const status = (room.gameStatus || room.roomStatus || "").toLowerCase();
+    if (status === "playing") {
+      return sendMessage(chatId,"⚠️ Game is currently playing.\nStop the room first before removing demo players.");
     }
 
-    // ♻️ 3) Reset the room state (clear game data)
-    await update(roomRef, {
-      gameStatus: "waiting",
-      countdownEndAt: null,
-      countdownStartedBy: null,
-      drawnNumbers: [],
-      winners: [],
-    });
+    sendMessage(chatId, `♻ Confirm to remove all demo users & reset balances in room *${roomId}*?\n\nReply: **yes** to proceed`);
+    await setPending(userId,{ type:"awaiting_removedemo_confirm", roomId });
+    return;
 
-    sendMessage(chatId, `♻️ Room '${roomId}' has been fully reset to 'waiting' state.`);
-    console.log(`✅ Room '${roomId}' reset complete.`);
   } catch (err) {
-    console.error("❌ Error resetting room:", err);
-    sendMessage(chatId, "❌ Failed to reset room. Check logs for details.");
+    console.error(err);
+    return sendMessage(chatId,"❌ Failed to fetch room state.");
+  }
+}
+
+
+// Step 3 — confirmation & processing
+if (pending?.type === "awaiting_removedemo_confirm") {
+  if (text.trim().toLowerCase() !== "yes") {
+    await clearPending(userId);
+    return sendMessage(chatId,"❌ Operation cancelled.");
   }
 
+  const roomId = pending.roomId;
+
+  sendMessage(chatId,"⏳ Removing demo players & clearing balances...");
+
+  try {
+    // Pull fresh room state
+    const state = await fetch(getApiUrl(`/api/room-state?roomId=${roomId}`)).then(r=>r.json());
+    const room = state.room;
+    const cards = room.bingoCards || {};
+
+    // find demo-owned cards
+    const demoCards = Object.entries(cards)
+      .filter(([_,c])=>String(c.userId).startsWith("demo"));
+
+    // cancel each card bet through Redis API
+    for (const [cardId,card] of demoCards) {
+      await fetch(getApiUrl("/api/cancel-bet"),{
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ roomId, cardId, userId: card.userId })
+      }).catch(()=>{});
+    }
+
+    // Reset demo balances globally using API not Firebase
+    const usersSnap = await get(ref(rtdb,"users"));
+    if(usersSnap.exists()){
+      const users = usersSnap.val();
+      const demoUsers = Object.values(users)
+        .filter(u=>u.telegramId?.startsWith("demo"));
+
+      for (const u of demoUsers) {
+        await fetch(getApiUrl("/api/update-user"),{
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body:JSON.stringify({ telegramId:u.telegramId, balance:0 })
+        }).catch(()=>{});
+      }
+    }
+
+    sendMessage(chatId,`✅ Removed ${demoCards.length} demo bets & reset balances in room ${roomId}.`);
+
+  } catch(err) {
+    console.error(err);
+    sendMessage(chatId,"❌ Failed removing demo players.");
+  }
+
+  await clearPending(userId);
+  return;
+}
+
+
+// ====================== /RESET COMMAND ======================
+// ====================== /RESET ======================
+if (text === "/reset") {
+  if (!ADMIN_IDS.includes(userId)) {
+    return sendMessage(chatId,"❌ You are not authorized.");
+  }
+
+  sendMessage(chatId,"🌀 Enter Room ID to reset:");
+  await setPending(userId,{ type:"awaiting_room_reset" });
+  return;
+}
+
+
+// Step 2 — Handle Room ID
+if (pending?.type === "awaiting_room_reset") {
+  const roomId = text.trim();
+
+  try {
+    // fetch via redis-backed API
+    const state = await fetch(getApiUrl(`/api/room-state?roomId=${roomId}`)).then(r=>r.json());
+    if (!state.room) return sendMessage(chatId,"❌ Room not found.");
+
+    const room = state.room;
+    const status = (room.gameStatus || room.roomStatus || "").toLowerCase();
+    const betAmount = Number(room.betAmount || 0);
+
+    sendMessage(chatId,
+      `🔁 Reset room *${roomId}*\n`+
+      `Status: ${status}\n\nReply **yes** to confirm`
+    );
+
+    await setPending(userId,{ type:"awaiting_room_reset_confirm", roomId, status, betAmount });
+    return;
+
+  } catch(err){
+    console.error(err);
+    return sendMessage(chatId,"❌ Error reading room state.");
+  }
+}
+
+
+// Step 3 — Confirm Reset
+if (pending?.type === "awaiting_room_reset_confirm") {
+  if (text.trim().toLowerCase() !== "yes") {
+    await clearPending(userId);
+    return sendMessage(chatId,"❌ Reset cancelled.");
+  }
+
+  const { roomId, status, betAmount } = pending;
+
+  sendMessage(chatId,"⏳ Resetting room...");
+
+  try {
+    // stop drawing if active
+    if (status === "playing"){
+      try {
+        gameManager.stopNumberDrawing(roomId);
+      } catch(e){
+        console.log("⚠ failed to stop drawing",e);
+      }
+    }
+
+    // refund if required
+    if (status==="playing" && betAmount>0){
+      const state = await fetch(getApiUrl(`/api/room-state?roomId=${roomId}`)).then(r=>r.json());
+      const players = Object.values(state.room.players||{});
+
+      for(const p of players){
+        if(!p.userId) continue;
+
+        await fetch(getApiUrl("/api/update-user"),{
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body:JSON.stringify({
+            telegramId:p.userId,
+            balanceIncrease:betAmount  // auto refund Redis-side
+          })
+        }).catch(()=>{});
+      }
+
+      sendMessage(chatId,`💰 Refunded ${betAmount} to ${players.length} players.`);
+    }
+
+    // RESET ROOM USING REDIS HELPER
+    await redis.set(`room:${roomId}`, JSON.stringify({
+      ...room,
+      gameStatus:"waiting",
+      countdownEndAt:null,
+      countdownStartedBy:null,
+      drawnNumbers:[],
+      winners:[]
+    }));
+
+    await redis.expire(`room:${roomId}`, 60*60); // optional TTL
+
+    sendMessage(chatId,`♻ Room *${roomId}* has been reset to waiting state.`);
+    
+  } catch(err){
+    console.error(err);
+    sendMessage(chatId,"❌ Reset failed.");
+  }
+
+  await clearPending(userId);
   return;
 }
 
@@ -1719,85 +1666,6 @@ if (pending?.type === "awaiting_room_restart") {
   return;
 }
 // 🧩 /stopdemo Command
-if (text === "/stopdemo") {
-  if (!ADMIN_IDS.includes(userId)) {
-    sendMessage(chatId, "❌ You are not authorized to use this command.");
-    return;
-  }
-
-  sendMessage(chatId, "🛑 Enter the Room ID where demo players should be removed:");
-  pendingActions.set(userId, { type: "awaiting_stopdemo_room" });
-  return;
-}
-
-// Step 2: Handle room ID input
-if (pending?.type === "awaiting_stopdemo_room") {
-  const roomId = text.trim();
-
-  try {
-    const roomRef = ref(rtdb, `rooms/${roomId}`);
-    const roomSnap = await get(roomRef);
-
-    if (!roomSnap.exists()) {
-      sendMessage(chatId, "❌ Room not found.");
-      pendingActions.delete(userId);
-      return;
-    }
-
-    const room = roomSnap.val();
-
-    // ✅ Ensure room is not currently playing
-    if (room.gameStatus && room.gameStatus.toLowerCase() === "playing") {
-      sendMessage(chatId, "⚠️ You cannot remove demo players while the game is playing.");
-      pendingActions.delete(userId);
-      return;
-    }
-
-    const playersSnap = await get(ref(rtdb, `rooms/${roomId}/players`));
-    if (!playersSnap.exists()) {
-      sendMessage(chatId, "⚠️ No players found in this room.");
-      pendingActions.delete(userId);
-      return;
-    }
-
-    const players = playersSnap.val();
-    const cardsSnap = await get(ref(rtdb, `rooms/${roomId}/bingoCards`));
-    const cards = cardsSnap.exists() ? cardsSnap.val() : {};
-
-    const updates = {};
-    let removedCount = 0;
-
-    for (const [telegramId, player] of Object.entries(players)) {
-      if (telegramId.startsWith("demo")) {
-        removedCount++;
-
-        // Unclaim their card
-        if (player.cardId && cards[player.cardId]) {
-          updates[`rooms/${roomId}/bingoCards/${player.cardId}/claimed`] = false;
-          updates[`rooms/${roomId}/bingoCards/${player.cardId}/claimedBy`] = null;
-          updates[`rooms/${roomId}/bingoCards/${player.cardId}/auto`] = null;
-          updates[`rooms/${roomId}/bingoCards/${player.cardId}/autoUntil`] = null;
-        }
-
-        // Remove demo player
-        updates[`rooms/${roomId}/players/${telegramId}`] = null;
-      }
-    }
-
-    if (removedCount > 0) {
-      await update(ref(rtdb), updates);
-      sendMessage(chatId, `✅ Removed ${removedCount} demo players from room ${roomId}.`);
-    } else {
-      sendMessage(chatId, `ℹ️ No demo players found in room ${roomId}.`);
-    }
-  } catch (err) {
-    console.error("❌ Error while removing demo players:", err);
-    sendMessage(chatId, "❌ Failed to remove demo players. Check logs for details.");
-  }
-
-  pendingActions.delete(userId);
-  return;
-}
 
 if (text === "/transaction") {
   if (!ADMIN_IDS.includes(userId)) {

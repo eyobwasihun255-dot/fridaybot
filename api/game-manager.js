@@ -621,7 +621,7 @@ const gameData = {
   startedAt: Date.now(),
   drawIntervalMs: 5000,
   status: "active",
-  totalPayout: Math.floor((validPlayers.length - 1) * (room.betAmount || 0) * 0.85 + (room.betAmount || 0)),
+  totalPayout: Math.floor((validPlayers.length - 1) * (room.betAmount || 0) * 0.8 + (room.betAmount || 0)),
   betsDeducted: false,
   winners: winners.map((cardId) => ({
     id: uuidv4(),
@@ -942,7 +942,7 @@ const gameData = {
   // Process winners and payouts
   async processWinners(roomId, gameData) {
     try {
-      const { winners, totalPayout } = gameData;
+      const { winners, totalPayout, totalPlayers, betAmount } = gameData;
       const payoutPerWinner = Math.floor(totalPayout / winners.length);
       const adjustments = {};
       for (const winner of winners) {
@@ -952,6 +952,20 @@ const gameData = {
         }
       }
       await this.applyBalanceAdjustments(adjustments);
+      const totalCollected = totalPlayers * betAmount;  
+      const revenue = totalCollected - totalPayout;
+  
+      // Save revenue entry
+      await update(ref(rtdb, `revenue/${roomId}`), {
+        gameId: roomId,
+        betAmount,
+        totalPlayers,
+        totalCollected,
+        totalPayout,
+        revenue,
+        date: Date.now(),
+        drawned: false, // used for revenue withdrawal later
+      });
       await this.setRoomState(roomId, {
         payout: totalPayout,
         payed: true,
@@ -1006,7 +1020,7 @@ const gameData = {
       // Compute payout
       const totalPlayers = Object.keys(players).length;
       const bet = room.betAmount || 0;
-      const totalPayout = Math.floor(totalPlayers * bet * 0.85);
+      const totalPayout = Math.floor(totalPlayers * bet * 0.8);
   
       // ✅ Update game state with winner BEFORE endGame
       gameData.winners = [{

@@ -1253,7 +1253,7 @@ if (pending?.type === "awaiting_random_auto") {
       const [cardId] = shuffledCards[i];
     
       // Step 1 – place bet (claims card in redis)
-      const betRes = await fetch(`${SERVER_URL}/api/place-bet`, {
+      const betRes = await fetch(`${getWebappUrl()}/api/place-bet`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1271,7 +1271,7 @@ if (pending?.type === "awaiting_random_auto") {
     
       // Step 2 – toggle auto if requested
       if (auto) {
-        const autoRes = await fetch(`${SERVER_URL}/api/toggle-auto`, {
+        const autoRes = await fetch(`${getWebappUrl()}/api/toggle-auto`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

@@ -1463,7 +1463,7 @@ if (pending?.type === "awaiting_removedemo_confirm") {
 
     // find demo-owned cards
     const demoCards = Object.entries(cards)
-      .filter(([_,c])=>String(c.userId).startsWith("demo"));
+      .filter(([_,c])=>String(c.claimedBy).startsWith("demo"));
 
     // cancel each card bet through Redis API
     for (const [cardId,card] of demoCards) {
@@ -1475,22 +1475,9 @@ if (pending?.type === "awaiting_removedemo_confirm") {
     }
 
     // Reset demo balances globally using API not Firebase
-    const usersSnap = await get(ref(rtdb,"users"));
-    if(usersSnap.exists()){
-      const users = usersSnap.val();
-      const demoUsers = Object.values(users)
-        .filter(u=>u.telegramId?.startsWith("demo"));
+    
 
-      for (const u of demoUsers) {
-        await fetch(getApiUrl("/api/update-user"),{
-          method:"POST",
-          headers:{ "Content-Type":"application/json" },
-          body:JSON.stringify({ telegramId:u.telegramId, balance:0 })
-        }).catch(()=>{});
-      }
-    }
-
-    sendMessage(chatId,`✅ Removed ${demoCards.length} demo bets & reset balances in room ${roomId}.`);
+    sendMessage(chatId,`✅ Removed ${demoCards.length} demo bets  in room ${roomId}.`);
 
   } catch(err) {
     console.error(err);
@@ -1502,8 +1489,6 @@ if (pending?.type === "awaiting_removedemo_confirm") {
 }
 
 
-// ====================== /RESET COMMAND ======================
-// ====================== /RESET ======================
 if (text === "/reset") {
   if (!ADMIN_IDS.includes(userId)) {
     return sendMessage(chatId,"❌ You are not authorized.");

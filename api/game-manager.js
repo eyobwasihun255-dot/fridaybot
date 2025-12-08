@@ -482,7 +482,7 @@ class GameManager {
       if (!reshuffleResult.done) {
         console.log(`ℹ️ Demo reshuffle for ${roomId} did not complete:`, reshuffleResult.reason || reshuffleResult);
       }
-
+      console.log(`🔄 Reshuffle result for ${roomId}:`, reshuffleResult);
       // --- Return countdown info ---
       return { success: true, countdownEndAt };
     } catch (err) {
@@ -775,73 +775,7 @@ const gameData = {
   // Stop number drawing
 
   // 🧮 Collect demo balances and distribute to real players before reset
-  async distributeDemoBalances(roomId) {
-    try {
-      const usersRef = ref(rtdb, "users");
-      const usersSnap = await get(usersRef);
-      if (!usersSnap.exists()) {
-        console.log("⚠️ No users found in database");
-        return;
-      }
-
-      const users = usersSnap.val();
-
-      // 🎯 1️⃣ Collect all global demo users with balance > 100
-      const demoUsers = Object.entries(users)
-        .filter(([_, u]) => u.telegramId?.startsWith("demo") && (u.balance || 0) > 50)
-        .map(([id, u]) => ({ id, balance: u.balance || 0 }));
-
-      if (demoUsers.length === 0) {
-        console.log("⚠️ No demo users with balance > 100 found globally");
-        return;
-      }
-
-      // 💰 2️⃣ Total up all demo balances
-      const total = demoUsers.reduce((sum, u) => sum + u.balance, 0);
-
-      // 🧹 3️⃣ Reset their balances to zero
-      const zeroAdjustments = {};
-      demoUsers.forEach((demo) => {
-        zeroAdjustments[demo.id] = -demo.balance;
-      });
-      await this.applyBalanceAdjustments(zeroAdjustments);
-
-      console.log(`♻️ Collected total demo pool: ${total} from ${demoUsers.length} demo users`);
-
-      // 👥 4️⃣ Get all players in this room
-      const roomPlayers = await this.getRoomPlayers(roomId);
-      if (!roomPlayers || Object.keys(roomPlayers).length === 0) {
-        console.log("⚠️ No players in room");
-        return;
-      }
-
-      // 🎯 5️⃣ Filter only demo players currently in the room
-      const demoPlayersInRoom = Object.entries(roomPlayers)
-        .filter(([pid, p]) => p.telegramId?.startsWith("demo"))
-        .map(([pid]) => pid);
-
-      if (demoPlayersInRoom.length === 0) {
-        console.log("⚠️ No demo players found in this room to distribute to");
-        return;
-      }
-
-      // 💸 6️⃣ Divide total equally among demo players in this room
-      const perPlayer = Math.floor(total / demoPlayersInRoom.length);
-
-      const payouts = {};
-      for (const pid of demoPlayersInRoom) {
-        payouts[pid] = perPlayer;
-      }
-      await this.applyBalanceAdjustments(payouts);
-
-      console.log(
-        `💰 Distributed total ${total} equally (${perPlayer} each) among ${demoPlayersInRoom.length} demo players in room ${roomId}`
-      );
-
-    } catch (err) {
-      console.error("❌ Error in distributeDemoBalances:", err);
-    }
-  }
+  
 
 
 
@@ -853,7 +787,6 @@ const gameData = {
     try {
       // Stop drawing numbers and cleanup
       this.stopNumberDrawing(roomId);
-      await this.distributeDemoBalances(roomId);
 
       // Clear countdown timer if active
       if (this.countdownTimers.has(roomId)) {

@@ -963,6 +963,7 @@ const gameData = {
         datetime: Date.now(),
         drawned: false, // used for revenue withdrawal later
       });
+      console.log(`💰 Saved revenue entry for game ${gameId}: ${revenue}`);
       await this.setRoomState(roomId, {
         payout: totalPayout,
         payed: true,

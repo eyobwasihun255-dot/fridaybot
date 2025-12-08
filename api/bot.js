@@ -3,7 +3,7 @@ import { rtdb } from "../bot/firebaseConfig.js";
 import fetch from "node-fetch";
 import { gameManager } from "./game-manager.js";
 import redis from "./redisClient.js";
-import {getApiUrl} from "./api";
+import {getApiUrl} from "./api.js";
 const ADMIN_PASSCODE = "19991999"; // Ideally move to process.env.ADMIN_PASSCODE
 
 // Helper function to get webapp URL (defaults to localhost for development)

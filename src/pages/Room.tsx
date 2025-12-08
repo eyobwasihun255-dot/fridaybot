@@ -556,7 +556,7 @@ const Room: React.FC = () => {
         {t('payout')}: {
   Math.max(
     0,
-    ((Object.keys(currentRoom.players || {}).length || 0) * currentRoom.betAmount * 0.85)
+    ((Object.keys(currentRoom.players || {}).length || 0) * currentRoom.betAmount * 0.8)
   )
 }
 

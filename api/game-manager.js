@@ -942,7 +942,7 @@ const gameData = {
   // Process winners and payouts
   async processWinners(roomId, gameData) {
     try {
-      const { winners, totalPayout, totalPlayers, betAmount } = gameData;
+      const { winners, totalPayout, totalPlayers, betAmount , gameId } = gameData;
       const payoutPerWinner = Math.floor(totalPayout / winners.length);
       const adjustments = {};
       for (const winner of winners) {
@@ -956,14 +956,11 @@ const gameData = {
       const revenue = totalCollected - totalPayout;
   
       // Save revenue entry
-      await update(ref(rtdb, `revenue/${roomId}`), {
-        gameId: roomId,
-        betAmount,
-        totalPlayers,
-        totalCollected,
-        totalPayout,
-        revenue,
-        date: Date.now(),
+      await update(ref(rtdb, `revenue/${gameId}`), {
+        gameId: gameId,
+        roomId: roomId,
+        amount: revenue,
+        datetime: Date.now(),
         drawned: false, // used for revenue withdrawal later
       });
       await this.setRoomState(roomId, {

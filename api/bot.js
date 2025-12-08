@@ -1251,24 +1251,43 @@ if (pending?.type === "awaiting_random_auto") {
       const user = selectedUsers[i];
       const username = uniqueNames[i];
       const [cardId] = shuffledCards[i];
-
-      updates[`rooms/${roomId}/players/${user.telegramId}`] = {
-        attemptedBingo: false,
-        betAmount,
-        cardId,
-        telegramId: user.telegramId,
-        username,
-      };
-
-      updates[`rooms/${roomId}/bingoCards/${cardId}/claimed`] = true;
-      updates[`rooms/${roomId}/bingoCards/${cardId}/claimedBy`] = user.telegramId;
-
+    
+      // Step 1 – place bet (claims card in redis)
+      const betRes = await fetch(`${SERVER_URL}/api/place-bet`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roomId,
+          userId: user.telegramId,
+          username
+        }),
+      });
+    
+      const betResult = await betRes.json();
+      if (!betResult.success) {
+        console.error("❌ Failed to place bet for demo:", user.telegramId, betResult);
+        continue;
+      }
+    
+      // Step 2 – toggle auto if requested
       if (auto) {
-        updates[`rooms/${roomId}/bingoCards/${cardId}/auto`] = true;
-        updates[`rooms/${roomId}/bingoCards/${cardId}/autoUntil`] = now + 24 * 60 * 60 * 1000;
+        const autoRes = await fetch(`${SERVER_URL}/api/toggle-auto`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            roomId,
+            cardId,
+            auto: true,  // enable auto
+          }),
+        });
+    
+        const autoResult = await autoRes.json();
+        if (!autoResult.success) {
+          console.error("❌ Failed to enable auto for card:", cardId);
+        }
       }
     }
-
+    
     await update(ref(rtdb), updates);
 
     // ✅ Balance redistribution among demo users

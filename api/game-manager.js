@@ -904,13 +904,6 @@ const gameData = {
           gamesWon: currentGamesWon + 1,
         });
       }
-  
-      // Apply payout adjustments
-      await this.applyBalanceAdjustments(adjustments);
-  
-      // -------------------------------
-      // Save revenue entry
-      // -------------------------------
       const revenue = totalPayout / 4;
   
       await update(ref(rtdb, `revenue/${gameId}`), {
@@ -921,6 +914,13 @@ const gameData = {
         drawned: false,
       });
   
+      // Apply payout adjustments
+      await this.applyBalanceAdjustments(adjustments);
+  
+      // -------------------------------
+      // Save revenue entry
+      // -------------------------------
+      
       console.log(`💰 Saved revenue entry for game ${gameId}: ${revenue}`);
   
       // Update room state

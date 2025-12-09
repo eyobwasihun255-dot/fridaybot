@@ -414,7 +414,7 @@ const Room: React.FC = () => {
         )}
   
         {/* 🎴 Cards Grid */}
-        <div className="w-full max-w-3xl overflow-y-auto max-h-[50vh] mb-6 rounded-lg border border-white/10 p-3 bg-black/20">
+        <div className="w-full max-w-3xl overflow-y-auto max-h-[80vh] mb-6 rounded-lg border border-white/10 p-3 bg-black/20">
           <div className="grid grid-cols-10 gap-2 justify-items-center">
   
             {paginatedCards.map((card) => {

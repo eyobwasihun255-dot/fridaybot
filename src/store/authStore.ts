@@ -7,6 +7,7 @@ export interface User {
   telegramId: string;
   username: string;
   balance: number;
+  referral :boolean;
   gamesPlayed: number;
   gamesWon: number;
   totalWinnings: number;

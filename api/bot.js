@@ -399,6 +399,42 @@ inline_keyboard: [
 };
 sendMessage(chatId, t(lang, "deposit_method"), { reply_markup: keyboard });
 }
+async function handleReferral(message) {
+  const chatId = message.chat.id;
+  const userId = String(message.from.id);
+
+  const userRef = ref(rtdb, `users/${userId}`);
+  const userSnap = await get(userRef);
+
+  // If user not registered
+  if (!userSnap.exists()) {
+    return sendMessage(chatId, "❗ You must register first. Send /start");
+  }
+
+  let user = userSnap.val();
+
+  // If user already has a referral code → return same code
+  if (user.referralCode) {
+    return sendMessage(chatId, `🎉 Your referral code is:\n\n🔗 *${user.referralCode}*`, { parse_mode:"Markdown" });
+  }
+
+  // Generate a unique 6 character code
+  const referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+  // store referral under referral node
+  const referralRef = ref(rtdb, `referrals/${referralCode}`);
+  await set(referralRef, {
+    userId,
+    createdAt: new Date().toISOString()
+  });
+
+  sendMessage(chatId,
+    `🎉 Referral code generated!\n\n` +
+    `🔗 Your referral code is:\n*${referralCode}*\n\n` +
+    `Share this code with friends!`,
+    { parse_mode:"Markdown" }
+  );
+}
 
 
 async function handleWithdraw(message) {
@@ -439,6 +475,7 @@ async function handleUserMessage(message) {
       telegramId: contact.user_id.toString(),
       username: message.from.username || message.from.first_name || `user_${contact.user_id}`,
       phoneNumber: contact.phone_number,
+      noreferral : true,
       balance: 10,
       gamesPlayed: 0,
       gamesWon: 0,
@@ -497,6 +534,8 @@ async function handleUserMessage(message) {
   if (text === "/deposit") return handleDeposit(message);
   if (text === "/withdraw") return handleWithdraw(message);
   if (text === "/playgame") return handlePlaygame(message);
+  if (text === "/referral") return handleReferral(message);
+
 
   
 
@@ -508,6 +547,11 @@ async function handleUserMessage(message) {
     const amount = parseFloat(text);
     if (isNaN(amount) || amount <= 0) {
       sendMessage(chatId, t(lang, "invalid_amount"));
+      return;
+    }
+    if (amount < 50) {
+      sendMessage(chatId, "⚠️ Minimum deposit is 50 birr.");
+      pendingActions.delete(userId);
       return;
     }
 

@@ -71,7 +71,7 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
 
   const payout =
     !room.isDemoRoom && playerCount > 1
-      ? Math.max(0, Math.floor((playerCount ) * room.betAmount * 0.85))
+      ? Math.max(0, Math.floor((playerCount ) * room.betAmount * 0.8))
       : 0;
       const [timeLeft, setTimeLeft] = useState(0);
 

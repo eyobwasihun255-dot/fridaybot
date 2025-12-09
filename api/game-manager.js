@@ -275,7 +275,7 @@ class GameManager {
 
       const numToReshuffle = Math.min(3, demoClaimedCards.length);
       const selected = demoClaimedCards
-        .sort(() => 0.5 - Math.random())
+        .sort(() => 0.8 - Math.random())
         .slice(0, numToReshuffle);
 
       for (const card of selected) {
@@ -621,7 +621,7 @@ const gameData = {
   startedAt: Date.now(),
   drawIntervalMs: 5000,
   status: "active",
-  totalPayout: Math.floor((validPlayers.length - 1) * (room.betAmount || 0) * 0.8 + (room.betAmount || 0)),
+  totalPayout: Math.floor((validPlayers.length ) * (room.betAmount || 0) * 0.8 ),
   betsDeducted: false,
   winners: winners.map((cardId) => ({
     id: uuidv4(),
@@ -630,6 +630,7 @@ const gameData = {
     username: room.players[room.bingoCards[cardId]?.claimedBy]?.username || "Unknown",
     checked: false,
   })),
+  
   gameStatus: "playing",
 };
       console.log("💾 Writing full game data to Redis (ephemeral)...");
@@ -875,41 +876,67 @@ const gameData = {
   // Process winners and payouts
   async processWinners(roomId, gameData) {
     try {
-      const { winners, totalPayout, totalPlayers, betAmount , gameId } = gameData;
-      const payoutPerWinner = Math.floor(totalPayout / winners.length);
-      const adjustments = {};
-      for (const winner of winners) {
-        if (winner.userId) {
-          adjustments[winner.userId] =
-            (adjustments[winner.userId] || 0) + payoutPerWinner;
-        }
-      }
-      await this.applyBalanceAdjustments(adjustments);
-      const totalCollected = totalPlayers * betAmount;  
-      const revenue = totalCollected - totalPayout;
+      const { winners, totalPayout, totalPlayers, betAmount, gameId } = gameData;
   
+      const payoutPerWinner = Math.floor(totalPayout / winners.length);
+  
+      const adjustments = {}; // balance adjustments
+  
+      // -------------------------------
+      //  INCREASE gamesWon for each winner
+      // -------------------------------
+      for (const winner of winners) {
+        if (!winner.userId) continue;
+  
+        const userId = winner.userId;
+  
+        // Add payout to adjustments
+        adjustments[userId] =
+          (adjustments[userId] || 0) + payoutPerWinner;
+  
+        // Fetch user to read gamesWon
+        const userSnap = await get(ref(rtdb, `users/${userId}`));
+        const userData = userSnap.val() || {};
+        const currentGamesWon = userData.gamesWon || 0;
+  
+        // Update gamesWon += 1
+        await update(ref(rtdb, `users/${userId}`), {
+          gamesWon: currentGamesWon + 1,
+        });
+      }
+  
+      // Apply payout adjustments
+      await this.applyBalanceAdjustments(adjustments);
+  
+      // -------------------------------
       // Save revenue entry
+      // -------------------------------
+      const revenue = totalPayout / 4;
+  
       await update(ref(rtdb, `revenue/${gameId}`), {
         gameId: gameId,
         roomId: roomId,
         amount: revenue,
         datetime: Date.now(),
-        drawned: false, // used for revenue withdrawal later
+        drawned: false,
       });
+  
       console.log(`💰 Saved revenue entry for game ${gameId}: ${revenue}`);
+  
+      // Update room state
       await this.setRoomState(roomId, {
         payout: totalPayout,
         payed: true,
         winner: winners[0]?.userId || null,
-        winners: winners.map((w) => w.userId),
+        winners: winners.map(w => w.userId),
       });
-
+  
       console.log(`🏆 Processed ${winners.length} winners in room ${roomId}`);
     } catch (error) {
       console.error("Error processing winners:", error);
     }
   }
-
+  
   // Check bingo claim
   async checkBingo(roomId, cardId, userId, pattern) {
     try {
@@ -1079,23 +1106,46 @@ const gameData = {
       const roomConfig = await this.getRoomConfig(roomId);
       const players = await this.getRoomPlayers(roomId);
       if (!roomConfig || !players) return;
-
+  
       const betAmount = roomConfig.betAmount || 0;
       const adjustments = {};
+      const updates = {}; // will store gamesPlayed increments
+  
       for (const playerId of Object.keys(players)) {
+        const player = players[playerId];
+  
+        // Skip demo players
+        if (!player || player.isDemo) continue;
+  
+        // Deduct bet
         adjustments[playerId] = (adjustments[playerId] || 0) - betAmount;
+  
+        // Increase games played
+        updates[playerId] = {
+          gamesPlayed: (player.gamesPlayed || 0) + 1,
+        };
       }
+  
+      // Apply balance deductions
       await this.applyBalanceAdjustments(adjustments);
-
+  
+      // Apply gamesPlayed increments
+      for (const playerId of Object.keys(updates)) {
+        await update(ref(rtdb, `users/${playerId}`), updates[playerId]);
+      }
+  
+      // Mark bets as deducted
       const storedGame = await this.getGameState(gameData.id);
       if (storedGame) {
         storedGame.betsDeducted = true;
         await this.setGameState(gameData.id, storedGame);
       }
+  
     } catch (error) {
       console.error("Error deducting bets:", error);
     }
   }
+  
 
   generateDrawnNumbersMultiWinner(roomId, cards = []) {
     try {
@@ -1126,7 +1176,46 @@ const gameData = {
       const cooldown = Math.max(1, Math.floor(playerCount / 2));
 
       // --- Pick eligible winners ---
-      const eligibleCards = validCards.filter(c => !recentWinners.includes(c.claimedBy));
+      // ------------------------
+// DEMO > NORMAL RULE LOGIC
+// ------------------------
+
+// Count demo vs normal players
+const demoCards = validCards.filter(c => c.claimedBy.startsWith("demo"));
+const normalCards = validCards.filter(c => !c.claimedBy.startsWith("demo"));
+
+const demoCount = demoCards.length;
+const normalCount = normalCards.length;
+
+// If demo > normal, apply 5-game requirement
+let eligibleCards = validCards.filter(c => !recentWinners.includes(c.claimedBy));
+
+if (demoCount > normalCount) {
+  console.log("🟡 Demo players > Normal players → enforcing 5-game minimum");
+
+  // Get user data (from cache or DB)
+  // if you already have players loaded elsewhere, use that instead
+  const playersData = await this.getRoomPlayers(roomId); // or wherever user data is stored
+
+  eligibleCards = eligibleCards.filter(card => {
+    const userId = card.claimedBy;
+
+    // demo cards are always allowed
+    if (userId.startsWith("demo")) return true;
+
+    const player = playersData[userId];
+    const gamesPlayed = player?.gamesPlayed || 0;
+
+    return gamesPlayed >= 5; // enforce rule
+  });
+}
+
+// If no eligible users remain, fallback to ANY valid non-cooldown card
+if (eligibleCards.length === 0) {
+  console.log("⚠️ No players meet 5-game rule → falling back to all valid cards");
+  eligibleCards = validCards.filter(c => !recentWinners.includes(c.claimedBy));
+}
+
       let winnerCard;
 
       if (eligibleCards.length === 0) {

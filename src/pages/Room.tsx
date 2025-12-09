@@ -35,7 +35,8 @@ const Room: React.FC = () => {
         String(card.claimedBy) === String(user?.telegramId)
     );
   }, [bingoCards, user?.telegramId]);
-  
+  const [cardPage, setCardPage] = useState(0);
+
   const displayedCard = selectedCard || userCard;
   const cardNumbers = userCard?.numbers ?? [];
   const [hasBet, setHasBet] = useState(false);
@@ -363,8 +364,10 @@ const Room: React.FC = () => {
       </div>
     );
   };
-  const CardSelectionGrid = () => {
+  const CardSelectionGrid = ({ page, setPage }) => {
 
+    const CARDS_PER_PAGE = 100;
+  
     const handleSelectCard = (cardId: string) => {
       if (!bingoCards.find((c) => c.id === cardId)?.claimed) {
         selectCard(cardId);
@@ -382,9 +385,17 @@ const Room: React.FC = () => {
       (a, b) => (a.serialNumber ?? 0) - (b.serialNumber ?? 0)
     );
   
+    // 🎯 Pagination
+    const totalPages = Math.ceil(sortedCards.length / CARDS_PER_PAGE);
+    const paginatedCards = sortedCards.slice(
+      page * CARDS_PER_PAGE,
+      (page + 1) * CARDS_PER_PAGE
+    );
+  
     return (
       <div className="flex flex-col items-center min-h-screen text-white p-4">
-        {/* 🏠 Home Button */}
+  
+        {/* 🏠 Home button */}
         <button
           onClick={() => navigate("/")}
           className="fixed top-3 left-3 bg-gradient-to-r from-red-500 to-pink-500 px-4 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition z-50"
@@ -392,7 +403,7 @@ const Room: React.FC = () => {
           {t("home")}
         </button>
   
-        {/* 🕒 Time Remaining */}
+        {/* Timer */}
         {currentRoom?.gameStatus === "countdown" && (
           <div className="mt-10 mb-4 text-center">
             <h2 className="text-2xl font-bold mb-1">{t("select_card")}</h2>
@@ -402,10 +413,11 @@ const Room: React.FC = () => {
           </div>
         )}
   
-        {/* 🎴 Scrollable Grid of Cards */}
+        {/* 🎴 Cards Grid */}
         <div className="w-full max-w-3xl overflow-y-auto max-h-[50vh] mb-6 rounded-lg border border-white/10 p-3 bg-black/20">
           <div className="grid grid-cols-10 gap-2 justify-items-center">
-            {sortedCards.slice(0, 300).map((card) => {
+  
+            {paginatedCards.map((card) => {
               const isClaimed = card.claimed;
               const isMine = card.claimedBy === user?.telegramId;
               const isSelected = selectedCard?.id === card.id;
@@ -426,19 +438,41 @@ const Room: React.FC = () => {
               return (
                 <div
                   key={card.id}
-                  onClick={() => {
-                    if (!card.claimed) handleSelectCard(card.id);
-                  }}
+                  onClick={() => !card.claimed && handleSelectCard(card.id)}
                   className={`w-8 h-8 flex items-center justify-center rounded-lg font-bold cursor-pointer transition-transform duration-150 transform hover:scale-105 text-xs ${colorClass}`}
                 >
                   {card.serialNumber}
                 </div>
               );
             })}
+  
           </div>
         </div>
   
-        {/* 🟩 Selected Card Preview (shown below grid) */}
+        {/* 🔄 Pagination Controls */}
+        <div className="flex items-center gap-4 mb-4">
+          <button
+            disabled={page === 0}
+            onClick={() => setPage((p) => p - 1)}
+            className="px-4 py-2 rounded bg-theme-primary disabled:opacity-40"
+          >
+            {t("previous")}
+          </button>
+  
+          <span className="font-bold text-sm">
+            {t("page")} {page + 1} / {totalPages}
+          </span>
+  
+          <button
+            disabled={page >= totalPages - 1}
+            onClick={() => setPage((p) => p + 1)}
+            className="px-4 py-2 rounded bg-theme-green disabled:opacity-40"
+          >
+            {t("next")}
+          </button>
+        </div>
+  
+        {/* Selected card preview */}
         {displayedCard && (
           <div className="mb-6 p-3 bg-white/10 rounded-lg shadow-inner flex flex-col items-center w-full max-w-[180px]">
             <div className="text-xs mb-2 font-semibold text-theme-light">
@@ -459,7 +493,7 @@ const Room: React.FC = () => {
           </div>
         )}
   
-        {/* 🎯 Place Bet Button */}
+        {/* Bet button */}
         <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
           <button
             onClick={isBetActive ? handleCancelBet : handlePlaceBet}
@@ -468,6 +502,7 @@ const Room: React.FC = () => {
             {t("place_bet")} card:{displayedCard?.serialNumber ?? 0}
           </button>
         </div>
+  
       </div>
     );
   };
@@ -477,8 +512,9 @@ const Room: React.FC = () => {
   
   
   if (["waiting", "countdown"].includes(currentRoom?.gameStatus) && !userCard) {
-    return <CardSelectionGrid />;
+    return <CardSelectionGrid page={cardPage} setPage={setCardPage} />;
   }
+  
   
   const handleBingoClick = async () => {
     if (currentRoom?.gameStatus !== "playing") {

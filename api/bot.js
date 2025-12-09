@@ -1470,7 +1470,7 @@ if (pending?.type === "awaiting_removedemo_confirm") {
       await fetch(getApiUrl("/api/cancel-bet"),{
         method:"POST",
         headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ roomId, cardId, userId: card.userId })
+        body:JSON.stringify({ roomId, cardId, userId: card.claimedBy })
       }).catch(()=>{});
     }
 

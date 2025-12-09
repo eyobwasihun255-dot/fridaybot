@@ -107,7 +107,7 @@ const Landing: React.FC = () => {
       {/* ------------------------------------------ */}
       {/* REFERRAL INPUT FIELD */}
       {/* ------------------------------------------ */}
-      {user?.referral === true && (
+      {user?.noreferral === true && (
   <div className="max-w-md mx-auto mb-10 bg-white/10 p-4 rounded-lg shadow">
     <h3 className="text-white font-bold mb-2">Enter Referral Code</h3>
 

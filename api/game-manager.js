@@ -906,7 +906,7 @@ const gameData = {
       }
       const revenue = totalPayout / 4;
   
-      await update(ref(rtdb, `revenue/${id}`), {
+      await set(ref(rtdb, `revenue/${id}`), {
         gameId: id,
         roomId: roomId,
         amount: revenue,

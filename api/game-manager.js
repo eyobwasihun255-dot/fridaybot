@@ -906,17 +906,23 @@ const gameData = {
       }
       const revenue = totalPayout / 4;
   
-      await set(ref(rtdb, `revenue/${id}`), {
-        gameId: id,
-        roomId: roomId,
-        amount: revenue,
-        datetime: Date.now(),
-        drawned: false,
-      });
-  
-      // Apply payout adjustments
-      await this.applyBalanceAdjustments(adjustments);
-  
+      // Apply payout adjustments first
+await this.applyBalanceAdjustments(adjustments);
+
+// Then save revenue
+try {
+  await set(ref(rtdb, `revenue/${id}`), {
+    gameId: id,
+    roomId: roomId,
+    amount: revenue,
+    datetime: Date.now(),
+    drawned: false,
+  });
+  console.log(`💰 Revenue successfully saved for game ${id}: ${revenue}`);
+} catch(err) {
+  console.error("❌ Failed to save revenue:", err);
+}
+
       // -------------------------------
       // Save revenue entry
       // -------------------------------

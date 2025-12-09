@@ -600,7 +600,7 @@ const cards = validPlayers.map(([pid, p]) => ({
 console.log(`cards${cards}`)
 // --- Generate drawn numbers ---
 console.log(`🎰 Generating drawn numbers for ${cards.length} cards...`);
-const { drawnNumbers, winners } = this.generateDrawnNumbersMultiWinner(roomId,cards);
+const { drawnNumbers, winners } =  await this.generateDrawnNumbersMultiWinner(roomId,cards);
 
 if (!drawnNumbers || drawnNumbers.length === 0) {
   console.error(`❌ Invalid drawnNumbers generated for room ${roomId}`);
@@ -1147,7 +1147,8 @@ const gameData = {
   }
   
 
-  generateDrawnNumbersMultiWinner(roomId, cards = []) {
+  async generateDrawnNumbersMultiWinner(roomId, cards = []) {
+
     try {
       const winners = [];
       const usedNumbers = new Set();

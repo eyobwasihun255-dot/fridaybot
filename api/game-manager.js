@@ -863,6 +863,7 @@ const gameData = {
             payed: true,
           });
         } else if (gameData.winners && gameData.winners.length > 0 && reason !== "bingo") {
+          console.log("oricesswininer sstart")
           // Multi-winner case (if not already handled in checkBingo)
           await this.processWinners(roomId, gameData);
         }

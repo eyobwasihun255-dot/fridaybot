@@ -53,7 +53,7 @@ const Landing: React.FC = () => {
       }
 
       // Check referral target
-      const referralRef = ref(rtdb, `referral/${referralCode}`);
+      const referralRef = ref(rtdb, `referrals/${referralCode}`);
       const referralSnap = await get(referralRef);
 
       if (!referralSnap.exists()) {

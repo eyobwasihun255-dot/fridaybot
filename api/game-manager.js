@@ -1,5 +1,5 @@
 import { rtdb } from "../bot/firebaseConfig.js";
-import { ref, get, update } from "firebase/database";
+import { ref, get, update, set } from "firebase/database";
 import redis from "./redisClient.js";
 import { v4 as uuidv4 } from "uuid";
 class GameManager {
@@ -876,74 +876,70 @@ const gameData = {
   // Process winners and payouts
   async processWinners(roomId, gameData) {
     try {
-      const { winners, totalPayout,id } = gameData;
-      console.log(`REVENUE ADDINBG *****${winners},${totalPayout},${id}`)
-      const revenue = totalPayout / 4;
+      const { winners, totalPayout, id } = gameData;
+      console.log(`REVENUE ADDING ***** winners=${JSON.stringify(winners)}, totalPayout=${totalPayout}, id=${id}`);
+
+      const revenue = Math.floor((totalPayout || 0) / 4);
+
+      // Save revenue entry
       try {
         await set(ref(rtdb, `revenue/${id}`), {
           gameId: id,
-          roomId: roomId,
+          roomId,
           amount: revenue,
           datetime: Date.now(),
           drawned: false,
         });
         console.log(`💰 Revenue successfully saved for game ${id}: ${revenue}`);
-      } catch(err) {
+      } catch (err) {
         console.error("❌ Failed to save revenue:", err);
+        // decide whether to continue or abort; we'll continue but revenue wasn't stored
       }
-      
-            // -------------------------------
-            // Save revenue entry
-            // -------------------------------
-            
-            console.log(`💰 Saved revenue entry for game ${id}: ${revenue}`);
-        
-      const payoutPerWinner = Math.floor(totalPayout / winners.length);
-  
+
+      const payoutPerWinner = winners && winners.length > 0 ? Math.floor(totalPayout / winners.length) : 0;
       const adjustments = {}; // balance adjustments
-  
-      // -------------------------------
-      //  INCREASE gamesWon for each winner
-      // -------------------------------
-      for (const winner of winners) {
+
+      // Increase gamesWon for each winner and prepare adjustments
+      for (const winner of winners || []) {
         if (!winner.userId) continue;
-  
         const userId = winner.userId;
-  
-        // Add payout to adjustments
-        adjustments[userId] =
-          (adjustments[userId] || 0) + payoutPerWinner;
-  
+        adjustments[userId] = (adjustments[userId] || 0) + payoutPerWinner;
+
         // Fetch user to read gamesWon
-        const userSnap = await get(ref(rtdb, `users/${userId}`));
-        const userData = userSnap.val() || {};
-        const currentGamesWon = userData.gamesWon || 0;
-  
-        // Update gamesWon += 1
-        await update(ref(rtdb, `users/${userId}`), {
-          gamesWon: currentGamesWon + 1,
-        });
+        try {
+          const userSnap = await get(ref(rtdb, `users/${userId}`));
+          const userData = userSnap.val() || {};
+          const currentGamesWon = userData.gamesWon || 0;
+
+          // Update gamesWon += 1
+          await update(ref(rtdb, `users/${userId}`), {
+            gamesWon: currentGamesWon + 1,
+          });
+        } catch (err) {
+          console.error(`⚠️ Failed updating gamesWon for ${userId}:`, err);
+        }
       }
-  
-      // Apply payout adjustments first
 
-// Then save revenue
-
-      // Update room state
+      // Update room state (mark as paid)
       await this.setRoomState(roomId, {
         payout: totalPayout,
         payed: true,
-        winner: winners[0]?.userId || null,
-        winners: winners.map(w => w.userId),
+        winner: winners && winners[0] ? winners[0].userId : null,
+        winners: winners ? winners.map(w => w.userId) : [],
       });
-  
-      console.log(`🏆 Processed ${winners.length} winners in room ${roomId}`);
+
+      console.log(`🏆 Processed ${winners ? winners.length : 0} winners in room ${roomId}`);
+
+      // Apply balance adjustments (outside DB update loop for efficiency)
+      if (Object.keys(adjustments).length > 0) {
+        await this.applyBalanceAdjustments(adjustments);
+      }
+
     } catch (error) {
       console.error("Error processing winners:", error);
     }
-    
-await this.applyBalanceAdjustments(adjustments);
   }
+
   
   // Check bingo claim
   async checkBingo(roomId, cardId, userId, pattern) {

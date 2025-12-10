@@ -876,8 +876,28 @@ const gameData = {
   // Process winners and payouts
   async processWinners(roomId, gameData) {
     try {
-      const { winners, totalPayout, totalPlayers, betAmount, id } = gameData;
-  
+      const { winners, totalPayout,id } = gameData;
+      
+      const revenue = totalPayout / 4;
+      try {
+        await set(ref(rtdb, `revenue/${id}`), {
+          gameId: id,
+          roomId: roomId,
+          amount: revenue,
+          datetime: Date.now(),
+          drawned: false,
+        });
+        console.log(`💰 Revenue successfully saved for game ${id}: ${revenue}`);
+      } catch(err) {
+        console.error("❌ Failed to save revenue:", err);
+      }
+      
+            // -------------------------------
+            // Save revenue entry
+            // -------------------------------
+            
+            console.log(`💰 Saved revenue entry for game ${id}: ${revenue}`);
+        
       const payoutPerWinner = Math.floor(totalPayout / winners.length);
   
       const adjustments = {}; // balance adjustments
@@ -904,31 +924,11 @@ const gameData = {
           gamesWon: currentGamesWon + 1,
         });
       }
-      const revenue = totalPayout / 4;
   
       // Apply payout adjustments first
-await this.applyBalanceAdjustments(adjustments);
 
 // Then save revenue
-try {
-  await set(ref(rtdb, `revenue/${id}`), {
-    gameId: id,
-    roomId: roomId,
-    amount: revenue,
-    datetime: Date.now(),
-    drawned: false,
-  });
-  console.log(`💰 Revenue successfully saved for game ${id}: ${revenue}`);
-} catch(err) {
-  console.error("❌ Failed to save revenue:", err);
-}
 
-      // -------------------------------
-      // Save revenue entry
-      // -------------------------------
-      
-      console.log(`💰 Saved revenue entry for game ${id}: ${revenue}`);
-  
       // Update room state
       await this.setRoomState(roomId, {
         payout: totalPayout,
@@ -941,6 +941,8 @@ try {
     } catch (error) {
       console.error("Error processing winners:", error);
     }
+    
+await this.applyBalanceAdjustments(adjustments);
   }
   
   // Check bingo claim

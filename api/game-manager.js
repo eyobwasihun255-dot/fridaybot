@@ -390,6 +390,148 @@ class GameManager {
     }
   }
 
+  /**
+   * Sync players and claimed cards to ensure:
+   * 1. Number of players equals number of claimed cards
+   * 2. Remove cards that don't have a corresponding player
+   * 3. Remove players that don't have a claimed card
+   * 4. If one user has multiple cards, unclaim all but one (keep the one matching player.cardId)
+   */
+  async syncPlayersAndCards(roomId) {
+    try {
+      const players = await this.getRoomPlayers(roomId);
+      const claimedCards = await this.getClaimedCards(roomId);
+      
+      const playerIds = Object.keys(players);
+      const cardIds = Object.keys(claimedCards);
+      
+      console.log(`🔄 Syncing room ${roomId}: ${playerIds.length} players, ${cardIds.length} claimed cards`);
+
+      // Build maps for easier lookup
+      const playerCardMap = {}; // playerId -> cardId (from player.cardId)
+      const cardPlayerMap = {}; // cardId -> playerId (from card.claimedBy)
+      const playerCardsMap = {}; // playerId -> [cardIds] (multiple cards per player)
+
+      // Map players to their cards
+      for (const [playerId, player] of Object.entries(players)) {
+        if (player?.cardId) {
+          playerCardMap[playerId] = player.cardId;
+          if (!playerCardsMap[playerId]) {
+            playerCardsMap[playerId] = [];
+          }
+          playerCardsMap[playerId].push(player.cardId);
+        }
+      }
+
+      // Map cards to their players
+      for (const [cardId, card] of Object.entries(claimedCards)) {
+        if (card?.claimedBy) {
+          cardPlayerMap[cardId] = card.claimedBy;
+          if (!playerCardsMap[card.claimedBy]) {
+            playerCardsMap[card.claimedBy] = [];
+          }
+          playerCardsMap[card.claimedBy].push(cardId);
+        }
+      }
+
+      const cardsToUnclaim = [];
+      const playersToRemove = [];
+
+      // Step 1: Handle users with multiple cards - keep only one (prefer the one matching player.cardId)
+      for (const [playerId, cardIdsForPlayer] of Object.entries(playerCardsMap)) {
+        if (cardIdsForPlayer.length > 1) {
+          const preferredCardId = playerCardMap[playerId]; // The cardId stored in player object
+          const cardToKeep = preferredCardId && cardIdsForPlayer.includes(preferredCardId) 
+            ? preferredCardId 
+            : cardIdsForPlayer[0]; // Fallback to first card if preferred not in list
+          
+          // Keep the preferred card, unclaim the rest
+          for (const cardId of cardIdsForPlayer) {
+            if (cardId !== cardToKeep) {
+              cardsToUnclaim.push(cardId);
+              console.log(`  ⚠️ User ${playerId} has multiple cards, unclaiming ${cardId} (keeping ${cardToKeep})`);
+            }
+          }
+        }
+      }
+
+      // Step 2: Remove cards that don't have a corresponding player
+      for (const [cardId, claimedBy] of Object.entries(cardPlayerMap)) {
+        if (!players[claimedBy]) {
+          cardsToUnclaim.push(cardId);
+          console.log(`  ⚠️ Card ${cardId} claimed by non-existent player ${claimedBy}, unclaiming`);
+        }
+      }
+
+      // Step 3: Remove players that don't have a claimed card
+      for (const [playerId, player] of Object.entries(players)) {
+        const playerCardId = player?.cardId;
+        if (!playerCardId || !claimedCards[playerCardId] || !claimedCards[playerCardId].claimed) {
+          playersToRemove.push(playerId);
+          console.log(`  ⚠️ Player ${playerId} has no valid claimed card, removing`);
+        }
+      }
+
+      // Step 4: Also check if player.cardId doesn't match card.claimedBy
+      for (const [playerId, player] of Object.entries(players)) {
+        const playerCardId = player?.cardId;
+        if (playerCardId && claimedCards[playerCardId]) {
+          const cardClaimedBy = claimedCards[playerCardId].claimedBy;
+          if (cardClaimedBy !== playerId) {
+            // Mismatch: either remove player or unclaim card
+            // Prefer removing player if card is claimed by someone else
+            if (players[cardClaimedBy]) {
+              playersToRemove.push(playerId);
+              console.log(`  ⚠️ Player ${playerId} card ${playerCardId} is claimed by ${cardClaimedBy}, removing player`);
+            } else {
+              cardsToUnclaim.push(playerCardId);
+              console.log(`  ⚠️ Player ${playerId} card ${playerCardId} claimed by non-existent user, unclaiming`);
+            }
+          }
+        }
+      }
+
+      // Apply changes
+      let changesMade = false;
+
+      // Unclaim cards
+      for (const cardId of cardsToUnclaim) {
+        await this.unclaimCard(roomId, cardId);
+        changesMade = true;
+      }
+
+      // Remove players
+      for (const playerId of playersToRemove) {
+        await this.removeRoomPlayer(roomId, playerId);
+        changesMade = true;
+      }
+
+      if (changesMade) {
+        console.log(`✅ Sync completed for room ${roomId}: Unclaimed ${cardsToUnclaim.length} cards, Removed ${playersToRemove.length} players`);
+        
+        // Notify clients
+        if (this.io) {
+          this.io.to(roomId).emit("roomSynced", {
+            roomId,
+            cardsUnclaimed: cardsToUnclaim.length,
+            playersRemoved: playersToRemove.length,
+          });
+        }
+      } else {
+        console.log(`✅ Room ${roomId} already in sync`);
+      }
+
+      return {
+        success: true,
+        cardsUnclaimed: cardsToUnclaim.length,
+        playersRemoved: playersToRemove.length,
+      };
+    } catch (error) {
+      console.error(`❌ Error syncing players and cards for room ${roomId}:`, error);
+      return { success: false, message: error.message };
+    }
+  }
+
   async getGameState(gameId) {
     try {
       const raw = await redis.get(`game:${gameId}`);
@@ -567,6 +709,9 @@ class GameManager {
         console.log("⚠️ Room not in countdown, aborting startGame()");
         return { success: false, message: "Room not in countdown state" };
       }
+
+      // ✅ Sync players and cards before starting game
+      await this.syncPlayersAndCards(roomId);
 
       // Generate a new gameId
       const gameId = uuidv4();

@@ -1659,93 +1659,98 @@ if (pending?.type === "awaiting_room_reset") {
   const roomId = text.trim();
 
   try {
-    // fetch via redis-backed API
-    const state = await fetch(getApiUrl(`/api/room-state?roomId=${roomId}`)).then(r=>r.json());
-    if (!state.room) return sendMessage(chatId,"❌ Room not found.");
+    const state = await fetch(getApiUrl(`/api/room-state?roomId=${roomId}`)).then(r => r.json());
+    if (!state.room) return sendMessage(chatId, "❌ Room not found.");
 
     const room = state.room;
     const status = (room.gameStatus || room.roomStatus || "").toLowerCase();
     const betAmount = Number(room.betAmount || 0);
 
     sendMessage(chatId,
-      `🔁 Reset room *${roomId}*\n`+
-      `Status: ${status}\n\nReply **yes** to confirm`
+      `🔁 Reset room *${roomId}*\nStatus: ${status}\n\nReply **yes** to confirm`
     );
 
-    await pendingActions.set(userId,{ type:"awaiting_room_reset_confirm", roomId, status, betAmount });
+    // ⭐ STORE ENTIRE ROOM IN PENDING
+    await pendingActions.set(userId, { 
+      type: "awaiting_room_reset_confirm", 
+      roomId, 
+      status, 
+      betAmount,
+      room   // <-- FIX
+    });
+
     return;
 
-  } catch(err){
+  } catch (err) {
     console.error(err);
-    return sendMessage(chatId,"❌ Error reading room state.");
+    return sendMessage(chatId, "❌ Error reading room state.");
   }
 }
+
 
 
 // Step 3 — Confirm Reset
 if (pending?.type === "awaiting_room_reset_confirm") {
   if (text.trim().toLowerCase() !== "yes") {
     await pendingActions.delete(userId);
-    return sendMessage(chatId,"❌ Reset cancelled.");
+    return sendMessage(chatId, "❌ Reset cancelled.");
   }
 
-  const { roomId, status, betAmount } = pending;
+  const { roomId, status, betAmount, room } = pending; // <-- room now exists
 
-  sendMessage(chatId,"⏳ Resetting room...");
+  sendMessage(chatId, "⏳ Resetting room...");
 
   try {
-    // stop drawing if active
-    if (status === "playing"){
-      try {
-        gameManager.stopNumberDrawing(roomId);
-      } catch(e){
-        console.log("⚠ failed to stop drawing",e);
-      }
+    // stop drawing if needed
+    if (status === "playing") {
+      try { gameManager.stopNumberDrawing(roomId); }
+      catch (e) { console.log("⚠ failed to stop drawing", e); }
     }
 
-    // refund if required
-    if (status==="playing" && betAmount>0){
-      const state = await fetch(getApiUrl(`/api/room-state?roomId=${roomId}`)).then(r=>r.json());
-      const players = Object.values(state.room.players||{});
+    // refund players
+    if (status === "playing" && betAmount > 0) {
+      const state = await fetch(getApiUrl(`/api/room-state?roomId=${roomId}`)).then(r => r.json());
+      const players = Object.values(state.room.players || {});
 
-      for(const p of players){
-        if(!p.userId) continue;
+      for (const p of players) {
+        if (!p.userId) continue;
 
-        await fetch(getApiUrl("/api/update-user"),{
-          method:"POST",
-          headers:{ "Content-Type":"application/json" },
-          body:JSON.stringify({
-            telegramId:p.userId,
-            balanceIncrease:betAmount  // auto refund Redis-side
+        await fetch(getApiUrl("/api/update-user"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            telegramId: p.userId,
+            balanceIncrease: betAmount
           })
-        }).catch(()=>{});
+        }).catch(() => {});
       }
 
-      sendMessage(chatId,`💰 Refunded ${betAmount} to ${players.length} players.`);
+      sendMessage(chatId, `💰 Refunded ${betAmount} to ${players.length} players.`);
     }
 
-    // RESET ROOM USING REDIS HELPER
+    // ⭐ RESET USING STORED ROOM OBJECT
     await redis.set(`room:${roomId}`, JSON.stringify({
       ...room,
-      gameStatus:"waiting",
-      countdownEndAt:null,
-      countdownStartedBy:null,
-      drawnNumbers:[],
-      winners:[]
+      gameStatus: "waiting",
+      countdownEndAt: null,
+      countdownStartedBy: null,
+      drawnNumbers: [],
+      winners: []
     }));
 
-    await redis.expire(`room:${roomId}`, 60*60); // optional TTL
+    await redis.expire(`room:${roomId}`, 3600);
 
-    sendMessage(chatId,`♻ Room *${roomId}* has been reset to waiting state.`);
-    
-  } catch(err){
+    sendMessage(chatId, `♻ Room *${roomId}* has been reset to waiting state.`);
+
+  } catch (err) {
     console.error(err);
-    sendMessage(chatId,"❌ Reset failed.");
+    sendMessage(chatId, "❌ Reset failed.");
   }
 
   await pendingActions.delete(userId);
   return;
 }
+
 
 if (text === "/stop") {
   if (!ADMIN_IDS.includes(userId)) {

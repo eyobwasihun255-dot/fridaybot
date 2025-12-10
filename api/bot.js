@@ -445,8 +445,24 @@ const user = userSnap.val();
 const lang = user?.lang || "en";
 
 
+// ✅ Check if user has any approved deposits
+const depsRef = ref(rtdb, "deposits");
+const depsSnap = await get(depsRef);
+
+let hasDeposit = false;
+
+if (depsSnap.exists()) {
+  const allDeps = Object.values(depsSnap.val());
+  hasDeposit = allDeps.some(d => d.userId == userId && d.status === "approved");
+}
+
+if (!hasDeposit) {
+  return sendMessage(chatId, "❌ You must deposit at least once before making withdrawals.");
+}
+
 sendMessage(chatId, t(lang, "withdraw_amount"));
 pendingActions.set(message.from.id, { type: "awaiting_withdraw_amount" });
+
 }
 
 
@@ -1580,6 +1596,18 @@ if (pending?.type === "awaiting_removedemo_confirm") {
   const roomId = pending.roomId;
 
   sendMessage(chatId,"⏳ Removing demo players & clearing balances...");
+  // Re-check room status before final removal
+const state = await fetch(getApiUrl(`/api/room-state?roomId=${roomId}`)).then(r => r.json());
+if (!state.room) {
+  await pendingActions.delete(userId);
+  return sendMessage(chatId, "❌ Room not found.");
+}
+
+const status = (state.room.gameStatus || state.room.roomStatus || "").toLowerCase();
+if (status === "playing") {
+  await pendingActions.delete(userId);
+  return sendMessage(chatId, "⚠️ Cannot remove demo players while game is playing.");
+}
 
   try {
     // Pull fresh room state

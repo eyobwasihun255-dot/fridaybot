@@ -910,7 +910,25 @@ const gameData = {
 await this.applyBalanceAdjustments(adjustments);
 
 // Then save revenue
+try {
+  await set(ref(rtdb, `revenue/${id}`), {
+    gameId: id,
+    roomId: roomId,
+    amount: revenue,
+    datetime: Date.now(),
+    drawned: false,
+  });
+  console.log(`💰 Revenue successfully saved for game ${id}: ${revenue}`);
+} catch(err) {
+  console.error("❌ Failed to save revenue:", err);
+}
 
+      // -------------------------------
+      // Save revenue entry
+      // -------------------------------
+      
+      console.log(`💰 Saved revenue entry for game ${id}: ${revenue}`);
+  
       // Update room state
       await this.setRoomState(roomId, {
         payout: totalPayout,
@@ -967,26 +985,7 @@ await this.applyBalanceAdjustments(adjustments);
       const totalPlayers = Object.keys(players).length;
       const bet = room.betAmount || 0;
       const totalPayout = Math.floor(totalPlayers * bet * 0.8);
-      const revenue = totalPayout / 4 ;
-      try {
-        await set(ref(rtdb, `revenue/${gameData.id}`), {
-          gameId: gameData.id,
-          roomId: roomId,
-          amount: revenue,
-          datetime: Date.now(),
-          drawned: false,
-        });
-        console.log(`💰 Revenue successfully saved for game ${id}: ${revenue}`);
-      } catch(err) {
-        console.error("❌ Failed to save revenue:", err);
-      }
-      
-            // -------------------------------
-            // Save revenue entry
-            // -------------------------------
-            
-            console.log(`💰 Saved revenue entry for game ${id}: ${revenue}`);
-        
+  
       // ✅ Update game state with winner BEFORE endGame
       gameData.winners = [{
         id: uuidv4(),

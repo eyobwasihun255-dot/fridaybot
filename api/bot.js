@@ -1292,6 +1292,7 @@ if (text === "/demo") {
 
   return;
 }
+
 if (text.startsWith("/demoadd")) {
   if (!ADMIN_IDS.includes(userId)) {
     sendMessage(chatId, "❌ You are not authorized to use this command.");
@@ -1369,6 +1370,105 @@ if (text.startsWith("/demoadd")) {
 
 
 
+// ====================== /CLEARDemo BALANCES ======================
+if (text === "/cleardemo") {
+  if (!ADMIN_IDS.includes(userId)) {
+    return sendMessage(chatId, "❌ You are not authorized to use this command.");
+  }
+
+  sendMessage(
+    chatId,
+    "🧹 Clear demo balances:\n\n" +
+    "Reply with `all` to set all demo users' balances to 0,\n" +
+    "or reply with a single demo Telegram ID (e.g. `demo123`) to clear one user."
+  );
+  pendingActions.set(userId, { type: "awaiting_cleardemo_target" });
+  return;
+}
+
+if (pending?.type === "awaiting_cleardemo_target") {
+  const target = text.trim();
+
+  try {
+    const usersRef = ref(rtdb, "users");
+    const snap = await get(usersRef);
+    if (!snap.exists()) {
+      sendMessage(chatId, "⚠️ No users found in database.");
+      pendingActions.delete(userId);
+      return;
+    }
+
+    const allUsers = snap.val();
+
+    // Case 1: clear all demo balances
+    if (target.toLowerCase() === "all") {
+      const updates = {};
+      let clearedCount = 0;
+
+      for (const [key, u] of Object.entries(allUsers)) {
+        // defensively handle telegramId stored as string on user object
+        const tId = (u && u.telegramId) ? String(u.telegramId) : null;
+        if (tId && tId.toLowerCase().startsWith("demo")) {
+          updates[`users/${key}/balance`] = 0;
+          updates[`users/${key}/updatedAt`] = new Date().toISOString();
+          clearedCount++;
+        }
+      }
+
+      if (clearedCount === 0) {
+        sendMessage(chatId, "⚠️ No demo users found to clear.");
+      } else {
+        // apply all updates at once
+        await update(ref(rtdb), updates);
+        sendMessage(chatId, `✅ Cleared balances for ${clearedCount} demo users.`);
+      }
+
+      pendingActions.delete(userId);
+      return;
+    }
+
+    // Case 2: clear single demo id
+    // Accept either a direct key (user node key) or a telegramId that begins with 'demo'
+    const searchId = target; // e.g. "demo123"
+
+    // Try direct path first (users/<searchId>)
+    const directRef = ref(rtdb, `users/${searchId}`);
+    const directSnap = await get(directRef);
+
+    if (directSnap.exists() && String(directSnap.val().telegramId).toLowerCase().startsWith("demo")) {
+      await update(directRef, { balance: 0, updatedAt: new Date().toISOString() });
+      sendMessage(chatId, `✅ Cleared balance for ${searchId}.`);
+      pendingActions.delete(userId);
+      return;
+    }
+
+    // Otherwise, search by telegramId field
+    let foundKey = null;
+    for (const [key, u] of Object.entries(allUsers)) {
+      if (u && typeof u.telegramId === "string" && u.telegramId.toLowerCase() === searchId.toLowerCase()) {
+        foundKey = key;
+        break;
+      }
+    }
+
+    if (!foundKey) {
+      sendMessage(chatId, "❌ Demo user not found. Make sure you provided the correct demo id (e.g. demo123).");
+      pendingActions.delete(userId);
+      return;
+    }
+
+    await update(ref(rtdb, `users/${foundKey}`), { balance: 0, updatedAt: new Date().toISOString() });
+    sendMessage(chatId, `✅ Cleared balance for ${searchId}.`);
+    pendingActions.delete(userId);
+    return;
+
+  } catch (err) {
+    console.error("Error during /cleardemo:", err);
+    sendMessage(chatId, "❌ Failed to clear demo balances. Check server logs.");
+    pendingActions.delete(userId);
+    return;
+  }
+}
 
 
 // Step 1: User types /reset

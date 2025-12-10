@@ -665,6 +665,29 @@ const gameData = {
     }
   }
 
+  async saveRevenueEntry(gameId, roomId, amount) {
+    try {
+      const revenueRef = ref(rtdb, `revenue/${gameId}`);
+      const existing = await get(revenueRef);
+      if (existing.exists()) {
+        console.log(`ℹ️ Revenue already saved for game ${gameId}`);
+        return;
+      }
+
+      await set(revenueRef, {
+        gameId,
+        roomId,
+        amount,
+        datetime: Date.now(),
+        drawned: false,
+      });
+
+      console.log(`💰 Revenue successfully saved for game ${gameId}: ${amount}`);
+    } catch (err) {
+      console.error("❌ Failed to save revenue:", err);
+    }
+  }
+
 
   // Start number drawing process
   startNumberDrawing(roomId, gameId, room) {
@@ -842,20 +865,7 @@ const gameData = {
 
       const revenue = Math.floor((totalPayout || 0) * 1.25);
 
-      // Save revenue entry
-      try {
-        await set(ref(rtdb, `revenue/${id}`), {
-          gameId: id,
-          roomId,
-          amount: revenue,
-          datetime: Date.now(),
-          drawned: false,
-        });
-        console.log(`💰 Revenue successfully saved for game ${id}: ${revenue}`);
-      } catch (err) {
-        console.error("❌ Failed to save revenue:", err);
-        // decide whether to continue or abort; we'll continue but revenue wasn't stored
-      }
+      await this.saveRevenueEntry(id, roomId, revenue);
 
           await this.setRoomState(roomId, {
             winner: null,
@@ -902,20 +912,7 @@ const gameData = {
 
       const revenue = Math.floor((totalPayout || 0) / 4);
 
-      // Save revenue entry
-      try {
-        await set(ref(rtdb, `revenue/${id}`), {
-          gameId: id,
-          roomId,
-          amount: revenue,
-          datetime: Date.now(),
-          drawned: false,
-        });
-        console.log(`💰 Revenue successfully saved for game ${id}: ${revenue}`);
-      } catch (err) {
-        console.error("❌ Failed to save revenue:", err);
-        // decide whether to continue or abort; we'll continue but revenue wasn't stored
-      }
+      await this.saveRevenueEntry(id, roomId, revenue);
 
       const payoutPerWinner = winners && winners.length > 0 ? Math.floor(totalPayout / winners.length) : 0;
       const adjustments = {}; // balance adjustments
@@ -1017,6 +1014,8 @@ const gameData = {
       gameData.winner = userId;
       await this.setGameState(gameId, gameData);
   
+      await this.saveRevenueEntry(gameId, roomId, Math.floor((totalPayout || 0) / 4));
+
       // ✅ Apply payout (batched)
       await this.applyBalanceAdjustments({
         [userId]: totalPayout,

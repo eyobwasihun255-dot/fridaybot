@@ -837,6 +837,26 @@ const gameData = {
         const hasConfirmedWinner = !!gameData.winner || (gameData.winners && gameData.winners.length > 0);
         if (reason === "allNumbersDrawn" && !hasConfirmedWinner) {
           // No winner - record revenue
+          const { winners, totalPayout, id } = gameData;
+      console.log(`REVENUE ADDING ***** winners=${JSON.stringify(winners)}, totalPayout=${totalPayout}, id=${id}`);
+
+      const revenue = Math.floor((totalPayout || 0) * 1.25);
+
+      // Save revenue entry
+      try {
+        await set(ref(rtdb, `revenue/${id}`), {
+          gameId: id,
+          roomId,
+          amount: revenue,
+          datetime: Date.now(),
+          drawned: false,
+        });
+        console.log(`💰 Revenue successfully saved for game ${id}: ${revenue}`);
+      } catch (err) {
+        console.error("❌ Failed to save revenue:", err);
+        // decide whether to continue or abort; we'll continue but revenue wasn't stored
+      }
+
           await this.setRoomState(roomId, {
             winner: null,
             payout: gameData.totalPayout || 0,
@@ -877,7 +897,7 @@ const gameData = {
   async processWinners(roomId, gameData) {
     try {
       const { winners, totalPayout, id } = gameData;
-      console.log(`REVENUE ADDING ***** winners=${JSON.stringify(winners)}, totalPayout=${totalPayout}, id=${id}`);
+      console.log(`REVENUE ADDING ***** `);
 
       const revenue = Math.floor((totalPayout || 0) / 4);
 
@@ -939,7 +959,7 @@ const gameData = {
       console.error("Error processing winners:", error);
     }
   }
-
+ 
   
   // Check bingo claim
   async checkBingo(roomId, cardId, userId, pattern) {

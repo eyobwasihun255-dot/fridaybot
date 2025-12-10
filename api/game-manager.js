@@ -877,7 +877,7 @@ const gameData = {
   async processWinners(roomId, gameData) {
     try {
       const { winners, totalPayout,id } = gameData;
-      console.log(`${winners},${totalPayout},${id}`)
+      console.log(`REVENUE ADDINBG *****${winners},${totalPayout},${id}`)
       const revenue = totalPayout / 4;
       try {
         await set(ref(rtdb, `revenue/${id}`), {

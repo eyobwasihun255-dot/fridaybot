@@ -544,25 +544,7 @@ async function handleUserMessage(message) {
 
   // ====================== DEPOSIT AMOUNT STEP ======================
   if (pending?.type === "awaiting_deposit_amount") {
-    const amount = parseFloat(text);
-    if (isNaN(amount) || amount <= 0) {
-      sendMessage(chatId, t(lang, "invalid_amount"));
-      return;
-    }
-    if (amount < 50) {
-      sendMessage(chatId, "⚠️ Minimum deposit is 50 birr.");
-      pendingActions.delete(userId);
-      return;
-    }
-
-    pendingActions.set(userId, { 
-      type: "awaiting_deposit_sms", 
-      method: pending.method, 
-      amount 
-    });
-
-  sendMessage(chatId, t(lang, "deposit_sms", pending.method));
-
+    sendMessage(chatId, "Please choose an amount from the buttons below.");
     return;
   }
   
@@ -1916,7 +1898,38 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
       ? `💳 *Deposit to CBE Account:*\n\`\`\`\n${escapeMD(accountDetails.accNumber)}\n\`\`\`\n*Account Holder:* ${escapeMD(accountDetails.accHolder)}\n\n💰 የሚጨምሩትን መጠን ያስገቡ:`
       : `📱 *Deposit via Telebirr:*\n\`\`\`\n${escapeMD(accountDetails.phone)}\n\`\`\`\n*የተቀባዩ ስም :* ${escapeMD(accountDetails.holder)}\n\n💰 የሚጨምሩትን መጠን ያስገቡ:`;
 
-  sendMessage(chatId, infoText, { parse_mode: "MarkdownV2" });
+  const amountOptions = [50, 100, 200, 500, 1000];
+  const keyboard = amountOptions.map(a => [{ text: `${a} birr`, callback_data: `deposit_amount_${a}` }]);
+
+  sendMessage(chatId, infoText, {
+    parse_mode: "MarkdownV2",
+    reply_markup: { inline_keyboard: keyboard },
+  });
+  return;
+}
+
+if (data.startsWith("deposit_amount_")) {
+  const pending = pendingActions.get(userId);
+  if (!pending || pending.type !== "awaiting_deposit_amount") {
+    sendMessage(chatId, "❌ No active deposit session. Please /deposit again.");
+    return;
+  }
+
+  const amountStr = data.replace("deposit_amount_", "");
+  const amount = parseFloat(amountStr);
+  if (isNaN(amount) || amount <= 0) {
+    sendMessage(chatId, "❌ Invalid amount selected.");
+    pendingActions.delete(userId);
+    return;
+  }
+
+  if (![50, 100, 200, 500, 1000].includes(amount)) {
+    sendMessage(chatId, "❌ Please choose a valid amount.");
+    return;
+  }
+
+  pendingActions.set(userId, { type: "awaiting_deposit_sms", method: pending.method, amount });
+  sendMessage(chatId, t(lang, "deposit_sms", pending.method));
   return;
 }
 

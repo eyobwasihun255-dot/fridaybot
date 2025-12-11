@@ -1241,15 +1241,23 @@ if (pending?.type === "awaiting_random_auto") {
 
     let successCount = 0;
 
+    // Work on a mutable copy so we keep local state in sync during the loop
+    let runtimeCards = { ...(room.bingoCards || {}) };
+    const usedIds = new Set(roomPlayers.map(p => p.telegramId || p.userId));
+
     for (let i = 0; i < demoUsers.length && successCount < count; i++) {
 
-      // Re-check free cards
-      unclaimedCards = Object.entries(room.bingoCards || {})
+      // Re-check free cards against the local runtime copy
+      unclaimedCards = Object.entries(runtimeCards)
         .filter(([_, c]) => !c.claimed);
 
       if (unclaimedCards.length < 1) break;
 
       const user = demoUsers[i];
+
+      // Skip if already placed in this run
+      if (usedIds.has(user.telegramId)) continue;
+
       const [cardId] = unclaimedCards[0]; // Always take the next free card
 
       // Place bet
@@ -1276,6 +1284,14 @@ if (pending?.type === "awaiting_random_auto") {
           body: JSON.stringify({ roomId, cardId, auto: true })
         });
       }
+
+      // Mark card/user locally to avoid reusing within this loop
+      runtimeCards[cardId] = {
+        ...(runtimeCards[cardId] || {}),
+        claimed: true,
+        claimedBy: user.telegramId,
+      };
+      usedIds.add(user.telegramId);
 
       successCount++;
     }

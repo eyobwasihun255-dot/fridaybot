@@ -618,7 +618,7 @@ const Room: React.FC = () => {
               <p className="mb-4 text-sm text-gray-600">
                 {t('card_number')}: {winnerCard.serialNumber}
                 <p></p>
-                {t('winner')}: {currentRoom?.players?.[winnerCard.claimedBy as string]?.username}
+                {t('winner')}: {currentRoom?.players?.[winnerCard.claimedBy as string]?.username || winnerCard.claimedBy || 'no Username'}
 
               </p>
 

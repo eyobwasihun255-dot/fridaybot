@@ -1101,6 +1101,7 @@ if (pending?.type === "awaiting_refill_demo_amount") {
 
 // ====================== /RANDOM COMMAND ======================
 // ====================== /RANDOM COMMAND ======================
+// /random command
 if (text === "/random") {
   if (!ADMIN_IDS.includes(userId)) {
     sendMessage(chatId, "❌ You are not authorized to use this command.");
@@ -1113,6 +1114,8 @@ if (text === "/random") {
 }
 
 
+
+// STEP 1 – Get Room ID
 if (pending?.type === "awaiting_random_room") {
   const roomId = text.trim();
 
@@ -1124,118 +1127,136 @@ if (pending?.type === "awaiting_random_room") {
   }
 
   const room = data.room;
-  const betAmount = room.betAmount || 0;
 
-  // extract bingo cards
-  const cards = data.room.bingoCards || {};
+  const cards = room.bingoCards || {};
   const unclaimedCards = Object.entries(cards).filter(([_, c]) => !c.claimed);
 
   if (unclaimedCards.length === 0) {
-    return sendMessage(chatId,"⚠️ No unclaimed cards in this room.");
+    return sendMessage(chatId, "⚠️ No unclaimed cards in this room.");
   }
 
   sendMessage(
     chatId,
-    `🎯 Room ${roomId} found.\n`+
-    `Available unclaimed cards: ${unclaimedCards.length}\n`+
+    `🎯 Room ${roomId} found.\n` +
+    `Available unclaimed cards: ${unclaimedCards.length}\n` +
     "Enter how many demo players to add:"
   );
 
-  await pendingActions.set(userId,{ type:"awaiting_random_count", roomId });
+  await pendingActions.set(userId, { type: "awaiting_random_count", roomId });
   return;
 }
 
 
 
-// Step 3: Get quantity
+// STEP 2 – Get quantity
 if (pending?.type === "awaiting_random_count") {
   const count = Number(text.trim());
 
   if (!count || count <= 0) {
-    return sendMessage(chatId,"❌ Invalid number. Enter a positive number.");
+    return sendMessage(chatId, "❌ Invalid number. Enter a positive number.");
   }
 
-  sendMessage(chatId,"⚙️ Auto mode for players? (true / false)");
-  await pendingActions.set(userId,{ type:"awaiting_random_auto", roomId: pending.roomId, count });
+  sendMessage(chatId, "⚙️ Auto mode for players? (true / false)");
+  await pendingActions.set(userId, { type: "awaiting_random_auto", roomId: pending.roomId, count });
   return;
 }
 
 
+
+// STEP 3 – Auto mode + Add demo players
 if (pending?.type === "awaiting_random_auto") {
   const auto = text.trim().toLowerCase() === "true";
   const { roomId, count } = pending;
 
   try {
-    // Fetch room state again to get fresh cards & players
-    const state = await fetch(getApiUrl(`/api/room-state?roomId=${roomId}`)).then(r=>r.json());
+    // Refresh room data
+    const state = await fetch(getApiUrl(`/api/room-state?roomId=${roomId}`)).then(r => r.json());
     const room = state.room;
-    if (!room) return sendMessage(chatId,"Room not found.");
+    if (!room) return sendMessage(chatId, "❌ Room not found.");
 
     const cards = room.bingoCards || {};
+    let unclaimedCards = Object.entries(cards)
+      .filter(([id, card]) => !card.claimed);
 
-    // Eligible unclaimed cards
-    const unclaimedCards = Object.entries(cards)
-      .filter(([id,card])=>!card.claimed)
-      .sort(()=>Math.random()-0.5)
-      .slice(0,count);
-
-    if(unclaimedCards.length < count){
-      return sendMessage(chatId,`⚠ Only ${unclaimedCards.length} free cards available.`);
+    if (unclaimedCards.length === 0) {
+      return sendMessage(chatId, "⚠️ No unclaimed cards left in this room.");
     }
 
-    // Fetch users for demo pick
-    const usersSnap = await get(ref(rtdb,"users"));
-    const users = usersSnap.val()||{};
+    // Players already in room (avoid duplicates)
+    const roomPlayers = Object.values(room.players || {});
+    const usedUserIds = new Set(roomPlayers.map(p => p.userId));
 
-    const demoUsers = Object.values(users)
-      .filter(u=>u.telegramId?.startsWith("demo") && (u.balance||0)>=room.betAmount)
-      .sort(()=>Math.random()-0.5)
-      .slice(0,count);
+    // Get demo users
+    const usersSnap = await get(ref(rtdb, "users"));
+    const users = usersSnap.val() || {};
 
-    if(demoUsers.length < count){
-      return sendMessage(chatId,`⚠ Only ${demoUsers.length} demo users available`);
+    let demoUsers = Object.values(users)
+      .filter(u =>
+        u.telegramId?.startsWith("demo") &&
+        (u.balance || 0) >= room.betAmount &&
+        !usedUserIds.has(u.telegramId) // FIX: avoid demo users already in the room
+      )
+      .sort(() => Math.random() - 0.5);
+
+    if (demoUsers.length === 0) {
+      return sendMessage(chatId, "⚠️ No eligible demo users available.");
     }
 
-    for (let i=0;i<count;i++){
+    let successCount = 0;
+
+    for (let i = 0; i < demoUsers.length && successCount < count; i++) {
+
+      // Re-check free cards
+      unclaimedCards = Object.entries(room.bingoCards || {})
+        .filter(([_, c]) => !c.claimed);
+
+      if (unclaimedCards.length < 1) break;
+
       const user = demoUsers[i];
-      const [cardId] = unclaimedCards[i]; // assign a card
+      const [cardId] = unclaimedCards[0]; // Always take the next free card
 
-      // PLACE BET using YOUR API → stored in Redis automatically
-      const result = await fetch(getApiUrl("/api/place-bet"),{
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({
+      // Place bet
+      const result = await fetch(getApiUrl("/api/place-bet"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           roomId,
           cardId,
-          userId:user.telegramId  // 👈 DEMO PLAYER BET LOGIC FIXED HERE
+          userId: user.telegramId
         })
-      }).then(r=>r.json());
+      }).then(r => r.json());
 
-      if(!result.success){
-        console.log("Bet failed:",user.telegramId, result.message);
-        continue;
+      if (!result.success) {
+        console.log("❌ Bet failed:", user.telegramId, result.message);
+        continue; // try next demo user
       }
 
-      // AUTO MODE
-      if(auto){
-        await fetch(getApiUrl("/api/toggle-auto"),{
-          method:"POST",
-          headers:{ "Content-Type":"application/json" },
-          body:JSON.stringify({ roomId, cardId, auto:true })
+      // Enable auto mode
+      if (auto) {
+        await fetch(getApiUrl("/api/toggle-auto"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roomId, cardId, auto: true })
         });
       }
+
+      successCount++;
     }
 
-    sendMessage(chatId,`🎉 Added ${count} demo players to room ${roomId}\nAUTO MODE: ${auto}`);
+    sendMessage(
+      chatId,
+      `🎉 Successfully added ${successCount}/${count} demo players to room ${roomId}\nAUTO MODE: ${auto}`
+    );
 
-  } catch(err){
+  } catch (err) {
     console.error(err);
-    sendMessage(chatId,"❌ Error adding demo players");
+    sendMessage(chatId, "❌ Error adding demo players");
   }
 
   await pendingActions.delete(userId);
   return;
 }
+
 
 
 if (text === "/demo") {

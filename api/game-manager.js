@@ -25,10 +25,7 @@ class GameManager {
       return null;
     }
   }
-
-  /**
-   * Fetch permanent room config stored in RTDB (allowed by requirements).
-   */
+// -----------RDTBS ROOM
   async getRoomConfig(roomId) {
     const roomRef = ref(rtdb, `rooms/${roomId}`);
     const snap = await get(roomRef);
@@ -49,12 +46,7 @@ class GameManager {
     }
     return hydrated;
   }
-
-  /**
-   * Merge permanent room config from RTDB with ephemeral runtime state from Redis.
-   * - RTDB: permanent data (id, name, betAmount, bingoCards, isDemoRoom, etc.)
-   * - Redis: roomStatus, countdowns, players, calledNumbers, currentGameId, etc.
-   */
+/// REDIS AND RDTBS TOGETHER
   async getFullRoom(roomId) {
     const baseRoom = (await this.getRoomConfig(roomId)) || {};
     const runtime = (await this.getRoomState(roomId)) || {};
@@ -68,7 +60,7 @@ class GameManager {
       bingoCards,
     };
   }
-
+// SET ROOM STATE IN REDIS
   async setRoomState(roomId, patch) {
     try {
       const current = (await this.getRoomState(roomId)) || {};
@@ -80,8 +72,7 @@ class GameManager {
       console.error("⚠️ setRoomState Redis error:", e);
     }
   }
-
-  // Get room players from Redis (runtime data)
+  // GET ROOM PLAYERS FROM REDIS
   async getRoomPlayers(roomId) {
     try {
       const roomState = await this.getRoomState(roomId);
@@ -91,8 +82,7 @@ class GameManager {
       return {};
     }
   }
-
-  // Set room players in Redis (runtime data)
+// SET ROOM PLAYERS IN REDIS
   async setRoomPlayers(roomId, players) {
     try {
       await this.setRoomState(roomId, { players });
@@ -100,7 +90,6 @@ class GameManager {
       console.error("⚠️ setRoomPlayers Redis error:", e);
     }
   }
-
   // Add/update a player in Redis
   async addRoomPlayer(roomId, playerId, playerData) {
     try {
@@ -122,7 +111,7 @@ class GameManager {
       console.error("⚠️ removeRoomPlayer Redis error:", e);
     }
   }
-
+// UPDATE ROOM PLAYER IN REDIS
   async updateRoomPlayer(roomId, playerId, patch) {
     try {
       const players = await this.getRoomPlayers(roomId);
@@ -134,7 +123,7 @@ class GameManager {
     }
   }
 
-  // Get claimed cards (non-auto) from Redis
+  // Get claimed cards  from Redis
   async getClaimedCards(roomId) {
     try {
       const roomState = await this.getRoomState(roomId);
@@ -145,7 +134,7 @@ class GameManager {
     }
   }
 
-  // Set claimed cards (non-auto) in Redis
+  // Set claimed cards on Redis
   async setClaimedCards(roomId, claimedCards) {
     try {
       await this.setRoomState(roomId, { claimedCards });
@@ -181,7 +170,7 @@ class GameManager {
       console.error("⚠️ unclaimCard Redis error:", e);
     }
   }
-
+// SET CARD AUTO STATE IN REDIS
   async setCardAutoState(roomId, cardId, options = {}) {
     try {
       const claimedCards = await this.getClaimedCards(roomId);
@@ -201,7 +190,7 @@ class GameManager {
       return { success: false, message: "Server error" };
     }
   }
-
+// APPLY BALANCE ADJUSTMENTS TO RDTBS
   async applyBalanceAdjustments(adjustments = {}) {
     const entries = Object.entries(adjustments);
     if (entries.length === 0) return;
@@ -220,7 +209,7 @@ class GameManager {
       await update(ref(rtdb), updates);
     }
   }
-
+// GET MULTI WIN STATS FROM REDIS
   async getMultiWinStats() {
     try {
       const raw = await redis.get("global:multiWinStats");
@@ -230,7 +219,7 @@ class GameManager {
       return { lastMultiGame: 0, gameCount: 0 };
     }
   }
-
+// SET MULTI WIN STATS IN REDIS
   async setMultiWinStats(stats) {
     try {
       await redis.set("global:multiWinStats", JSON.stringify(stats));
@@ -238,7 +227,7 @@ class GameManager {
       console.error("⚠️ setMultiWinStats error:", e);
     }
   }
-
+// RESHUFFLE DEMO AUTO PLAYERS IN REDIS
   async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
     try {
       const roomConfig = baseRoom || (await this.getRoomConfig(roomId)) || {};
@@ -281,10 +270,13 @@ class GameManager {
       for (const card of selected) {
         const demoId = card.claimedBy;
         const username = players[demoId]?.username || `demo_${demoId}`;
-
+        try {
         await this.unclaimCard(roomId, card.cardId);
         await this.removeRoomPlayer(roomId, demoId);
-
+        } catch (err) {
+          console.error(`❌ Demo reshuffle error for ${roomId}:`, err);
+          return { done: false, reason: "error", err };
+        }
         if (unclaimedPool.length === 0) break;
         const randomIndex = Math.floor(Math.random() * unclaimedPool.length);
         const newCardId = unclaimedPool.splice(randomIndex, 1)[0];
@@ -311,10 +303,6 @@ class GameManager {
     }
   }
 
-  /**
-   * Place bet: record player + claimed card in Redis only.
-   * RTDB is used only to read permanent room/card data and financial operations elsewhere.
-   */
   async placeBet(roomId, cardId, user) {
     try {
       // Gate by room state: only allow in waiting or countdown
@@ -350,6 +338,7 @@ class GameManager {
       }
 
       // Record in Redis
+      try {
       await this.claimCard(roomId, cardId, playerId);
       await this.addRoomPlayer(roomId, playerId, {
         telegramId: playerId,
@@ -358,6 +347,10 @@ class GameManager {
         cardId,
         attemptedBingo: false,
       });
+    } catch (err) {
+      console.error(`❌ Place bet error for ${roomId}:`, err);
+      return { success: false, message: "Server error" };
+    }
 
       // Notify clients in this room
       if (this.io) {
@@ -640,13 +633,6 @@ class GameManager {
     }
   }
 
-
-
-
-
-
-
-
   async cancelCountdown(roomId) {
     try {
       if (this.countdownTimers.has(roomId)) {
@@ -680,8 +666,6 @@ class GameManager {
     }
   }
 
-
-  // Start a new game
   async startGame(roomId) {
     console.log("➡️ startGame(): entered for", roomId);
 
@@ -853,8 +837,6 @@ const gameData = {
       console.error("❌ Failed to save revenue:", err);
     }
   }
-
-
   // Start number drawing process
   startNumberDrawing(roomId, gameId, room) {
     if (this.numberDrawIntervals.has(roomId)) {
@@ -962,14 +944,6 @@ const gameData = {
     this.numberDrawIntervals.set(roomId, drawInterval);
   }
 
-  // Stop number drawing
-
-  // 🧮 Collect demo balances and distribute to real players before reset
-  
-
-
-
-  // End game
   async endGame(roomId, gameId, reason = "manual") {
       const nextGameCountdownMs = 3000; // 5 seconds before reset
     const nextGameCountdownEndAt = Date.now() + nextGameCountdownMs;
@@ -1070,7 +1044,6 @@ const gameData = {
   }
 
 
-  // Process winners and payouts
   async processWinners(roomId, gameData) {
     try {
       const { winners, totalPayout, id } = gameData;
@@ -1243,10 +1216,6 @@ const gameData = {
     }
   }
   
-  
-
-
-  // Validate bingo pattern
   validateBingoPattern(cardId, room, pattern, calledNumbers) {
     try {
       const card = room.bingoCards[cardId];
@@ -1568,10 +1537,6 @@ const gameData = {
     }
   }
   
-
-
-
-  // Pick winning patterns from a card
   pickPatternNumbers(card) {
     const numbers = card.numbers;
     const size = numbers.length;
@@ -1608,7 +1573,6 @@ const gameData = {
     return patterns;
   }
 
-  // Shuffle array
   shuffleArray(array) {
     const arr = array.slice();
     for (let i = arr.length - 1; i > 0; i--) {
@@ -1618,7 +1582,6 @@ const gameData = {
     return arr;
   }
 
-  // Reset room for next game
   async resetRoom(roomId) {
     try {
       if (this.resetRoomTimers && this.resetRoomTimers.has(roomId)) {

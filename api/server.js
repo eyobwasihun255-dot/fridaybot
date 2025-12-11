@@ -253,61 +253,66 @@ const autoCountdownCheck = async () => {
     
     for (let i = 0; i < roomEntries.length; i += batchSize) {
       const batch = roomEntries.slice(i, i + batchSize);
-      await Promise.allSettled(batch.map(async ([roomId, room]) => {
-        try {
-          await processRoomCountdown(roomId, room, now);
-        } catch (error) {
-          console.error(`❌ Error processing room ${roomId}:`, error);
-        }
-      }));
+      await Promise.allSettled(
+        batch.map(async ([roomId, room]) => {
+          try {
+            await processRoomCountdown(roomId, room, now);
+          } catch (error) {
+            console.error(`❌ Error processing room ${roomId}:`, error);
+          }
+        })
+      );
     }
   } catch (error) {
     console.error("⚠️ autoCountdownCheck error:", error);
   }
 };
 
-const processRoomCountdown = async (roomId, room, now) => {
-  if (!room) return;
+const processRoomCountdown = async (roomId, roomFromCache, now) => {
+  try {
+    // 1) Load state from Redis via GameManager
+    let roomState = await gameManager.getRoomState(roomId);
 
-  // Players list is now stored in Redis runtime state
-  const runtimeState = await gameManager.getRoomState(roomId);
-  const playersObj = runtimeState?.players || {};
-
-  const players = Object.values(playersObj).filter((p) => {
-    if (!p.cardId) return false;
-    if (room.isDemoRoom) return true;
-
-    // Bet placed or card claimed (for auto-bet)
-    const hasBet = !!p.betAmount;
-    const card = room.bingoCards?.[p.cardId];
-    const hasAuto = card?.claimed && card?.auto;
-
-    return hasBet || hasAuto;
-  });
-
-  const roomStatus = runtimeState?.roomStatus || room.gameStatus;
-  const countdownEndAt = runtimeState?.countdownEndAt || room.countdownEndAt;
-
-  const hasEnoughPlayers = players.length >= 2;
-  const isWaiting = roomStatus === "waiting";
-  const countdownActive = countdownEndAt && countdownEndAt > now;
-
-  // Start countdown if conditions are met
-  if (isWaiting && hasEnoughPlayers && !countdownActive) {
-    console.log(`🔄 Starting countdown for room ${roomId} with ${players.length} players`);
-    const result = await gameManager.startCountdown(room, roomId, players, 30000, "auto");
-    if (!result.success) {
-      console.warn(`❌ Failed to start countdown for room ${roomId}: ${result.message}`);
+    // Fallback to RTDB base config
+    if (!roomState) {
+      roomState = { ...roomFromCache, players: {} };
     }
-    return;
-  }
 
-  // Cancel countdown if not enough players remain (only if auto)
-  if (roomStatus === "countdown" && !hasEnoughPlayers && (runtimeState?.countdownStartedBy || room.countdownStartedBy) === "auto") {
-    console.log(`❌ Cancelling countdown for room ${roomId} (not enough players)`);
-    await gameManager.cancelCountdown(roomId);
+    // 2) Get players (Redis → RTDB fallback)
+    let players = roomState.players || {};
+
+    if (!players || Object.keys(players).length === 0) {
+      const snap = await get(ref(rtdb, `rooms/${roomId}/players`));
+      players = snap.val() || {};
+    }
+
+    const playerList = Object.keys(players);
+    const playerCount = playerList.length;
+
+    // 3) If room is already busy → ignore
+    if (roomState.roomStatus === "countdown" || roomState.roomStatus === "playing") {
+      return; 
+    }
+
+    // 4) Not enough players → do nothing
+    if (playerCount < 2) return;
+
+    // 5) START official countdown through GameManager
+    console.log(`🚀 Triggering GameManager countdown for room ${roomId}`);
+
+    await gameManager.startCountdown(
+      roomState,
+      roomId,
+      playerList,
+      30000,         // countdown duration (5 sec or your value)
+      "auto"
+    );
+
+  } catch (err) {
+    console.error(`❌ processRoomCountdown error for room ${roomId}:`, err);
   }
 };
+
 
 // 🔁 Run optimized loop every 3 seconds
 setInterval(autoCountdownCheck, 3000);

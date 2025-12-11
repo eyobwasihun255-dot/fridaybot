@@ -6,15 +6,12 @@ import redis from "./redisClient.js";
 import {getApiUrl} from "./api.js";
 const ADMIN_PASSCODE = "19991999"; // Ideally move to process.env.ADMIN_PASSCODE
 
-// Helper function to get webapp URL (defaults to localhost for development)
 function getWebappUrl() {
   return process.env.WEBAPP_URL || 
       (process.env.NODE_ENV === 'production' 
         ? "https://fridaybot-c47n.onrender.com"
       : `http://localhost:${process.env.PORT || 5000}`);
 }
-
-
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ADMIN_IDS = (process.env.ADMIN_IDS || "")
@@ -211,16 +208,6 @@ async function telegram(method, payload) {
     return { ok: false, error: err.message }; // Never throw!
   }
 }
-function homeKeyboard(lang) {
-  return {
-    inline_keyboard: [
-      [{ text: "🏠 Home", callback_data: "go_home" }],
-    ],
-  };
-}
-
-
-
 async function sendMessage(chatId, text, extra = {}) {
   try {
     const result = await telegram("sendMessage", { chat_id: chatId, text, ...extra });
@@ -232,12 +219,6 @@ async function sendMessage(chatId, text, extra = {}) {
     // Do nothing — game logic continues unaffected
   }
 }
-
-// ====================== USER MANAGEMENT ======================
-// ====================== USER MANAGEMENT ======================
-// ====================== USER MANAGEMENT ======================
-
-
 // ====================== MESSAGE HELPERS ======================
 function extractUrlFromText(text) {
   const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -290,7 +271,6 @@ async function handleStart(message) {
     sendMessage(chatId, t("en", "choose_lang"), { reply_markup: keyboard });
   }
 }
-
 
 import crypto from "crypto";
 const API = `https://api.telegram.org/bot${TOKEN}`;
@@ -379,9 +359,6 @@ async function handlePlaygame(message) {
 
   sendMessage(chatId, t("am", "play"), { reply_markup: keyboard });
 }
-
-
-
 
 async function handleDeposit(message) {
 const chatId = message.chat.id;
@@ -499,16 +476,10 @@ async function handleWithdraw(message) {
   pendingActions.set(userId, { type: "awaiting_withdraw_amount" });
 }
 
-
-
-
-
-// ====================== STATE MACHINE ======================
 const pendingActions = new Map();
 const depositRequests = new Map();
 const withdrawalRequests = new Map();
 
-// ====================== USER MESSAGES ======================
 async function handleUserMessage(message) {
   const chatId = message.chat.id;
   const userId = message.from.id;
@@ -1359,8 +1330,7 @@ if (text === "/demo") {
       `- Total demo players: ${demoPlayers.length}\n` +
       `- Total balance: ${totalBalance}\n` +
       `- Players with balance > 10: ${countAbove10}\n` +
-      `- Sample demo players: ${JSON.stringify(sampleDemoPlayers)}\n` +
-      `- Unique prefixes found: ${uniquePrefixes.join(", ")}`
+      `- Sample demo players: ${JSON.stringify(sampleDemoPlayers)}\n` 
     );
 
   } catch (err) {
@@ -2150,10 +2120,6 @@ if (data.startsWith("deposit_amount_")) {
   telegram("answerCallbackQuery", { callback_query_id: callbackQuery.id });
 }
 
- // check every 1 minute
-
-
-// ====================== MAIN HANDLER (Webhook mode) ======================
 export default async function handler(req, res) {
   try {
     // Log incoming requests for debugging

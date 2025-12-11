@@ -82,6 +82,41 @@ class GameManager {
       return {};
     }
   }
+  async getRoomPlayersrdtbs(roomId) {
+    try {
+      // 1️⃣ Get room state (so we know which players are in the room)
+      const roomState = await this.getRoomState(roomId);
+      const roomPlayers = roomState?.players || {};
+  
+      if (!roomPlayers || Object.keys(roomPlayers).length === 0) {
+        return {};
+      }
+  
+      const result = {};
+  
+      // 2️⃣ Fetch each player from RTDB
+      for (const userId of Object.keys(roomPlayers)) {
+        try {
+          const snap = await get(ref(rtdb, `users/${userId}`));
+          if (snap.exists()) {
+            result[userId] = snap.val();
+          } else {
+            console.warn(`⚠️ User record missing in RTDB: ${userId}`);
+            result[userId] = { gamesPlayed: 0 }; // safe fallback
+          }
+        } catch (err) {
+          console.error(`⚠️ Error fetching user ${userId} from RTDB:`, err);
+          result[userId] = { gamesPlayed: 0 }; // safe fallback
+        }
+      }
+  
+      return result; // key → userId, value → full user data from RTDB
+  
+    } catch (e) {
+      console.error("⚠️ getRoomPlayers RTDB fallback error:", e);
+      return {};
+    }
+  }
 // SET ROOM PLAYERS IN REDIS
   async setRoomPlayers(roomId, players) {
     try {
@@ -604,6 +639,7 @@ class GameManager {
           const latest = await this.getRoomState(roomId);
           if (latest?.roomStatus === "countdown") {
             console.log(`🎮 Countdown ended → starting game for room ${roomId}`);
+            await this.syncPlayersAndCards(roomId);
             await this.startGame(roomId, latest);
           } else {
             console.log(`⚠️ Skipping startGame for room ${roomId}, state changed to ${latest?.roomStatus}`);
@@ -702,7 +738,7 @@ class GameManager {
       }
 
       // ✅ Sync players and cards before starting game
-      await this.syncPlayersAndCards(roomId);
+      
 
       // ✅ Ensure enough claimed cards (>2) before starting
       const syncedState = (await this.getRoomState(roomId)) || {};
@@ -1107,6 +1143,9 @@ const gameData = {
       if (!room || (room.roomStatus || room.gameStatus) !== "playing") {
         return { success: false, message: "Game not in playing state" };
       }
+      
+      // Mark this player as having attempted (prevents double-claim spam)
+      await this.updateRoomPlayer(roomId, userId, { attemptedBingo: true });
   
       const players = room.players || {};
       const player = players[userId];
@@ -1165,13 +1204,13 @@ const gameData = {
         const userSnap = await get(ref(rtdb, `users/${userId}`));
         const userData = userSnap.val() || {};
         const currentGamesWon = userData.gamesWon || 0;
-
+     
         // Update gamesWon += 1
         await update(ref(rtdb, `users/${userId}`), {
           gamesWon: currentGamesWon + 1,
           lastWinDate: new Date().toISOString()  // ✅ store last win time
         });
-        
+        console.log(`🏆 Games won updated for ${userId}: ${currentGamesWon + 1}`);
       } catch (err) {
         console.error(`⚠️ Failed updating gamesWon for ${userId}:`, err);
       }
@@ -1196,8 +1235,6 @@ const gameData = {
         });
       }
   
-      // Mark this player as having attempted (prevents double-claim spam)
-      await this.updateRoomPlayer(roomId, userId, { attemptedBingo: true });
 
       // ✅ End the game (this will emit gameEnded and schedule reset)
       await this.endGame(roomId, gameId, "bingo");
@@ -1279,7 +1316,7 @@ const gameData = {
   async deductBets(roomId, gameData) {
     try {
       const roomConfig = await this.getRoomConfig(roomId);
-      const players = await this.getRoomPlayers(roomId);
+      const players = await this.getRoomPlayersrdtbs(roomId);
       if (!roomConfig || !players) return;
   
       const betAmount = roomConfig.betAmount || 0;

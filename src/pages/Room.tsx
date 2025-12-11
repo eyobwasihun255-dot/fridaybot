@@ -278,21 +278,19 @@ const Room: React.FC = () => {
     const calledSet = new Set(displayedCalledNumbers);
     return patternNumbers.every((n) => n === 0 || calledSet.has(n));
   }, [displayedCalledNumbers]);
-  const handleBingoClick = useCallback(async () => {
 
-    // 1) USER HAS NO CARD → STOP
+  const handleBingoClick = async () => {
+    console.log("clicked bingo")
     if (!displayedCard) {
       setGameMessage("❌ You don't have a card");
       return;
     }
 
-    // 2) ROOM MUST BE PLAYING
     if (currentRoom?.gameStatus !== 'playing') {
       setGameMessage(t('bingo_not_allowed'));
       return;
     }
 
-    // 3) BASE CHECKS
     if (!currentRoom || !user) {
       setGameMessage(t('error_player_card'));
       return;
@@ -300,7 +298,6 @@ const Room: React.FC = () => {
 
     if (hasAttemptedBingo) return;
 
-    // 4) VALIDATE PATTERN
     const covered = findCoveredPatternByMarks();
     if (!covered || !patternExistsInCalled(covered.patternNumbers)) {
       setGameMessage(t('not_a_winner'));
@@ -308,7 +305,6 @@ const Room: React.FC = () => {
       return;
     }
 
-    // 5) SUBMIT BINGO
     try {
       const result = await checkBingo(covered.patternIndices);
       if (!result.success) {
@@ -320,17 +316,8 @@ const Room: React.FC = () => {
       setGameMessage('Network error');
       setHasAttemptedBingo(false);
     }
-    
-}, [
-    currentRoom,
-    displayedCard,
-    user,
-    hasAttemptedBingo,
-    findCoveredPatternByMarks,
-    patternExistsInCalled,
-    checkBingo,
-    t
-]);
+
+}
 
   // ---- small helpers used by UI ----
   function getBingoLetter(num: number) {
@@ -448,6 +435,7 @@ const Room: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-800 via-purple-900 to-blue-900 flex flex-col items-center p-2 text-white">
       {/* header & info */}
+      
       <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 mb-3 w-full text-xs">
         <button onClick={() => navigate('/')} className="fixed top-3 left-3 bg-gradient-to-r from-red-500 to-pink-500 px-4 py-2 rounded font-bold text-sm shadow hover:opacity-90 transition z-50">
           {t('home')}
@@ -467,7 +455,7 @@ const Room: React.FC = () => {
       <div className="bg-white/10 rounded text-center py-1 border border-white/20 w-full mb-2">
         {currentRoom?.gameStatus ?? t('waiting')}
       </div>
-
+      
       {/* popups */}
       {showLoserPopup && winnerCard && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
@@ -707,11 +695,13 @@ const Room: React.FC = () => {
           <button onClick={handleBingoClick} disabled={hasAttemptedBingo || isDisqualified} className={`flex-1 py-2 rounded font-bold text-sm shadow transition bg-gradient-to-r from-orange-500 to-yellow-500 hover:opacity-90 ${hasAttemptedBingo || isDisqualified ? 'opacity-50 cursor-not-allowed' : ''}`}>
             {t('bingo')}
           </button>
+          
         </div>
-
+        {gameMessage && <p>{gameMessage}</p>}
         <button onClick={() => setShowPatterns(true)} className="w-full bg-gradient-to-r from-theme-primary to-theme-secondary py-2 rounded-lg font-bold text-sm shadow hover:opacity-90 transition">
           {t('pattern')}
         </button>
+        
       </div>
 
       {/* players footer */}

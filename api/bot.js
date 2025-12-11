@@ -436,34 +436,70 @@ async function handleReferral(message) {
   );
 }
 
-
 async function handleWithdraw(message) {
-const chatId = message.chat.id;
-const userRef = ref(rtdb, "users/" + message.from.id);
-const userSnap = await get(userRef);
-const user = userSnap.val();
-const lang = user?.lang || "en";
+  const chatId = message.chat.id;
+  const userId = message.from.id;
 
+  const userRef = ref(rtdb, "users/" + userId);
+  const userSnap = await get(userRef);
+  const user = userSnap.val();
+  const lang = user?.lang || "en";
 
-// ✅ Check if user has any approved deposits
-const depsRef = ref(rtdb, "deposits");
-const depsSnap = await get(depsRef);
+  // ===========================================
+  // 🔍 STEP 1: Get ALL approved deposits
+  // ===========================================
+  const depsRef = ref(rtdb, "deposits");
+  const depsSnap = await get(depsRef);
 
-let hasDeposit = false;
+  if (!depsSnap.exists()) {
+    return sendMessage(chatId, "❌ You must deposit at least once before withdrawing.");
+  }
 
-if (depsSnap.exists()) {
-  const allDeps = Object.values(depsSnap.val());
-  hasDeposit = allDeps.some(d => d.userId == userId && d.status === "approved");
+  const deposits = Object.values(depsSnap.val())
+    .filter(d => d.userId == userId );
+
+  if (deposits.length === 0) {
+    return sendMessage(chatId, "❌ You must deposit at least once before withdrawing.");
+  }
+
+  // ===========================================
+  // 🔍 STEP 2: Last approved deposit date
+  // ===========================================
+  const lastDeposit = deposits
+    .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+
+  const lastDepositDate = new Date(lastDeposit.date);
+
+  // ===========================================
+  // 🔍 STEP 3: Check user's lastWinDate
+  // ===========================================
+  if (!user.lastWinDate) {
+    return sendMessage(
+      chatId,
+      "❌ You must win at least one game before withdrawing."
+    );
+  }
+
+  const lastWinDate = new Date(user.lastWinDate);
+
+  // ===========================================
+  // 🔍 STEP 4: Ensure last win happened AFTER last deposit
+  // ===========================================
+  if (lastWinDate <= lastDepositDate) {
+    return sendMessage(
+      chatId,
+      "❌ You must WIN a game AFTER your latest deposit before withdrawing."
+    );
+  }
+
+  // ===========================================
+  // 👍 PASSED ALL CHECKS → Continue withdrawal
+  // ===========================================
+  sendMessage(chatId, t(lang, "withdraw_amount"));
+  pendingActions.set(userId, { type: "awaiting_withdraw_amount" });
 }
 
-if (!hasDeposit) {
-  return sendMessage(chatId, "❌ You must deposit at least once before making withdrawals.");
-}
 
-sendMessage(chatId, t(lang, "withdraw_amount"));
-pendingActions.set(message.from.id, { type: "awaiting_withdraw_amount" });
-
-}
 
 
 

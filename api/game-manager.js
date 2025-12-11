@@ -1077,7 +1077,9 @@ const gameData = {
           // Update gamesWon += 1
           await update(ref(rtdb, `users/${userId}`), {
             gamesWon: currentGamesWon + 1,
+            lastWinDate: new Date().toISOString()  // ✅ store last win time
           });
+          
         } catch (err) {
           console.error(`⚠️ Failed updating gamesWon for ${userId}:`, err);
         }

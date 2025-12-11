@@ -1220,7 +1220,8 @@ if (pending?.type === "awaiting_random_auto") {
 
     // Players already in room (avoid duplicates)
     const roomPlayers = Object.values(room.players || {});
-    const usedUserIds = new Set(roomPlayers.map(p => p.userId));
+    // Players in Redis store telegramId; older schema might have userId. Cover both.
+    const usedUserIds = new Set(roomPlayers.map(p => p.telegramId || p.userId));
 
     // Get demo users
     const usersSnap = await get(ref(rtdb, "users"));

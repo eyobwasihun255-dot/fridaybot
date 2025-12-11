@@ -713,6 +713,20 @@ class GameManager {
       // ✅ Sync players and cards before starting game
       await this.syncPlayersAndCards(roomId);
 
+      // ✅ Ensure enough claimed cards (>2) before starting
+      const syncedState = (await this.getRoomState(roomId)) || {};
+      const claimedCardsAfterSync = syncedState.claimedCards || {};
+      const claimedCount = Object.values(claimedCardsAfterSync).filter((c) => c?.claimed).length;
+      if (claimedCount < 2) {
+        console.log(`❌ Not enough claimed cards to start game in room ${roomId}: ${claimedCount}`);
+        await this.setRoomState(roomId, {
+          roomStatus: "waiting",
+          countdownEndAt: null,
+          countdownStartedBy: null,
+        });
+        return { success: false, message: "Not enough claimed cards (need > 2)" };
+      }
+
       // Generate a new gameId
       const gameId = uuidv4();
       console.log("🎲 New gameId:", gameId);

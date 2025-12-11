@@ -317,6 +317,13 @@ class GameManager {
    */
   async placeBet(roomId, cardId, user) {
     try {
+      // Gate by room state: only allow in waiting or countdown
+      const runtimeState = (await this.getRoomState(roomId)) || {};
+      const roomStatus = runtimeState.roomStatus || runtimeState.gameStatus || "unknown";
+      if (roomStatus !== "waiting" && roomStatus !== "countdown") {
+        return { success: false, message: "Room not accepting bets right now" };
+      }
+
       const room = await this.getRoomConfig(roomId);
       if (!room) {
         return { success: false, message: "Room not found" };

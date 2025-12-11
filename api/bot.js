@@ -1210,6 +1210,15 @@ if (pending?.type === "awaiting_random_auto") {
     const room = state.room;
     if (!room) return sendMessage(chatId, "❌ Room not found.");
 
+    // ✅ Ensure room is in countdown or waiting state (runtime status)
+    const roomStatus = room.roomStatus || room.gameStatus || room.state;
+    if (roomStatus !== "waiting" && roomStatus !== "countdown") {
+      return sendMessage(
+        chatId,
+        "⚠️ Demo players can only be added when the room is in WAITING or COUNTDOWN state."
+      );
+    }
+
     const cards = room.bingoCards || {};
     let unclaimedCards = Object.entries(cards)
       .filter(([id, card]) => !card.claimed);
@@ -1220,7 +1229,6 @@ if (pending?.type === "awaiting_random_auto") {
 
     // Players already in room (avoid duplicates)
     const roomPlayers = Object.values(room.players || {});
-    // Players in Redis store telegramId; older schema might have userId. Cover both.
     const usedUserIds = new Set(roomPlayers.map(p => p.telegramId || p.userId));
 
     // Get demo users
@@ -1231,7 +1239,7 @@ if (pending?.type === "awaiting_random_auto") {
       .filter(u =>
         u.telegramId?.startsWith("demo") &&
         (u.balance || 0) >= room.betAmount &&
-        !usedUserIds.has(u.telegramId) // FIX: avoid demo users already in the room
+        !usedUserIds.has(u.telegramId)
       )
       .sort(() => Math.random() - 0.5);
 
@@ -1241,24 +1249,22 @@ if (pending?.type === "awaiting_random_auto") {
 
     let successCount = 0;
 
-    // Work on a mutable copy so we keep local state in sync during the loop
+    // Mutable runtime card state
     let runtimeCards = { ...(room.bingoCards || {}) };
     const usedIds = new Set(roomPlayers.map(p => p.telegramId || p.userId));
 
     for (let i = 0; i < demoUsers.length && successCount < count; i++) {
 
-      // Re-check free cards against the local runtime copy
+      // Re-check free cards from runtime copy
       unclaimedCards = Object.entries(runtimeCards)
         .filter(([_, c]) => !c.claimed);
 
       if (unclaimedCards.length < 1) break;
 
       const user = demoUsers[i];
-
-      // Skip if already placed in this run
       if (usedIds.has(user.telegramId)) continue;
 
-      const [cardId] = unclaimedCards[i]; // Always take the next free card
+      const [cardId] = unclaimedCards[i];
 
       // Place bet
       const result = await fetch(getApiUrl("/api/place-bet"), {
@@ -1273,10 +1279,10 @@ if (pending?.type === "awaiting_random_auto") {
 
       if (!result.success) {
         console.log("❌ Bet failed:", user.telegramId, result.message);
-        continue; // try next demo user
+        continue;
       }
 
-      // Enable auto mode
+      // Auto mode
       if (auto) {
         await fetch(getApiUrl("/api/toggle-auto"), {
           method: "POST",
@@ -1285,7 +1291,6 @@ if (pending?.type === "awaiting_random_auto") {
         });
       }
 
-      // Mark card/user locally to avoid reusing within this loop
       runtimeCards[cardId] = {
         ...(runtimeCards[cardId] || {}),
         claimed: true,
@@ -1309,6 +1314,7 @@ if (pending?.type === "awaiting_random_auto") {
   await pendingActions.delete(userId);
   return;
 }
+
 
 
 

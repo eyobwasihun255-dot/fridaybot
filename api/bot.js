@@ -1258,7 +1258,7 @@ if (pending?.type === "awaiting_random_auto") {
       // Skip if already placed in this run
       if (usedIds.has(user.telegramId)) continue;
 
-      const [cardId] = unclaimedCards[0]; // Always take the next free card
+      const [cardId] = unclaimedCards[i]; // Always take the next free card
 
       // Place bet
       const result = await fetch(getApiUrl("/api/place-bet"), {

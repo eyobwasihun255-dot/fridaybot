@@ -730,6 +730,7 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
   }
 
   async startGame(roomId) {
+    return this.lockRoom(roomId, async () => {
     console.log("➡️ startGame(): entered for", roomId);
 
     try {
@@ -739,13 +740,13 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
         return { success: false, message: "Room not found" };
       }
       const runtime = (await this.getRoomState(roomId)) || {};
-      const players = runtime.players || {};
-      const claimedCards = runtime.claimedCards || {};
-      const bingoCards = this.hydrateCards(
+      let players = runtime.players || {};
+      let claimedCards = runtime.claimedCards || {};
+      let bingoCards = this.hydrateCards(
         roomConfig.bingoCards || {},
         claimedCards
       );
-      const room = {
+      let room = {
         ...roomConfig,
         ...runtime,
         players,
@@ -765,7 +766,22 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
       }
 
       // ✅ Sync players and cards before starting game
-      
+      await this.syncPlayersAndCards(roomId);
+
+      // ✅ Re-fetch runtime after sync to avoid stale data while starting
+      const runtimeAfterSync = (await this.getRoomState(roomId)) || {};
+      players = runtimeAfterSync.players || {};
+      claimedCards = runtimeAfterSync.claimedCards || {};
+      bingoCards = this.hydrateCards(
+        roomConfig.bingoCards || {},
+        claimedCards
+      );
+      room = {
+        ...roomConfig,
+        ...runtimeAfterSync,
+        players,
+        bingoCards,
+      };
 
       // ✅ Ensure enough claimed cards (>2) before starting
       const syncedState = (await this.getRoomState(roomId)) || {};
@@ -834,7 +850,7 @@ const gameData = {
   startedAt: Date.now(),
   drawIntervalMs: 5000,
   status: "active",
-  totalPayout: Math.floor((validPlayers.length ) * (room.betAmount || 0) * 0.8 ),
+        totalPayout: Math.floor((validPlayers.length ) * (room.betAmount || 0) * 0.8 ),
   betsDeducted: false,
   winners: winners.map((cardId) => ({
     id: uuidv4(),
@@ -876,6 +892,7 @@ const gameData = {
       console.error("💥 Error in startGame():", error);
       return { success: false, message: error.message };
     }
+  });
   }
 
   async saveRevenueEntry(gameId, roomId, amount) {

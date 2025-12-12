@@ -647,7 +647,7 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
           console.log(`🎮 Countdown ended → attempting to start game for room ${roomId}`);
         
           // 1️⃣ Sync players & cards
-          await this.syncPlayersAndCards(roomId);
+          
         
           // 2️⃣ Re-check players AFTER sync — THIS IS THE FIX
           const livePlayers = await this.getRoomPlayers(roomId);

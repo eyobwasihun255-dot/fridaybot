@@ -265,7 +265,6 @@ class GameManager {
 // RESHUFFLE DEMO AUTO PLAYERS IN REDIS
   async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
     try {
-      const roomConfig = baseRoom || (await this.getRoomConfig(roomId)) || {};
       const players = await this.getRoomPlayers(roomId);
       const claimedCards = await this.getClaimedCards(roomId);
       const bingoCards = claimedCards// fallback when roomConfig has no bingoCards

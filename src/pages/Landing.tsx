@@ -124,9 +124,7 @@ const [loadingLeaders, setLoadingLeaders] = useState(false);
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Hero Section */}
       <div className="text-center mb-12">
-      <h1 className="text-4xl md:text-6xl font-bold text-white">
-          coming soon
-        </h1>
+      
         <h1 className="text-4xl md:text-6xl font-bold text-white">
           {t('friday_bingo')}
         </h1>

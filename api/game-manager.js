@@ -642,6 +642,7 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
       // --- Start countdown in Redis (ephemeral room state) ---
       await this.setRoomState(roomId, {
         roomStatus: "countdown",
+        gameStatus:"countdown",
         countdownEndAt,
         countdownStartedBy: startedBy,
       });

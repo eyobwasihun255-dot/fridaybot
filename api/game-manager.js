@@ -1161,23 +1161,21 @@ const gameData = {
       console.error("Error processing winners:", error);
     }
   }
- 
-  // Acquire a lock for checkBingo
-async acquireBingoLock(roomId, timeoutMs = 10000) {
+ // Acquire a lock for checkBingo
+ async acquireBingoLock(roomId, timeoutMs = 10000) {
   const key = `lock:bingo:${roomId}`;
   const now = Date.now();
 
-  const result = await this.redis.set(key, now, "NX", "PX", timeoutMs);
-
-  return result === "OK"; // true only if locked by this call
+  const result = await redis.set(key, now, "NX", "PX", timeoutMs);
+  return result === "OK";
 }
 
-// Release lock
 async releaseBingoLock(roomId) {
   const key = `lock:bingo:${roomId}`;
-  await this.redis.del(key);
+  await redis.del(key);
 }
 
+  
   // Check bingo claim
   async checkBingo(roomId, cardId, userId, pattern) {
 
@@ -1304,7 +1302,6 @@ async releaseBingoLock(roomId) {
       await this.releaseBingoLock(roomId);
     }
   }
-  
   
   validateBingoPattern(cardId, room, pattern, calledNumbers) {
     try {

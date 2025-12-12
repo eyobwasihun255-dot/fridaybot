@@ -644,11 +644,35 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
         }
       
         if (Date.now() >= countdownEndAt) {
-          console.log(`🎮 Countdown ended → starting game for room ${roomId}`);
+          console.log(`🎮 Countdown ended → attempting to start game for room ${roomId}`);
+        
+          // 1️⃣ Sync players & cards
           await this.syncPlayersAndCards(roomId);
+        
+          // 2️⃣ Re-check players AFTER sync — THIS IS THE FIX
+          const livePlayers = await this.getRoomPlayers(roomId);
+          const liveCount = Object.keys(livePlayers || {}).length;
+        
+          if (liveCount < 2) {
+            console.log(`❌ Not enough players after sync → Cancelling game start for room ${roomId}`);
+        
+            clearTimeout(this.countdownTimers.get(roomId));
+            this.countdownTimers.delete(roomId);
+        
+            await this.setRoomState(roomId, { roomStatus: "waiting", countdownEndAt: null });
+        
+            if (this.io) this.io.to(roomId).emit("countdownStopped", { roomId });
+        
+            return; // Do NOT start the game
+          }
+        
+          // 3️⃣ Now it's safe to start the game
+          console.log(`🎮 Starting game for room ${roomId} with ${liveCount} players`);
           await this.startGame(roomId, room);
+        
           this.countdownTimers.delete(roomId);
-        } else {
+        }
+         else {
           this.countdownTimers.set(roomId, setTimeout(countdownCheck, 500));
         }
       };

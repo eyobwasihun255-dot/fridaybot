@@ -730,7 +730,7 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
   }
 
   async startGame(roomId) {
-    return this.lockRoom(roomId, async () => {
+   
     console.log("➡️ startGame(): entered for", roomId);
 
     try {
@@ -892,7 +892,7 @@ const gameData = {
       console.error("💥 Error in startGame():", error);
       return { success: false, message: error.message };
     }
-  });
+  );
   }
 
   async saveRevenueEntry(gameId, roomId, amount) {

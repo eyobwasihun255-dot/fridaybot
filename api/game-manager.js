@@ -310,8 +310,7 @@ class GameManager {
         const demoId = card.claimedBy;
         const username = players[demoId]?.username || `demo_${demoId}`;
         try {
-        await this.unclaimCard(roomId, card.cardId);
-        await this.removeRoomPlayer(roomId, demoId);
+        await this.cancelBetForPlayer(roomId, card.cardId, demoId) ;
         } catch (err) {
           console.error(`❌ Demo reshuffle error for ${roomId}:`, err);
           return { done: false, reason: "error", err };
@@ -321,18 +320,8 @@ class GameManager {
         const newCardId = unclaimedPool.splice(randomIndex, 1)[0];
         if (!newCardId) continue;
 
-        await this.claimCard(roomId, newCardId, demoId, {
-          auto: true,
-          autoUntil: Date.now() + 24 * 60 * 60 * 1000,
-        });
+        await this.placeBet(roomId, newCardId, demoId);
 
-        await this.addRoomPlayer(roomId, demoId, {
-          telegramId: demoId,
-          username,
-          betAmount: roomConfig.betAmount || 0,
-          cardId: newCardId,
-          attemptedBingo: false,
-        });
       }
 
       return { done: true };

@@ -1287,6 +1287,52 @@ if (pending?.type === "awaiting_random_auto") {
 }
 
 
+// ====================== /FIXBALANCE ======================
+if (text === "/fixbalance") {
+  if (!ADMIN_IDS.includes(userId)) {
+    return sendMessage(chatId, "❌ You are not authorized to use this command.");
+  }
+
+  sendMessage(chatId, "⏳ Checking all user balances...");
+
+  try {
+    const usersSnap = await get(ref(rtdb, "users"));
+    if (!usersSnap.exists()) {
+      return sendMessage(chatId, "⚠️ No users found in database.");
+    }
+
+    const allUsers = usersSnap.val();
+    let updates = {};
+    let fixedCount = 0;
+
+    for (const [key, u] of Object.entries(allUsers)) {
+      const bal = Number(u.balance) || 0;
+
+      if (bal < 0) {
+        updates[`users/${key}/balance`] = 0;
+        updates[`users/${key}/updatedAt`] = new Date().toISOString();
+        fixedCount++;
+      }
+    }
+
+    if (fixedCount > 0) {
+      await update(ref(rtdb), updates);
+    }
+
+    sendMessage(
+      chatId,
+      `✅ Balance correction completed.\n` +
+      `🔍 Users scanned: ${Object.keys(allUsers).length}\n` +
+      `🔧 Negative balances fixed: ${fixedCount}`
+    );
+
+  } catch (err) {
+    console.error("❌ Error in /fixbalance:", err);
+    sendMessage(chatId, "❌ Error while fixing balances.");
+  }
+
+  return;
+}
 
 
 if (text === "/demo") {

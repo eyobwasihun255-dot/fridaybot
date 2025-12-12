@@ -338,7 +338,7 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
     try {
       // Gate by room state: only allow in waiting or countdown
       const runtimeState = (await this.getRoomState(roomId)) || {};
-      const roomStatus = runtimeState.roomStatus || runtimeState.gameStatus || "unknown";
+      const roomStatus = runtimeState.roomStatus || runtimeState.gameStatus || "waiting";
       if (roomStatus !== "waiting" && roomStatus !== "countdown") {
         return { success: false, message: "Room not accepting bets right now" };
       }
@@ -603,7 +603,7 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
   async startCountdown(room, roomId, players, durationMs = 30000, startedBy = "auto") {
     try {
       console.log(`🎮 Room ${roomId} snapshot received for countdown`);
-
+  
       // --- Basic validations ---
       if (room.gameStatus === "countdown") {
         console.log(`⚠️ Countdown already active for room ${roomId}`);
@@ -617,9 +617,9 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
         console.log(`⚠️ Room ${roomId} not in waiting state: ${room.gameStatus}`);
         return { success: false, message: "Room not in waiting state" };
       }
-
+  
       const countdownEndAt = Date.now() + durationMs;
-
+  
       // --- Start countdown in Redis (ephemeral room state) ---
       await this.setRoomState(roomId, {
         roomStatus: "countdown",
@@ -627,44 +627,53 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
         countdownStartedBy: startedBy,
       });
       console.log(`⏳ Countdown started for room ${roomId} (${durationMs / 1000}s)`);
-
-      // --- Start countdown timer to auto-start game ---
+  
+      // --- Clear any existing countdown timer ---
       if (this.countdownTimers.has(roomId)) clearTimeout(this.countdownTimers.get(roomId));
-      const tid = setTimeout(async () => {
-        try {
-          const latest = await this.getRoomState(roomId);
-          if (latest?.roomStatus === "countdown") {
-            console.log(`🎮 Countdown ended → starting game for room ${roomId}`);
-            await this.syncPlayersAndCards(roomId);
-            await this.startGame(roomId, latest);
-          } else {
-            console.log(`⚠️ Skipping startGame for room ${roomId}, state changed to ${latest?.roomStatus}`);
-          }
-        } catch (err) {
-          console.error(`❌ Auto startGame error for room ${roomId}:`, err);
-        } finally {
+  
+      // --- Create a wrapper function that checks player count dynamically ---
+      const countdownCheck = async () => {
+        const latestRoom = await this.getRoomState(roomId);
+        const currentPlayers = await this.getPlayersInRoom(roomId); // you need a function to get current players
+  
+        if (currentPlayers.length < 2) {
+          console.log(`⚠️ Countdown stopped for room ${roomId}, not enough players`);
+          clearTimeout(this.countdownTimers.get(roomId));
           this.countdownTimers.delete(roomId);
+          await this.setRoomState(roomId, { roomStatus: "waiting" });
+          if (this.io) this.io.to(roomId).emit("countdownStopped", { roomId });
+          return;
         }
-      }, durationMs);
-      this.countdownTimers.set(roomId, tid);
-
+  
+        if (Date.now() >= countdownEndAt) {
+          console.log(`🎮 Countdown ended → starting game for room ${roomId}`);
+          await this.syncPlayersAndCards(roomId);
+          await this.startGame(roomId, latestRoom);
+          this.countdownTimers.delete(roomId);
+        } else {
+          // Check again in 500ms
+          this.countdownTimers.set(roomId, setTimeout(countdownCheck, 500));
+        }
+      };
+  
+      // --- Start the countdown monitoring loop ---
+      this.countdownTimers.set(roomId, setTimeout(countdownCheck, 500));
+  
       if (this.io) this.io.to(roomId).emit("countdownStarted", { roomId, countdownEndAt });
-
-
-
+  
       const reshuffleResult = await this.reshuffleDemoAutoPlayers(roomId, room);
       if (!reshuffleResult.done) {
         console.log(`ℹ️ Demo reshuffle for ${roomId} did not complete:`, reshuffleResult.reason || reshuffleResult);
       }
       console.log(`🔄 Reshuffle result for ${roomId}:`, reshuffleResult);
-      // --- Return countdown info ---
+  
       return { success: true, countdownEndAt };
     } catch (err) {
       console.error(`❌ Error starting countdown for room ${roomId}:`, err);
       return { success: false, message: "Server error" };
     }
   }
-
+  
   async cancelCountdown(roomId) {
     try {
       if (this.countdownTimers.has(roomId)) {

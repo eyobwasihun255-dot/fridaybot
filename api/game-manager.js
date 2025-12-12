@@ -46,6 +46,25 @@ class GameManager {
     }
     return hydrated;
   }
+  async ensureRoomExists(roomId) {
+    const state = await this.getRoomState(roomId);
+    if (state) return;
+  
+    const initial = {
+      gameStatus: "waiting",
+      roomStatus: "waiting",
+      players: {},
+      claimedCards: {},
+      calledNumbers: [],
+      payout: null,
+      payed: false,
+      winner: null,
+    };
+  
+    await redis.set(`room:${roomId}`, JSON.stringify(initial));
+    await redis.expire(`room:${roomId}`, 60 * 60);
+  }
+  
 /// REDIS AND RDTBS TOGETHER
   async getFullRoom(roomId) {
     const baseRoom = (await this.getRoomConfig(roomId)) || {};
@@ -336,6 +355,7 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
   async placeBet(roomId, cardId, user) {
     try {
       // Gate by room state: only allow in waiting or countdown
+      await this.ensureRoomExists(roomId);
       const runtimeState = (await this.getRoomState(roomId)) || {};
       const roomStatus = runtimeState.roomStatus || runtimeState.gameStatus || "waiting";
       if (roomStatus !== "waiting" && roomStatus !== "countdown") {

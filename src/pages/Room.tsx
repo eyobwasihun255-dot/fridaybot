@@ -147,11 +147,11 @@ const Room: React.FC = () => {
     const timers: number[] = [];
 
     if (showWinnerPopup) {
-      timers.push(window.setTimeout(() => setShowWinnerPopup(false), 10000));
+      timers.push(window.setTimeout(() => setShowWinnerPopup(false), 3000));
     }
     if (showLoserPopup) {
       setGameMessage(t('loser_bingo'));
-      timers.push(window.setTimeout(() => setShowLoserPopup(false), 10000));
+      timers.push(window.setTimeout(() => setShowLoserPopup(false), 3000));
     }
     if (gameMessage) {
       timers.push(window.setTimeout(() => setGameMessage(''), 3000));
@@ -457,7 +457,7 @@ const Room: React.FC = () => {
       </div>
       
       {/* popups */}
-      {showLoserPopup && winnerCard && (
+      {showLoserPopup && winnerCard && currentRoom.payed && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           {/* loser popup content (kept similar to yours) */}
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-96 max-w-full text-center">

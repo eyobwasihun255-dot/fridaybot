@@ -457,7 +457,7 @@ const Room: React.FC = () => {
       </div>
       
       {/* popups */}
-      {showLoserPopup && winnerCard && currentRoom.payed && (
+      {showLoserPopup && winnerCard  && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           {/* loser popup content (kept similar to yours) */}
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-96 max-w-full text-center">

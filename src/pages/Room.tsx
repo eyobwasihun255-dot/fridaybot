@@ -79,6 +79,7 @@ const Room: React.FC = () => {
   const [gameMessage, setGameMessage] = useState('');
   const [popupMessage, setPopupMessage] = useState<string | null>(null);
   const [showPatterns, setShowPatterns] = useState(false);
+  const [showNetworkPopup, setShowNetworkPopup] = useState(false);
 
   // unify isBetActive
   const isBetActive = hasBet || alreadyBetted || !!storeIsBetActive;
@@ -122,6 +123,26 @@ const Room: React.FC = () => {
     // cleanup is handled inside store/socket if implemented
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectToServer, joinRoom, roomId]);
+  // ---- Detect network lag / lost sync ----
+useEffect(() => {
+  let lastUpdate = Date.now();
+  
+  // Whenever currentRoom updates, refresh timestamp
+  if (currentRoom) {
+    lastUpdate = Date.now();
+  }
+
+  const interval = setInterval(() => {
+    const now = Date.now();
+
+    // If 7 seconds pass without room updates → assume lag
+    if (now - lastUpdate > 7000) {
+      setShowNetworkPopup(true);
+    }
+  }, 3000);
+
+  return () => clearInterval(interval);
+}, [currentRoom]);
 
   // ---- Countdown timer effect (single, based on countdownEndAt) ----
   useEffect(() => {
@@ -690,6 +711,15 @@ const Room: React.FC = () => {
             </ul>
           </div>
         )}
+        {showNetworkPopup && (
+  <div className="w-full bg-yellow-500 text-black text-center py-2 font-bold animate-pulse rounded mb-2 shadow-lg">
+    ⚠️ Network slow or out of sync — please refresh the page.
+    <button onClick={() => window.location.reload()} className="ml-2 underline">
+      Refresh
+    </button>
+  </div>
+)}
+
 
         <div className="flex flex-row gap-2">
           <button onClick={handleBingoClick} disabled={hasAttemptedBingo || isDisqualified} className={`flex-1 py-2 rounded font-bold text-sm shadow transition bg-gradient-to-r from-orange-500 to-yellow-500 hover:opacity-90 ${hasAttemptedBingo || isDisqualified ? 'opacity-50 cursor-not-allowed' : ''}`}>

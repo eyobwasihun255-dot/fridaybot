@@ -730,7 +730,6 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
   }
 
   async startGame(roomId) {
-   
     console.log("➡️ startGame(): entered for", roomId);
 
     try {
@@ -740,13 +739,13 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
         return { success: false, message: "Room not found" };
       }
       const runtime = (await this.getRoomState(roomId)) || {};
-      let players = runtime.players || {};
-      let claimedCards = runtime.claimedCards || {};
-      let bingoCards = this.hydrateCards(
+      const players = runtime.players || {};
+      const claimedCards = runtime.claimedCards || {};
+      const bingoCards = this.hydrateCards(
         roomConfig.bingoCards || {},
         claimedCards
       );
-      let room = {
+      const room = {
         ...roomConfig,
         ...runtime,
         players,
@@ -766,22 +765,7 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
       }
 
       // ✅ Sync players and cards before starting game
-      await this.syncPlayersAndCards(roomId);
-
-      // ✅ Re-fetch runtime after sync to avoid stale data while starting
-      const runtimeAfterSync = (await this.getRoomState(roomId)) || {};
-      players = runtimeAfterSync.players || {};
-      claimedCards = runtimeAfterSync.claimedCards || {};
-      bingoCards = this.hydrateCards(
-        roomConfig.bingoCards || {},
-        claimedCards
-      );
-      room = {
-        ...roomConfig,
-        ...runtimeAfterSync,
-        players,
-        bingoCards,
-      };
+      
 
       // ✅ Ensure enough claimed cards (>2) before starting
       const syncedState = (await this.getRoomState(roomId)) || {};
@@ -850,7 +834,7 @@ const gameData = {
   startedAt: Date.now(),
   drawIntervalMs: 5000,
   status: "active",
-        totalPayout: Math.floor((validPlayers.length ) * (room.betAmount || 0) * 0.8 ),
+  totalPayout: Math.floor((validPlayers.length ) * (room.betAmount || 0) * 0.8 ),
   betsDeducted: false,
   winners: winners.map((cardId) => ({
     id: uuidv4(),
@@ -892,7 +876,6 @@ const gameData = {
       console.error("💥 Error in startGame():", error);
       return { success: false, message: error.message };
     }
-  
   }
 
   async saveRevenueEntry(gameId, roomId, amount) {
@@ -1179,16 +1162,42 @@ const gameData = {
     }
   }
  
-  
+  // Acquire a lock for checkBingo
+async acquireBingoLock(roomId, timeoutMs = 10000) {
+  const key = `lock:bingo:${roomId}`;
+  const now = Date.now();
+
+  const result = await this.redis.set(key, now, "NX", "PX", timeoutMs);
+
+  return result === "OK"; // true only if locked by this call
+}
+
+// Release lock
+async releaseBingoLock(roomId) {
+  const key = `lock:bingo:${roomId}`;
+  await this.redis.del(key);
+}
+
   // Check bingo claim
   async checkBingo(roomId, cardId, userId, pattern) {
+
+    // ------------------------------------
+    // 1) QUEUE: Only one bingo check at a time
+    // ------------------------------------
+    while (true) {
+      const got = await this.acquireBingoLock(roomId);
+      if (got) break;
+      await new Promise(res => setTimeout(res, 120)); 
+    }
+  
     try {
+      // 2) Load full room
       const room = await this.getFullRoom(roomId);
       if (!room || (room.roomStatus || room.gameStatus) !== "playing") {
         return { success: false, message: "Game not in playing state" };
       }
-      
-      // Mark this player as having attempted (prevents double-claim spam)
+  
+      // Pre-mark attempt to prevent spam
       await this.updateRoomPlayer(roomId, userId, { attemptedBingo: true });
   
       const players = room.players || {};
@@ -1210,23 +1219,19 @@ const gameData = {
         return { success: false, message: "Invalid bingo pattern" };
       }
   
-      // ✅ STOP NUMBER DRAWING IMMEDIATELY
+      // STOP NUMBER DRAWING
       this.stopNumberDrawing(roomId);
   
-      // ⭕ If valid — we immediately end the game with this single winner
       const gameId = room.currentGameId;
       let gameData = await this.getGameState(gameId);
-  
-      if (!gameData) {
-        return { success: false, message: "Game not found" };
-      }
+      if (!gameData) return { success: false, message: "Game not found" };
   
       // Compute payout
       const totalPlayers = Object.keys(players).length;
       const bet = room.betAmount || 0;
       const totalPayout = Math.floor(totalPlayers * bet * 0.8);
   
-      // ✅ Update game state with winner BEFORE endGame
+      // Set winner
       gameData.winners = [{
         id: uuidv4(),
         cardId,
@@ -1236,30 +1241,31 @@ const gameData = {
       }];
       gameData.totalPayout = totalPayout;
       gameData.winner = userId;
+  
       await this.setGameState(gameId, gameData);
   
-      await this.saveRevenueEntry(gameId, roomId, Math.floor((totalPayout || 0) / 4));
-
-      // ✅ Apply payout (batched)
+      await this.saveRevenueEntry(gameId, roomId, Math.floor(totalPayout / 4));
+  
+      // Apply payout
       await this.applyBalanceAdjustments({
         [userId]: totalPayout,
       });
+  
+      // Update gamesWon
       try {
         const userSnap = await get(ref(rtdb, `users/${userId}`));
         const userData = userSnap.val() || {};
         const currentGamesWon = userData.gamesWon || 0;
-     
-        // Update gamesWon += 1
+  
         await update(ref(rtdb, `users/${userId}`), {
           gamesWon: currentGamesWon + 1,
-          lastWinDate: new Date().toISOString()  // ✅ store last win time
+          lastWinDate: new Date().toISOString()
         });
-        console.log(`🏆 Games won updated for ${userId}: ${currentGamesWon + 1}`);
       } catch (err) {
-        console.error(`⚠️ Failed updating gamesWon for ${userId}:`, err);
+        console.error("Failed updating gamesWon:", err);
       }
   
-      // ✅ Update room state with winner info
+      // Update room
       await this.setRoomState(roomId, {
         winner: userId,
         winners: [userId],
@@ -1267,7 +1273,6 @@ const gameData = {
         payed: true,
       });
   
-      // ✅ Notify UI with correct payload structure
       if (this.io) {
         this.io.to(roomId).emit("winnerConfirmed", {
           roomId,
@@ -1279,8 +1284,6 @@ const gameData = {
         });
       }
   
-
-      // ✅ End the game (this will emit gameEnded and schedule reset)
       await this.endGame(roomId, gameId, "bingo");
   
       return {
@@ -1294,8 +1297,14 @@ const gameData = {
     } catch (e) {
       console.error("checkBingo error:", e);
       return { success: false, message: "Server error" };
+    } finally {
+      // ------------------------------------
+      // RELEASE LOCK ALWAYS
+      // ------------------------------------
+      await this.releaseBingoLock(roomId);
     }
   }
+  
   
   validateBingoPattern(cardId, room, pattern, calledNumbers) {
     try {

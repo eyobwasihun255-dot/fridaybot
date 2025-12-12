@@ -289,39 +289,16 @@ const processRoomCountdown = async (roomId, roomFromCache, now) => {
     const playerList = Object.keys(players);
     const playerCount = playerList.length;
 
-    // 3) Handle stale countdown/ended states: if stuck > 30s, reset to waiting
-    const THIRTY_SECONDS = 30_000;
-    if (roomState.roomStatus === "countdown") {
-      const endAt = roomState.countdownEndAt || 0;
-      if (endAt && now - endAt > THIRTY_SECONDS) {
-        console.log(`⏳ Countdown stale for room ${roomId}, resetting to waiting`);
-        await gameManager.setRoomState(roomId, {
-          roomStatus: "waiting",
-          countdownEndAt: null,
-          countdownStartedBy: null,
-          currentGameId: null,
-        });
-        if (gameManager.io) gameManager.io.to(roomId).emit("countdownCancelled", { roomId });
-      }
-      return; 
-    }
+    // ❌ REMOVED:
+    // - countdown stale auto-reset
+    // - ended stale auto-reset
 
-    if (roomState.roomStatus === "ended") {
-      const nextAt = roomState.nextGameCountdownEndAt || 0;
-      if (nextAt && now - nextAt > THIRTY_SECONDS) {
-        console.log(`⏳ Ended state stale for room ${roomId}, resetting to waiting`);
-        await gameManager.setRoomState(roomId, {
-          roomStatus: "waiting",
-          currentGameId: null,
-          nextGameCountdownEndAt: null,
-        });
-        if (gameManager.io) gameManager.io.to(roomId).emit("roomReset", { roomId });
-      }
-      return;
-    }
-
-    // If playing, do nothing here
-    if (roomState.roomStatus === "playing") {
+    // Do nothing if already in countdown, ended, or playing
+    if (
+      roomState.roomStatus === "countdown" ||
+      roomState.roomStatus === "ended" ||
+      roomState.roomStatus === "playing"
+    ) {
       return;
     }
 
@@ -335,14 +312,14 @@ const processRoomCountdown = async (roomId, roomFromCache, now) => {
       roomState,
       roomId,
       playerList,
-      30000,         // countdown duration (5 sec or your value)
+      30000,  // countdown duration
       "auto"
     );
-
   } catch (err) {
     console.error(`❌ processRoomCountdown error for room ${roomId}:`, err);
   }
 };
+
 
 
 // 🔁 Run optimized loop every 3 seconds

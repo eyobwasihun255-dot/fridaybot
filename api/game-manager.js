@@ -66,8 +66,7 @@ class GameManager {
       const current = (await this.getRoomState(roomId)) || {};
       const next = { ...current, ...patch };
       await redis.set(`room:${roomId}`, JSON.stringify(next));
-      // Optional TTL so old rooms are cleaned automatically
-      await redis.expire(`room:${roomId}`, 60 * 60); // 1 hour
+       // 1 hour
     } catch (e) {
       console.error("⚠️ setRoomState Redis error:", e);
     }
@@ -638,7 +637,7 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
           console.log(`⚠️ Countdown stopped for room ${roomId}, not enough players`);
           clearTimeout(this.countdownTimers.get(roomId));
           this.countdownTimers.delete(roomId);
-          await this.setRoomState(roomId, { roomStatus: "waiting" });
+          await this.setRoomState(roomId, { roomStatus: "waiting", gameStatus:"waiting" });
           if (this.io) this.io.to(roomId).emit("countdownStopped", { roomId });
           return;
         }
@@ -659,7 +658,7 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
             clearTimeout(this.countdownTimers.get(roomId));
             this.countdownTimers.delete(roomId);
         
-            await this.setRoomState(roomId, { roomStatus: "waiting", countdownEndAt: null });
+            await this.setRoomState(roomId, {gamestatus:"waiting", roomStatus: "waiting", countdownEndAt: null });
         
             if (this.io) this.io.to(roomId).emit("countdownStopped", { roomId });
         
@@ -703,6 +702,8 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
         this.countdownTimers.delete(roomId);
       }
       await this.setRoomState(roomId, {
+
+        gameStatus:"waiting",
         roomStatus: "waiting",
         countdownEndAt: null,
         countdownStartedBy: null,
@@ -774,6 +775,7 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
       if (claimedCount < 2) {
         console.log(`❌ Not enough claimed cards to start game in room ${roomId}: ${claimedCount}`);
         await this.setRoomState(roomId, {
+          gameStatus:"waiting",
           roomStatus: "waiting",
           countdownEndAt: null,
           countdownStartedBy: null,
@@ -786,6 +788,7 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
       console.log("🎲 New gameId:", gameId);
 
       await this.setRoomState(roomId, {
+        gameStatus:"playing",
         roomStatus: "playing",
         currentGameId: gameId,
         calledNumbers: [],
@@ -817,7 +820,7 @@ const { drawnNumbers, winners } =  await this.generateDrawnNumbersMultiWinner(ro
 
 if (!drawnNumbers || drawnNumbers.length === 0) {
   console.error(`❌ Invalid drawnNumbers generated for room ${roomId}`);
-  await this.setRoomState(roomId, { roomStatus: "waiting", currentGameId: null });
+  await this.setRoomState(roomId, {gameStatus:"waiting", roomStatus: "waiting", currentGameId: null });
   return { success: false, message: "No valid drawn numbers generated" };
 }
 
@@ -1052,6 +1055,7 @@ const gameData = {
       const alreadyPaid = currentRoomState?.payed === true;
 
       await this.setRoomState(roomId, {
+        gameStatus:"ended",
         roomStatus: "ended",
         nextGameCountdownEndAt,
         countdownEndAt: null,
@@ -1726,6 +1730,7 @@ async releaseBingoLock(roomId) {
 
       await this.setRoomState(roomId, {
         roomStatus: "waiting",
+        gameStatus:"waiting",
         currentGameId: null,
         calledNumbers: [],
         countdownEndAt: null,

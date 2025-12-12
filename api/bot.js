@@ -1828,6 +1828,7 @@ if (pending?.type === "awaiting_room_reset_confirm") {
     await redis.set(`room:${roomId}`, JSON.stringify({
       ...room,
       gameStatus: "waiting",
+      roomStatus:"waiting",
       countdownEndAt: null,
       countdownStartedBy: null,
       drawnNumbers: [],

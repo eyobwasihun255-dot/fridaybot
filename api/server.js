@@ -304,7 +304,7 @@ const processRoomCountdown = async (roomId, roomFromCache, now) => {
 
     // 4) Not enough players → do nothing
     if (playerCount < 2) return;
-
+    if(roomState.roomStatus === "waiting"){
     // 5) START official countdown through GameManager
     console.log(`🚀 Triggering GameManager countdown for room ${roomId}`);
 
@@ -314,7 +314,7 @@ const processRoomCountdown = async (roomId, roomFromCache, now) => {
       playerList,
       30000,  // countdown duration
       "auto"
-    );
+    );}
   } catch (err) {
     console.error(`❌ processRoomCountdown error for room ${roomId}:`, err);
   }

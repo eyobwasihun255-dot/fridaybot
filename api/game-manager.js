@@ -892,7 +892,7 @@ const gameData = {
       console.error("💥 Error in startGame():", error);
       return { success: false, message: error.message };
     }
-  );
+  
   }
 
   async saveRevenueEntry(gameId, roomId, amount) {

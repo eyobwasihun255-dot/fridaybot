@@ -309,7 +309,6 @@ const processRoomCountdown = async (roomId, roomFromCache, now) => {
     console.log(`🚀 Triggering GameManager countdown for room ${roomId}`);
 
     await gameManager.startCountdown(
-      roomState,
       roomId,
       playerList,
       30000,  // countdown duration

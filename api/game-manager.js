@@ -619,10 +619,10 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
       this.numberDrawIntervals.delete(roomId);
     }
   }
-  async startCountdown(room, roomId, players, durationMs = 30000, startedBy = "auto") {
+  async startCountdown( roomId, players, durationMs = 30000, startedBy = "auto") {
     try {
       console.log(`🎮 Room ${roomId} snapshot received for countdown`);
-  
+      const room = (await this.getRoomState(roomId)) || {};
       // --- Basic validations ---
       if (room.gameStatus === "countdown") {
         console.log(`⚠️ Countdown already active for room ${roomId}`);
@@ -688,7 +688,7 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
         
           // 3️⃣ Now it's safe to start the game
           console.log(`🎮 Starting game for room ${roomId} with ${liveCount} players`);
-          await this.startGame(roomId, room);
+          await this.startGame(roomId);
         
           this.countdownTimers.delete(roomId);
         }
@@ -928,7 +928,7 @@ const gameData = {
   startNumberDrawing(roomId, gameId, room) {
     if (this.numberDrawIntervals.has(roomId)) {
 
-      if (room.gameStatus !== "playing") {
+      if (room.gameStatus !== "playing" && room.roomStatus !== "playing" ) {
         this.stopNumberDrawing(roomId);
         return;
       }

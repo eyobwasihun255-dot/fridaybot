@@ -263,69 +263,76 @@ class GameManager {
     }
   }
 // RESHUFFLE DEMO AUTO PLAYERS IN REDIS
-  async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
-    try {
-      const players = await this.getRoomPlayers(roomId);
-      const claimedCards = await this.getClaimedCards(roomId);
-      const bingoCards = claimedCards// fallback when roomConfig has no bingoCards
+async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
+  try {
+    const players = await this.getRoomPlayers(roomId);
+    const claimedCards = await this.getClaimedCards(roomId);
 
+    // FIX — Load real bingo cards
+    const roomConfig = await this.getRoomConfig(roomId);
+    const bingoCards =
+      (baseRoom?.bingoCards) ||
+      (roomConfig?.bingoCards) ||
+      (await this.getRoomBingoCards(roomId));
 
-      const demoPlayers = Object.entries(players).filter(([id, p]) =>
-        (p?.telegramId || id)?.toLowerCase().startsWith("demo")
-      );
-      if (demoPlayers.length === 0) return { done: false, reason: "no-demo" };
-      const demoIds = new Set(demoPlayers.map(([id]) => id));
-
-      const demoClaimedCards = Object.entries(claimedCards)
-        .filter(
-          ([, card]) =>
-            card?.claimed &&
-            card?.auto &&
-            card?.claimedBy &&
-            demoIds.has(card.claimedBy)
-        )
-        .map(([cardId, card]) => ({ cardId, ...card }));
-
-      if (demoClaimedCards.length === 0) {
-        return { done: false, reason: "none" };
-      }
-
-      const unclaimedPool = Object.keys(bingoCards).filter(
-        (cardId) => !claimedCards[cardId]?.claimed
-      );
-      if (unclaimedPool.length === 0) {
-        return { done: false, reason: "no-unclaimed" };
-      }
-
-      const numToReshuffle = Math.min(3, demoClaimedCards.length);
-      const selected = demoClaimedCards
-        .sort(() => 0.8 - Math.random())
-        .slice(0, numToReshuffle);
-
-      for (const card of selected) {
-        const demoId = card.claimedBy;
-        const username = players[demoId]?.username || `demo_${demoId}`;
-        try {
-        await this.cancelBetForPlayer(roomId, card.cardId, demoId) ;
-        } catch (err) {
-          console.error(`❌ Demo reshuffle error for ${roomId}:`, err);
-          return { done: false, reason: "error", err };
-        }
-        if (unclaimedPool.length === 0) break;
-        const randomIndex = Math.floor(Math.random() * unclaimedPool.length);
-        const newCardId = unclaimedPool.splice(randomIndex, 1)[0];
-        if (!newCardId) continue;
-
-        await this.placeBet(roomId, newCardId, demoId);
-
-      }
-
-      return { done: true };
-    } catch (err) {
-      console.error(`❌ Demo reshuffle error for ${roomId}:`, err);
-      return { done: false, reason: "error", err };
+    if (!bingoCards) {
+      return { done: false, reason: "no-bingo-cards" };
     }
+
+    const demoPlayers = Object.entries(players).filter(([id, p]) =>
+      (p?.telegramId || id)?.toLowerCase().startsWith("demo")
+    );
+    if (demoPlayers.length === 0) return { done: false, reason: "no-demo" };
+
+    const demoIds = new Set(demoPlayers.map(([id]) => id));
+
+    const demoClaimedCards = Object.entries(claimedCards)
+      .filter(
+        ([, card]) =>
+          card?.claimed &&
+          card?.auto &&
+          card?.claimedBy &&
+          demoIds.has(card.claimedBy)
+      )
+      .map(([cardId, card]) => ({ cardId, ...card }));
+
+    if (demoClaimedCards.length === 0) {
+      return { done: false, reason: "none" };
+    }
+
+    // FIX — correct unclaimed detection
+    const unclaimedPool = Object.keys(bingoCards).filter(
+      (cardId) => !claimedCards[cardId]?.claimed
+    );
+
+    if (unclaimedPool.length === 0) {
+      return { done: false, reason: "no-unclaimed" };
+    }
+
+    const numToReshuffle = Math.min(3, demoClaimedCards.length);
+    const selected = demoClaimedCards
+      .sort(() => 0.8 - Math.random())
+      .slice(0, numToReshuffle);
+
+    for (const card of selected) {
+      const demoId = card.claimedBy;
+
+      await this.cancelBetForPlayer(roomId, card.cardId, demoId);
+
+      if (unclaimedPool.length === 0) break;
+
+      const randomIndex = Math.floor(Math.random() * unclaimedPool.length);
+      const newCardId = unclaimedPool.splice(randomIndex, 1)[0];
+
+      await this.placeBet(roomId, newCardId, demoId);
+    }
+
+    return { done: true };
+  } catch (err) {
+    console.error(`❌ Demo reshuffle error for ${roomId}:`, err);
+    return { done: false, reason: "error", err };
   }
+}
 
   async placeBet(roomId, cardId, user) {
     try {

@@ -268,10 +268,7 @@ class GameManager {
       const roomConfig = baseRoom || (await this.getRoomConfig(roomId)) || {};
       const players = await this.getRoomPlayers(roomId);
       const claimedCards = await this.getClaimedCards(roomId);
-      const bingoCards =
-  roomConfig.bingoCards && Object.keys(roomConfig.bingoCards).length > 0
-    ? roomConfig.bingoCards
-    : claimedCards; // fallback when roomConfig has no bingoCards
+      const bingoCards = claimedCards// fallback when roomConfig has no bingoCards
 
 
       const demoPlayers = Object.entries(players).filter(([id, p]) =>

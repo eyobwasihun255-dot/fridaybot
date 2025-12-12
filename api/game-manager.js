@@ -633,10 +633,8 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
   
       // --- Create a wrapper function that checks player count dynamically ---
       const countdownCheck = async () => {
-        const latestRoom = await this.getRoomState(roomId);
-        const currentPlayers = await this.getPlayersInRoom(roomId); // you need a function to get current players
-  
-        if (currentPlayers.length < 2) {
+        // --- check player count dynamically ---
+        if (players.length < 2) {
           console.log(`⚠️ Countdown stopped for room ${roomId}, not enough players`);
           clearTimeout(this.countdownTimers.get(roomId));
           this.countdownTimers.delete(roomId);
@@ -644,17 +642,17 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
           if (this.io) this.io.to(roomId).emit("countdownStopped", { roomId });
           return;
         }
-  
+      
         if (Date.now() >= countdownEndAt) {
           console.log(`🎮 Countdown ended → starting game for room ${roomId}`);
           await this.syncPlayersAndCards(roomId);
-          await this.startGame(roomId, latestRoom);
+          await this.startGame(roomId, room);
           this.countdownTimers.delete(roomId);
         } else {
-          // Check again in 500ms
           this.countdownTimers.set(roomId, setTimeout(countdownCheck, 500));
         }
       };
+      
   
       // --- Start the countdown monitoring loop ---
       this.countdownTimers.set(roomId, setTimeout(countdownCheck, 500));

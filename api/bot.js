@@ -1825,15 +1825,15 @@ if (pending?.type === "awaiting_room_reset_confirm") {
     }
 
     // ⭐ RESET USING STORED ROOM OBJECT
-    await redis.set(`room:${roomId}`, JSON.stringify({
-      ...room,
-      gameStatus: "waiting",
-      roomStatus:"waiting",
-      countdownEndAt: null,
-      countdownStartedBy: null,
-      drawnNumbers: [],
-      winners: []
-    }));
+    await redis.set(
+      `room:${roomId}`,
+      JSON.stringify({
+        gameStatus: "waiting",
+        claimedCards: {},
+        players: {}
+      })
+    );
+    
 
     await redis.expire(`room:${roomId}`, 3600);
 

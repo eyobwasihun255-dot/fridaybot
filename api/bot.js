@@ -2066,39 +2066,79 @@ if (data.startsWith("deposit_amount_")) {
 
 
 
-  if (data.startsWith("approve_deposit_")) {
-    const requestId = data.replace("approve_deposit_", "");
-    const req = depositRequests.get(requestId);
-    if (!req) return;
+if (data.startsWith("approve_deposit_")) {
+  const requestId = data.replace("approve_deposit_", "");
+  const req = depositRequests.get(requestId);
+  if (!req) return;
 
-    const userRef = ref(rtdb, "users/" + req.userId);
-    const snap = await get(userRef);
-    if (snap.exists()) {
-      const user = snap.val();
-      const newBalance = (user.balance || 0) + req.amount;
-      await update(userRef, { balance: newBalance });
+  const userRef = ref(rtdb, "users/" + req.userId);
+  const snap = await get(userRef);
+  if (!snap.exists()) return;
 
-      // ✅ Save receipt
-      const depositId = `dep_${Date.now()}`;
-      const depositRef = ref(rtdb, `deposits/${depositId}`);
-      await set(depositRef, {
-        userId: req.userId,
-        username: user.username || req.userId,
-        amount: req.amount,
-        url: req.url,
-        smsText: req.smsText,
-        method: req.method,
-        date: new Date().toISOString(),
-      });
+  const user = snap.val();
 
-      // Notify player
-      sendMessage(req.userId, t(lang, "approved_deposit", req.amount));
-      // Notify admin
-      sendMessage(chatId, t(lang, "admin_approved_deposit", `@${user.username || req.userId}`, req.amount));
+  // ----------------------------------------
+  // 🔒 CHECK IF URL ALREADY USED IN DEPOSITS
+  // ----------------------------------------
+  const depositsSnap = await get(ref(rtdb, "deposits"));
+  if (depositsSnap.exists()) {
+    const deposits = depositsSnap.val();
+
+    const urlAlreadyUsed = Object.values(deposits).some(
+      (d) => d?.url === req.url
+    );
+
+    if (urlAlreadyUsed) {
+      // ❌ Do NOT add balance
+      sendMessage(
+        chatId,
+        `⚠️ Deposit rejected.\nThis receipt URL was already used.\nUser: @${user.username || req.userId}`
+      );
+      depositRequests.delete(requestId);
+      return;
     }
-    depositRequests.delete(requestId);
-    return;
   }
+
+  // ----------------------------------------
+  // ✅ ADD BALANCE
+  // ----------------------------------------
+  const newBalance = (user.balance || 0) + req.amount;
+  await update(userRef, { balance: newBalance });
+
+  // ----------------------------------------
+  // ✅ SAVE DEPOSIT
+  // ----------------------------------------
+  const depositId = `dep_${Date.now()}`;
+  const depositRef = ref(rtdb, `deposits/${depositId}`);
+
+  await set(depositRef, {
+    userId: req.userId,
+    username: user.username || req.userId,
+    amount: req.amount,
+    url: req.url,
+    smsText: req.smsText,
+    method: req.method,
+    date: new Date().toISOString(),
+  });
+
+  // Notify player
+  sendMessage(req.userId, t(lang, "approved_deposit", req.amount));
+
+  // Notify admin
+  sendMessage(
+    chatId,
+    t(
+      lang,
+      "admin_approved_deposit",
+      `@${user.username || req.userId}`,
+      req.amount
+    )
+  );
+
+  depositRequests.delete(requestId);
+  return;
+}
+
 
   if (data.startsWith("decline_deposit_")) {
     const requestId = data.replace("decline_deposit_", "");

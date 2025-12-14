@@ -279,7 +279,7 @@ const processRoomCountdown = async (roomId, roomFromCache, now) => {
     }
 
     // 2) Get players (Redis → RTDB fallback)
-    let players = roomState.players || {};
+    let players = await gameManager.getRoomPlayers(roomId);
 
     if (!players || Object.keys(players).length === 0) {
       const snap = await get(ref(rtdb, `rooms/${roomId}/players`));
@@ -295,20 +295,20 @@ const processRoomCountdown = async (roomId, roomFromCache, now) => {
 
     // Do nothing if already in countdown, ended, or playing
     if (
-      roomState.roomStatus === "countdown" ||
-      roomState.roomStatus === "ended" ||
-      roomState.roomStatus === "playing"
+      roomState.gameStatus=== "countdown" ||
+      roomState.gameStatus === "ended" ||
+      roomState.gameStatus === "playing"
     ) {
       return;
     }
 
     // 4) Not enough players → do nothing
     if (playerCount < 2) return;
-    if(roomState.roomStatus === "waiting"){
+    if(roomState.gameStatus === "waiting"){
     // 5) START official countdown through GameManager
     console.log(`🚀 Triggering GameManager countdown for room ${roomId}`);
 
-    await gameManager.startCountdown(
+    await gameManager.startGaming(
       roomId,
       playerList,
       30000,  // countdown duration

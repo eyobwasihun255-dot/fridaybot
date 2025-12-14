@@ -36,7 +36,6 @@
     gameId?: string;
     nextGameCountdownEndAt?: number;
     bingoCards?: Record<string, any>;
-    roomStatus?: 'waiting' | 'countdown' | 'playing' | 'ended';
   }
 
   interface GameState {
@@ -177,7 +176,7 @@ autoReconnectToServer: () => {
         if (!room) return;
 
         const normalizedStatus =
-          room.roomStatus || room.gameStatus || "waiting";
+           room.gameStatus || "waiting";
 
         const calledNumbers = Array.isArray(room.calledNumbers)
           ? room.calledNumbers
@@ -240,7 +239,6 @@ autoReconnectToServer: () => {
             currentRoom: {
               ...state.currentRoom,
               gameStatus: 'playing',
-              roomStatus: 'playing',
               currentGameId: data.gameId,
             },
           };
@@ -263,7 +261,6 @@ autoReconnectToServer: () => {
             currentRoom: {
               ...state.currentRoom,
               gameStatus: 'countdown',
-              roomStatus: 'countdown',
               countdownEndAt,
             },
           };
@@ -299,7 +296,6 @@ autoReconnectToServer: () => {
             currentRoom: {
               ...state.currentRoom,
               gameStatus: 'ended',
-              roomStatus: 'ended',
               nextGameCountdownEndAt: data.nextGameCountdownEndAt,
             },
           };
@@ -572,7 +568,7 @@ autoReconnectToServer: () => {
           ? data.rooms.map((room: any) => ({
               id: room.id,
               ...room,
-              gameStatus: room.roomStatus || room.gameStatus || 'waiting',
+              gameStatus:room.gameStatus || 'waiting',
             }))
           : [];
         set({ rooms });

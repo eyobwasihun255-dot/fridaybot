@@ -18,7 +18,7 @@ export default async function handler(req, res) {
   try {
     // Enforce room state (waiting/countdown only) via runtime state
     const runtime = (await gameManager.getRoomState(roomId)) || {};
-    const status = runtime.roomStatus || runtime.gameStatus || "unknown";
+    const status =  runtime.gameStatus || "unknown";
     if (status !== "waiting" && status !== "countdown") {
       return res
         .status(400)

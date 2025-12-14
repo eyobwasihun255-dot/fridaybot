@@ -1182,8 +1182,8 @@ if (pending?.type === "awaiting_random_auto") {
     if (!room) return sendMessage(chatId, "❌ Room not found.");
 
     // ✅ Ensure room is in countdown or waiting state (runtime status)
-    const roomStatus = room.roomStatus || room.gameStatus || room.state;
-    if (roomStatus !== "waiting" && roomStatus !== "countdown") {
+    const gameStatus = room.gameStatus || room.state;
+    if (gameStatus !== "waiting" && gameStatus !== "countdown") {
       return sendMessage(
         chatId,
         "⚠️ Demo players can only be added when the room is in WAITING or COUNTDOWN state."
@@ -1666,7 +1666,7 @@ if (pending?.type === "awaiting_removedemo_room") {
     const room = state.room;
 
     // check status
-    const status = (room.gameStatus || room.roomStatus || "").toLowerCase();
+    const status = (room.gameStatus || "").toLowerCase();
     if (status === "playing") {
       return sendMessage(chatId,"⚠️ Game is currently playing.\nStop the room first before removing demo players.");
     }
@@ -1699,7 +1699,7 @@ if (!state.room) {
   return sendMessage(chatId, "❌ Room not found.");
 }
 
-const status = (state.room.gameStatus || state.room.roomStatus || "").toLowerCase();
+const status = (state.room.gameStatus || "").toLowerCase();
 if (status === "playing") {
   await pendingActions.delete(userId);
   return sendMessage(chatId, "⚠️ Cannot remove demo players while game is playing.");
@@ -1759,7 +1759,7 @@ if (pending?.type === "awaiting_room_reset") {
     if (!state.room) return sendMessage(chatId, "❌ Room not found.");
 
     const room = state.room;
-    const status = (room.gameStatus || room.roomStatus || "").toLowerCase();
+    const status = (room.gameStatus || "").toLowerCase();
     const betAmount = Number(room.betAmount || 0);
 
     sendMessage(chatId,

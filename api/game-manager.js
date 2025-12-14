@@ -52,8 +52,6 @@ class GameManager {
   
     const initial = {
       gameStatus: "waiting",
-      roomStatus: "waiting",
-      players: {},
       claimedCards: {},
       calledNumbers: [],
       payout: null,
@@ -69,13 +67,11 @@ class GameManager {
   async getFullRoom(roomId) {
     const baseRoom = (await this.getRoomConfig(roomId)) || {};
     const runtime = (await this.getRoomState(roomId)) || {};
-    const players = runtime.players || {};
     const claimedCards = runtime.claimedCards || {};
     const bingoCards = this.hydrateCards(baseRoom.bingoCards || {}, claimedCards);
     return {
       ...baseRoom,
       ...runtime,
-      players,
       bingoCards,
     };
   }
@@ -94,17 +90,36 @@ class GameManager {
   async getRoomPlayers(roomId) {
     try {
       const roomState = await this.getRoomState(roomId);
-      return roomState?.players || {};
+      const claimedCards = roomState?.claimedCards || {};
+  
+      const players = {};
+  
+      for (const [cardId, card] of Object.entries(claimedCards)) {
+        if (!card?.claimed || !card.claimedBy) continue;
+  
+        const userId = card.claimedBy;
+  
+        players[userId] = {
+          telegramId: userId,
+          username: card.username || "Unknown",
+          betAmount: card.betAmount || 0,
+          cardId: card.cardId || cardId,
+          attemptedBingo: !!card.attemptedBingo,
+        };
+      }
+  
+      return players;
     } catch (e) {
-      console.error("⚠️ getRoomPlayers Redis error:", e);
+      console.error("⚠️ getRoomPlayers (derived) error:", e);
       return {};
     }
   }
+  
   async getRoomPlayersrdtbs(roomId) {
     try {
       // 1️⃣ Get room state (so we know which players are in the room)
       const roomState = await this.getRoomState(roomId);
-      const roomPlayers = roomState?.players || {};
+      const roomPlayers = await this.getRoomPlayers(roomId);
   
       if (!roomPlayers || Object.keys(roomPlayers).length === 0) {
         return {};
@@ -135,46 +150,9 @@ class GameManager {
       return {};
     }
   }
-// SET ROOM PLAYERS IN REDIS
-  async setRoomPlayers(roomId, players) {
-    try {
-      await this.setRoomState(roomId, { players });
-    } catch (e) {
-      console.error("⚠️ setRoomPlayers Redis error:", e);
-    }
-  }
-  // Add/update a player in Redis
-  async addRoomPlayer(roomId, playerId, playerData) {
-    try {
-      const players = await this.getRoomPlayers(roomId);
-      players[playerId] = playerData;
-      await this.setRoomPlayers(roomId, players);
-    } catch (e) {
-      console.error("⚠️ addRoomPlayer Redis error:", e);
-    }
-  }
 
-  // Remove a player from Redis
-  async removeRoomPlayer(roomId, playerId) {
-    try {
-      const players = await this.getRoomPlayers(roomId);
-      delete players[playerId];
-      await this.setRoomPlayers(roomId, players);
-    } catch (e) {
-      console.error("⚠️ removeRoomPlayer Redis error:", e);
-    }
-  }
-// UPDATE ROOM PLAYER IN REDIS
-  async updateRoomPlayer(roomId, playerId, patch) {
-    try {
-      const players = await this.getRoomPlayers(roomId);
-      if (!players[playerId]) return;
-      players[playerId] = { ...players[playerId], ...patch };
-      await this.setRoomPlayers(roomId, players);
-    } catch (e) {
-      console.error("⚠️ updateRoomPlayer Redis error:", e);
-    }
-  }
+  // Add/update a player in Redis
+  
 
   // Get claimed cards  from Redis
   async getClaimedCards(roomId) {
@@ -196,53 +174,43 @@ class GameManager {
     }
   }
 
-  // Claim a card in Redis (non-auto only)
-  async claimCard(roomId, cardId, userId, extras = {}) {
-    try {
-      const claimedCards = await this.getClaimedCards(roomId);
-      claimedCards[cardId] = {
-        claimed: true,
-        claimedBy: userId,
-        claimedAt: Date.now(),
-        auto: extras.auto || false,
-        autoUntil: extras.autoUntil || null,
-      };
-      await this.setClaimedCards(roomId, claimedCards);
-    } catch (e) {
-      console.error("⚠️ claimCard Redis error:", e);
-    }
-  }
 
-  // Unclaim a card in Redis (non-auto only)
-  async unclaimCard(roomId, cardId) {
-    try {
-      const claimedCards = await this.getClaimedCards(roomId);
-      delete claimedCards[cardId];
-      await this.setClaimedCards(roomId, claimedCards);
-    } catch (e) {
-      console.error("⚠️ unclaimCard Redis error:", e);
-    }
-  }
 // SET CARD AUTO STATE IN REDIS
-  async setCardAutoState(roomId, cardId, options = {}) {
-    try {
-      const claimedCards = await this.getClaimedCards(roomId);
-      if (!claimedCards[cardId]) {
-        console.warn(`setCardAutoState: card ${cardId} not claimed in room ${roomId}`);
-        return { success: false, message: "Card not claimed" };
-      }
-      claimedCards[cardId] = {
-        ...claimedCards[cardId],
-        auto: !!options.auto,
-        autoUntil: options.auto ? options.autoUntil || Date.now() + 24 * 60 * 60 * 1000 : null,
-      };
-      await this.setClaimedCards(roomId, claimedCards);
-      return { success: true };
-    } catch (e) {
-      console.error("⚠️ setCardAutoState error:", e);
-      return { success: false, message: "Server error" };
+async setCardAutoState(roomId, cardId, options = {}) {
+  try {
+    const claimedCards = await this.getClaimedCards(roomId);
+
+    const targetCard = claimedCards[cardId];
+    if (!targetCard) {
+      return { success: false, message: "Card not found" };
     }
+
+    const autoEnabled = !!options.auto;
+    const autoUntil = autoEnabled
+      ? options.autoUntil || Date.now() + 24 * 60 * 60 * 1000
+      : null;
+
+    claimedCards[cardId] = {
+      ...targetCard,
+      auto: autoEnabled,
+      autoUntil,
+    };
+
+    await this.setClaimedCards(roomId, claimedCards);
+
+    return {
+      success: true,
+      cardId,
+      auto: autoEnabled,
+      autoUntil,
+    };
+  } catch (e) {
+    console.error("⚠️ setCardAutoState error:", e);
+    return { success: false, message: "Server error" };
   }
+}
+
+
 // APPLY BALANCE ADJUSTMENTS TO RDTBS
   async applyBalanceAdjustments(adjustments = {}) {
     const entries = Object.entries(adjustments);
@@ -280,165 +248,147 @@ class GameManager {
       console.error("⚠️ setMultiWinStats error:", e);
     }
   }
-// RESHUFFLE DEMO AUTO PLAYERS IN REDIS
-async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
-  try {
-    const players = await this.getRoomPlayers(roomId);
-    const claimedCards = await this.getClaimedCards(roomId);
 
-    // FIX — Load real bingo cards
-    const roomConfig = await this.getRoomConfig(roomId);
-    const bingoCards =
-      (baseRoom?.bingoCards) ||
-      (roomConfig?.bingoCards) ||
-      (await this.getRoomBingoCards(roomId));
-
-    if (!bingoCards) {
-      return { done: false, reason: "no-bingo-cards" };
-    }
-
-    const demoPlayers = Object.entries(players).filter(([id, p]) =>
-      (p?.telegramId || id)?.toLowerCase().startsWith("demo")
-    );
-    if (demoPlayers.length === 0) return { done: false, reason: "no-demo" };
-
-    const demoIds = new Set(demoPlayers.map(([id]) => id));
-
-    const demoClaimedCards = Object.entries(claimedCards)
-      .filter(
-        ([, card]) =>
-          card?.claimed &&
-          card?.auto &&
-          card?.claimedBy &&
-          demoIds.has(card.claimedBy)
-      )
-      .map(([cardId, card]) => ({ cardId, ...card }));
-
-    if (demoClaimedCards.length === 0) {
-      return { done: false, reason: "none" };
-    }
-
-    // FIX — correct unclaimed detection
-    const unclaimedPool = Object.keys(bingoCards).filter(
-      (cardId) => !claimedCards[cardId]?.claimed
-    );
-
-    if (unclaimedPool.length === 0) {
-      return { done: false, reason: "no-unclaimed" };
-    }
-
-    const numToReshuffle = Math.min(3, demoClaimedCards.length);
-    const selected = demoClaimedCards
-      .sort(() => 0.8 - Math.random())
-      .slice(0, numToReshuffle);
-
-    for (const card of selected) {
-      const demoId = card.claimedBy;
-
-      await this.cancelBetForPlayer(roomId, card.cardId, demoId);
-
-      if (unclaimedPool.length === 0) break;
-
-      const randomIndex = Math.floor(Math.random() * unclaimedPool.length);
-      const newCardId = unclaimedPool.splice(randomIndex, 1)[0];
-
-      await this.placeBet(roomId, newCardId, demoId);
-    }
-
-    return { done: true };
-  } catch (err) {
-    console.error(`❌ Demo reshuffle error for ${roomId}:`, err);
-    return { done: false, reason: "error", err };
-  }
-}
 
   async placeBet(roomId, cardId, user) {
     try {
-      // Gate by room state: only allow in waiting or countdown
       await this.ensureRoomExists(roomId);
-      const runtimeState = (await this.getRoomState(roomId)) || {};
-      const roomStatus = runtimeState.roomStatus || runtimeState.gameStatus || "waiting";
-      if (roomStatus !== "waiting" && roomStatus !== "countdown") {
+  
+      const roomState = await this.getRoomState(roomId);
+      const gameStatus = roomState?.gameStatus || "waiting";
+  
+      // Only allow bets in waiting or countdown
+      if (gameStatus !== "waiting" && gameStatus !== "countdown") {
         return { success: false, message: "Room not accepting bets right now" };
       }
-
-      const room = await this.getRoomConfig(roomId);
-      if (!room) {
+  
+      const roomConfig = await this.getRoomConfig(roomId);
+      if (!roomConfig) {
         return { success: false, message: "Room not found" };
       }
-      const betAmount = room.betAmount || 0;
-
-      // Basic validation
-      if (!room.bingoCards || !room.bingoCards[cardId]) {
+  
+      // Validate card exists
+      if (!roomConfig.bingoCards?.[cardId]) {
         return { success: false, message: "Invalid card" };
       }
-
-      // Auto cards remain in RTDB; Redis only tracks per-game manual claims
-      const existingClaims = await this.getClaimedCards(roomId);
-      if (existingClaims[cardId]?.claimed) {
+  
+      const claimedCards = await this.getClaimedCards(roomId);
+  
+      // ❌ Card already taken
+      if (claimedCards[cardId]) {
         return { success: false, message: "Card already claimed" };
       }
-
-      const playerId = user.telegramId;
-      const players = await this.getRoomPlayers(roomId);
-
-      // If player already has a bet, prevent double-bet for now
-      if (players[playerId]?.betAmount && players[playerId].betAmount > 0) {
-        return { success: false, message: "Bet already placed" };
+  
+      const userId = user.telegramId;
+  
+      // ❌ User already has a card (NO double betting)
+      const alreadyClaimed = Object.values(claimedCards).some(
+        c => c.claimedBy === userId
+      );
+      if (alreadyClaimed) {
+        return { success: false, message: "You already placed a bet" };
       }
-
-      // Record in Redis
-      try {
-      await this.claimCard(roomId, cardId, playerId);
-      await this.addRoomPlayer(roomId, playerId, {
-        telegramId: playerId,
-        username: user.username,
-        betAmount,
+  
+      // ✅ Claim card = player joins game
+      claimedCards[cardId] = {
         cardId,
+        claimed: true,
+        claimedBy: userId,
+        username: user.username,
+        telegramId: user.telegramId,
+        claimedAt: Date.now(),
+        betAmount: roomConfig.betAmount || 0,
         attemptedBingo: false,
-      });
-    } catch (err) {
-      console.error(`❌ Place bet error for ${roomId}:`, err);
-      return { success: false, message: "Server error" };
-    }
-
-      // Notify clients in this room
+        auto: false,
+        autoUntil: null,
+      };
+  
+      await this.setClaimedCards(roomId, claimedCards);
+  
+      // Notify clients
       if (this.io) {
-        this.io.to(roomId).emit("playerBetPlaced", {
+        this.io.to(roomId).emit("cardClaimed", {
           roomId,
-          playerId,
           cardId,
-          betAmount,
+          userId,
           username: user.username,
+          betAmount: roomConfig.betAmount || 0,
         });
       }
-
+  
       return { success: true };
-    } catch (e) {
-      console.error("❌ placeBet error:", e);
+  
+    } catch (err) {
+      console.error("❌ placeBet error:", err);
       return { success: false, message: "Server error" };
     }
   }
+  
 
-  async cancelBetForPlayer(roomId, cardId, playerId) {
+  async cancelBetForPlayer(roomId, cardId, userId) {
     try {
-      await this.unclaimCard(roomId, cardId);
-      await this.removeRoomPlayer(roomId, playerId);
-
+      await this.ensureRoomExists(roomId);
+  
+      const roomState = await this.getRoomState(roomId);
+      const gameStatus = roomState?.gameStatus || "waiting";
+  
+      // ❌ Cannot cancel once game started
+      if (gameStatus !== "waiting" && gameStatus !== "countdown") {
+        return { success: false, message: "Cannot cancel bet right now" };
+      }
+  
+      const claimedCards = await this.getClaimedCards(roomId);
+      const card = claimedCards[cardId];
+  
+      // ❌ Card not claimed
+      if (!card) {
+        return { success: false, message: "Card not claimed" };
+      }
+  
+      // ❌ Not the owner
+      if (card.claimedBy !== userId) {
+        return { success: false, message: "Not your card" };
+      }
+  
+      // ✅ Remove card (this IS removing the player)
+      delete claimedCards[cardId];
+      await this.setClaimedCards(roomId, claimedCards);
+  
+      // 🔁 If countdown is running and cards < 2 → revert to waiting
+      const remainingCount = Object.keys(claimedCards).length;
+      if (gameStatus === "countdown" && remainingCount < 2) {
+        await this.setRoomState(roomId, {
+          gameStatus: "waiting",
+          countdownEndAt: null,
+        });
+  
+        if (this.countdownTimers?.has(roomId)) {
+          clearTimeout(this.countdownTimers.get(roomId));
+          this.countdownTimers.delete(roomId);
+        }
+  
+        if (this.io) {
+          this.io.to(roomId).emit("countdownStopped", { roomId });
+        }
+      }
+  
+      // Notify clients
       if (this.io) {
-        this.io.to(roomId).emit("playerBetCancelled", {
+        this.io.to(roomId).emit("cardUnclaimed", {
           roomId,
-          playerId,
           cardId,
+          userId,
         });
       }
-
+  
       return { success: true };
-    } catch (e) {
-      console.error("❌ cancelBetForPlayer error:", e);
+  
+    } catch (err) {
+      console.error("❌ cancelBet error:", err);
       return { success: false, message: "Server error" };
     }
   }
+  
 
   /**
    * Sync players and claimed cards to ensure:
@@ -447,140 +397,6 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
    * 3. Remove players that don't have a claimed card
    * 4. If one user has multiple cards, unclaim all but one (keep the one matching player.cardId)
    */
-  async syncPlayersAndCards(roomId) {
-    try {
-      const players = await this.getRoomPlayers(roomId);
-      const claimedCards = await this.getClaimedCards(roomId);
-      
-      const playerIds = Object.keys(players);
-      const cardIds = Object.keys(claimedCards);
-      
-      console.log(`🔄 Syncing room ${roomId}: ${playerIds.length} players, ${cardIds.length} claimed cards`);
-
-      // Build maps for easier lookup
-      const playerCardMap = {}; // playerId -> cardId (from player.cardId)
-      const cardPlayerMap = {}; // cardId -> playerId (from card.claimedBy)
-      const playerCardsMap = {}; // playerId -> [cardIds] (multiple cards per player)
-
-      // Map players to their cards
-      for (const [playerId, player] of Object.entries(players)) {
-        if (player?.cardId) {
-          playerCardMap[playerId] = player.cardId;
-          if (!playerCardsMap[playerId]) {
-            playerCardsMap[playerId] = [];
-          }
-          playerCardsMap[playerId].push(player.cardId);
-        }
-      }
-
-      // Map cards to their players
-      for (const [cardId, card] of Object.entries(claimedCards)) {
-        if (card?.claimedBy) {
-          cardPlayerMap[cardId] = card.claimedBy;
-          if (!playerCardsMap[card.claimedBy]) {
-            playerCardsMap[card.claimedBy] = [];
-          }
-          playerCardsMap[card.claimedBy].push(cardId);
-        }
-      }
-
-      const cardsToUnclaim = [];
-      const playersToRemove = [];
-
-      // Step 1: Handle users with multiple cards - keep only one (prefer the one matching player.cardId)
-      for (const [playerId, cardIdsForPlayer] of Object.entries(playerCardsMap)) {
-        if (cardIdsForPlayer.length > 1) {
-          const preferredCardId = playerCardMap[playerId]; // The cardId stored in player object
-          const cardToKeep = preferredCardId && cardIdsForPlayer.includes(preferredCardId) 
-            ? preferredCardId 
-            : cardIdsForPlayer[0]; // Fallback to first card if preferred not in list
-          
-          // Keep the preferred card, unclaim the rest
-          for (const cardId of cardIdsForPlayer) {
-            if (cardId !== cardToKeep) {
-              cardsToUnclaim.push(cardId);
-              console.log(`  ⚠️ User ${playerId} has multiple cards, unclaiming ${cardId} (keeping ${cardToKeep})`);
-            }
-          }
-        }
-      }
-
-      // Step 2: Remove cards that don't have a corresponding player
-      for (const [cardId, claimedBy] of Object.entries(cardPlayerMap)) {
-        if (!players[claimedBy]) {
-          cardsToUnclaim.push(cardId);
-          console.log(`  ⚠️ Card ${cardId} claimed by non-existent player ${claimedBy}, unclaiming`);
-        }
-      }
-
-      // Step 3: Remove players that don't have a claimed card
-      for (const [playerId, player] of Object.entries(players)) {
-        const playerCardId = player?.cardId;
-        if (!playerCardId || !claimedCards[playerCardId] || !claimedCards[playerCardId].claimed) {
-          playersToRemove.push(playerId);
-          console.log(`  ⚠️ Player ${playerId} has no valid claimed card, removing`);
-        }
-      }
-
-      // Step 4: Also check if player.cardId doesn't match card.claimedBy
-      for (const [playerId, player] of Object.entries(players)) {
-        const playerCardId = player?.cardId;
-        if (playerCardId && claimedCards[playerCardId]) {
-          const cardClaimedBy = claimedCards[playerCardId].claimedBy;
-          if (cardClaimedBy !== playerId) {
-            // Mismatch: either remove player or unclaim card
-            // Prefer removing player if card is claimed by someone else
-            if (players[cardClaimedBy]) {
-              playersToRemove.push(playerId);
-              console.log(`  ⚠️ Player ${playerId} card ${playerCardId} is claimed by ${cardClaimedBy}, removing player`);
-            } else {
-              cardsToUnclaim.push(playerCardId);
-              console.log(`  ⚠️ Player ${playerId} card ${playerCardId} claimed by non-existent user, unclaiming`);
-            }
-          }
-        }
-      }
-
-      // Apply changes
-      let changesMade = false;
-
-      // Unclaim cards
-      for (const cardId of cardsToUnclaim) {
-        await this.unclaimCard(roomId, cardId);
-        changesMade = true;
-      }
-
-      // Remove players
-      for (const playerId of playersToRemove) {
-        await this.removeRoomPlayer(roomId, playerId);
-        changesMade = true;
-      }
-
-      if (changesMade) {
-        console.log(`✅ Sync completed for room ${roomId}: Unclaimed ${cardsToUnclaim.length} cards, Removed ${playersToRemove.length} players`);
-        
-        // Notify clients
-        if (this.io) {
-          this.io.to(roomId).emit("roomSynced", {
-            roomId,
-            cardsUnclaimed: cardsToUnclaim.length,
-            playersRemoved: playersToRemove.length,
-          });
-        }
-      } else {
-        console.log(`✅ Room ${roomId} already in sync`);
-      }
-
-      return {
-        success: true,
-        cardsUnclaimed: cardsToUnclaim.length,
-        playersRemoved: playersToRemove.length,
-      };
-    } catch (error) {
-      console.error(`❌ Error syncing players and cards for room ${roomId}:`, error);
-      return { success: false, message: error.message };
-    }
-  }
 
   async getGameState(gameId) {
     try {
@@ -619,124 +435,96 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
       this.numberDrawIntervals.delete(roomId);
     }
   }
-  async startCountdown( roomId, players, durationMs = 30000, startedBy = "auto") {
+  async startGamingProcess(roomId, durationMs = 30000, startedBy = "auto") {
     try {
-      console.log(`🎮 Room ${roomId} snapshot received for countdown`);
-      const room = (await this.getRoomState(roomId)) || {};
-      // --- Basic validations ---
-      if (room.gameStatus === "countdown") {
-        console.log(`⚠️ Countdown already active for room ${roomId}`);
-        return { success: false, message: "Countdown already active" };
+      await this.ensureRoomExists(roomId);
+      if (this.countdownTimers.has(roomId)) {
+        return { success: false, message: "Countdown already running" };
       }
-      if (players.length < 2) {
-        console.log(`❌ Not enough players for room ${roomId}: ${players.length}`);
-        return { success: false, message: "Not enough players" };
-      }
+      const room = await this.getRoomState(roomId);
+      const claimedCards = await this.getClaimedCards(roomId);
+      const playerCount = Object.keys(claimedCards).length;
+  
+      // ❌ Basic guards
       if (room.gameStatus !== "waiting") {
-        console.log(`⚠️ Room ${roomId} not in waiting state: ${room.gameStatus}`);
         return { success: false, message: "Room not in waiting state" };
+      }
+  
+      if (playerCount < 2) {
+        return { success: false, message: "Not enough players" };
       }
   
       const countdownEndAt = Date.now() + durationMs;
   
-      // --- Start countdown in Redis (ephemeral room state) ---
+      // ✅ Set countdown state
       await this.setRoomState(roomId, {
-        roomStatus: "countdown",
-        gameStatus:"countdown",
+        gameStatus: "countdown",
         countdownEndAt,
         countdownStartedBy: startedBy,
       });
-      console.log(`⏳ Countdown started for room ${roomId} (${durationMs / 1000}s)`);
   
-      // --- Clear any existing countdown timer ---
-      if (this.countdownTimers.has(roomId)) clearTimeout(this.countdownTimers.get(roomId));
+      if (this.io) {
+        this.io.to(roomId).emit("countdownStarted", { roomId, countdownEndAt });
+      }
   
-      // --- Create a wrapper function that checks player count dynamically ---
-      const countdownCheck = async () => {
-        // --- check player count dynamically ---
-        if (players.length < 2) {
-          console.log(`⚠️ Countdown stopped for room ${roomId}, not enough players`);
-          clearTimeout(this.countdownTimers.get(roomId));
+      // Clear existing timer
+      if (this.countdownTimers?.has(roomId)) {
+        clearTimeout(this.countdownTimers.get(roomId));
+      }
+  
+      const tick = async () => {
+        const state = await this.getRoomState(roomId);
+        const cards = await this.getClaimedCards(roomId);
+        const count = Object.keys(cards).length;
+  
+        // ❌ Abort countdown if players drop
+        if (count < 2) {
+          await this.setRoomState(roomId, {
+            gameStatus: "waiting",
+            countdownEndAt: null,
+          });
+  
+          if (this.io) {
+            this.io.to(roomId).emit("countdownStopped", { roomId });
+          }
+  
           this.countdownTimers.delete(roomId);
-          await this.setRoomState(roomId, { roomStatus: "waiting", gameStatus:"waiting" });
-          if (this.io) this.io.to(roomId).emit("countdownStopped", { roomId });
           return;
         }
-      
+  
+        // ✅ Countdown finished → last validation
         if (Date.now() >= countdownEndAt) {
-          console.log(`🎮 Countdown ended → attempting to start game for room ${roomId}`);
-        
-          // 1️⃣ Sync players & cards
-          
-        
-          // 2️⃣ Re-check players AFTER sync — THIS IS THE FIX
-          const livePlayers = await this.getRoomPlayers(roomId);
-          const liveCount = Object.keys(livePlayers || {}).length;
-        
-          if (liveCount < 2) {
-            console.log(`❌ Not enough players after sync → Cancelling game start for room ${roomId}`);
-        
-            clearTimeout(this.countdownTimers.get(roomId));
-            this.countdownTimers.delete(roomId);
-        
-            await this.setRoomState(roomId, {gamestatus:"waiting", roomStatus: "waiting", countdownEndAt: null });
-        
-            if (this.io) this.io.to(roomId).emit("countdownStopped", { roomId });
-        
-            return; // Do NOT start the game
-          }
-        
-          // 3️⃣ Now it's safe to start the game
-          console.log(`🎮 Starting game for room ${roomId} with ${liveCount} players`);
-          await this.startGame(roomId);
-        
           this.countdownTimers.delete(roomId);
+  
+          const finalCards = await this.getClaimedCards(roomId);
+          if (Object.keys(finalCards).length < 2) {
+            await this.setRoomState(roomId, {
+              gameStatus: "waiting",
+              countdownEndAt: null,
+            });
+            return;
+          }
+  
+          // 🎮 START GAME
+          await this.startGame(roomId);
+          return;
         }
-         else {
-          this.countdownTimers.set(roomId, setTimeout(countdownCheck, 500));
-        }
+  
+        // Continue ticking
+        this.countdownTimers.set(roomId, setTimeout(tick, 500));
       };
-      
   
-      // --- Start the countdown monitoring loop ---
-      this.countdownTimers.set(roomId, setTimeout(countdownCheck, 500));
-  
-      if (this.io) this.io.to(roomId).emit("countdownStarted", { roomId, countdownEndAt });
-  
-      const reshuffleResult = await this.reshuffleDemoAutoPlayers(roomId, room);
-      if (!reshuffleResult.done) {
-        console.log(`ℹ️ Demo reshuffle for ${roomId} did not complete:`, reshuffleResult.reason || reshuffleResult);
-      }
-      console.log(`🔄 Reshuffle result for ${roomId}:`, reshuffleResult);
+      this.countdownTimers.set(roomId, setTimeout(tick, 500));
   
       return { success: true, countdownEndAt };
+  
     } catch (err) {
-      console.error(`❌ Error starting countdown for room ${roomId}:`, err);
+      console.error(`❌ startGamingProcess error (${roomId}):`, err);
       return { success: false, message: "Server error" };
     }
   }
   
-  async cancelCountdown(roomId) {
-    try {
-      if (this.countdownTimers.has(roomId)) {
-        clearTimeout(this.countdownTimers.get(roomId));
-        this.countdownTimers.delete(roomId);
-      }
-      await this.setRoomState(roomId, {
-
-        gameStatus:"waiting",
-        roomStatus: "waiting",
-        countdownEndAt: null,
-        countdownStartedBy: null,
-      });
-      if (this.io) this.io.to(roomId).emit('countdownCancelled', { roomId });
-
-      return { success: true };
-    } catch (err) {
-      console.error('Error cancelling countdown:', err);
-      return { success: false };
-    }
-  }
+  
 
 
   async lockRoom(roomId, fn) {
@@ -752,156 +540,46 @@ async reshuffleDemoAutoPlayers(roomId, baseRoom = null) {
   }
 
   async startGame(roomId) {
-    console.log("➡️ startGame(): entered for", roomId);
-
-    try {
-      const roomConfig = await this.getRoomConfig(roomId);
-      if (!roomConfig) {
-        console.log("❌ startGame(): room not found");
-        return { success: false, message: "Room not found" };
-      }
-      const runtime = (await this.getRoomState(roomId)) || {};
-      const players = runtime.players || {};
-      const claimedCards = runtime.claimedCards || {};
-      const bingoCards = this.hydrateCards(
-        roomConfig.bingoCards || {},
-        claimedCards
-      );
-      const room = {
-        ...roomConfig,
-        ...runtime,
-        players,
-        bingoCards,
-      };
-      console.log("🧩 Room data:", {
-        status: room.roomStatus || room.gameStatus,
-        players: Object.keys(room.players || {}).length,
-        cards: Object.keys(room.bingoCards || {}).length,
-      });
-
-      const currentStatus = room.roomStatus || room.gameStatus;
-
-      if (currentStatus !== "countdown") {
-        console.log("⚠️ Room not in countdown, aborting startGame()");
-        return { success: false, message: "Room not in countdown state" };
-      }
-
-      // ✅ Sync players and cards before starting game
-      
-
-      // ✅ Ensure enough claimed cards (>2) before starting
-      const syncedState = (await this.getRoomState(roomId)) || {};
-      const claimedCardsAfterSync = syncedState.claimedCards || {};
-      const claimedCount = Object.values(claimedCardsAfterSync).filter((c) => c?.claimed).length;
-      if (claimedCount < 2) {
-        console.log(`❌ Not enough claimed cards to start game in room ${roomId}: ${claimedCount}`);
-        await this.setRoomState(roomId, {
-          gameStatus:"waiting",
-          roomStatus: "waiting",
-          countdownEndAt: null,
-          countdownStartedBy: null,
-        });
-        return { success: false, message: "Not enough claimed cards (need > 2)" };
-      }
-
-      // Generate a new gameId
-      const gameId = uuidv4();
-      console.log("🎲 New gameId:", gameId);
-
-      await this.setRoomState(roomId, {
-        gameStatus:"playing",
-        roomStatus: "playing",
-        currentGameId: gameId,
-        calledNumbers: [],
-        countdownEndAt: null,
-        countdownStartedBy: null,
-      });
-
-      // ✅ Prepare players
-     // ✅ Prepare players with valid cards
-// --- Prepare cards from players ---
-const allPlayers = Object.entries(room.players || {});
-const validPlayers = allPlayers.filter(
-  ([pid, p]) => p?.cardId && room.bingoCards?.[p.cardId]
-);
-
-if (validPlayers.length < 2) {
-  console.log(`❌ Not enough valid players with cards: ${validPlayers.length}`);
-  return { success: false, message: "Not enough valid players with cards" };
-}
-
-const cards = validPlayers.map(([pid, p]) => ({
-  id: p.cardId,
-  ...room.bingoCards[p.cardId],
-}));
-console.log(`cards${cards}`)
-// --- Generate drawn numbers ---
-console.log(`🎰 Generating drawn numbers for ${cards.length} cards...`);
-const { drawnNumbers, winners } =  await this.generateDrawnNumbersMultiWinner(roomId,cards);
-
-if (!drawnNumbers || drawnNumbers.length === 0) {
-  console.error(`❌ Invalid drawnNumbers generated for room ${roomId}`);
-  await this.setRoomState(roomId, {gameStatus:"waiting", roomStatus: "waiting", currentGameId: null });
-  return { success: false, message: "No valid drawn numbers generated" };
-}
-
-console.log(`✅ Generated ${drawnNumbers.length} numbers, winners: ${winners}`);
-
-// ✅ Construct game data
-const gameData = {
-  id: gameId,
-  roomId,
-  drawnNumbers,
-  currentDrawnNumbers: [],
-  currentNumberIndex: 0,
-  createdAt: Date.now(),
-  startedAt: Date.now(),
-  drawIntervalMs: 5000,
-  status: "active",
-  totalPayout: Math.floor((validPlayers.length ) * (room.betAmount || 0) * 0.8 ),
-  betsDeducted: false,
-  winners: winners.map((cardId) => ({
-    id: uuidv4(),
-    cardId,
-    userId: room.bingoCards[cardId]?.claimedBy,
-    username: room.players[room.bingoCards[cardId]?.claimedBy]?.username || "Unknown",
-    checked: false,
-  })),
-  
-  gameStatus: "playing",
-};
-      console.log("💾 Writing full game data to Redis (ephemeral)...");
-      await this.setGameState(gameId, gameData);
-      console.log("✅ Game data cached in Redis.");
-
-      // ✅ Deduct player bets
-      console.log("💰 Deducting bets...");
-      await this.deductBets(roomId, gameData);
-      console.log("✅ Bets deducted.");
-
-      // ✅ Start number drawing
-      console.log("🎯 Starting number drawing...");
-      await this.lockRoom(roomId, async () => {
-        this.startNumberDrawing(roomId, gameId);
-      });
-
-
-      console.log("✅ Number drawing started.");
-
-      // ✅ Notify clients
-      if (this.io) {
-        this.io.to(roomId).emit("gameStarted", { roomId, gameId });
-        console.log("📡 Emitted 'gameStarted' to clients");
-      }
-
-      console.log("🏁 startGame(): completed successfully for", roomId);
-      return { success: true, gameId };
-    } catch (error) {
-      console.error("💥 Error in startGame():", error);
-      return { success: false, message: error.message };
+    const claimedCards = await this.getClaimedCards(roomId);
+    const playerCount = Object.keys(claimedCards).length;
+    const roomData= await this.getFullRoom(roomId);
+    const rooms = await this.getRoomState(roomId);
+    if (playerCount < 2) {
+      await this.setRoomState(roomId, { gameStatus: "waiting" });
+      return;
     }
+  
+    const gameId = `game_${Date.now()}`
+    const totalPayout = rooms.betAmount * playerCount;
+    const gameState = {
+      id: gameId,
+      roomId,
+      drawnNumbers:[],
+      currentNumberIndex: 0,
+      createdAt: Date.now(),
+      startedAt: Date.now(),
+      drawIntervalMs: 5000,
+      totalPayout,
+      status: "active",
+    };
+  
+    // ✅ Persist game
+    await this.setGameState(gameId, gameState);
+    await this.deductBets(roomId, gameId );
+    await this.setRoomState(roomId, {
+      gameStatus: "playing",
+      currentGameId: gameId,
+      calledNumbers: [],
+    });
+  
+    if (this.io) {
+      this.io.to(roomId).emit("gameStarted", { roomId, gameId });
+    }
+  
+    // 🔢 Start number drawing loop
+    this.startNumberDrawing(roomId, gameId ,rooms, roomData);
   }
-
+  
   async saveRevenueEntry(gameId, roomId, amount) {
     try {
       const revenueRef = ref(rtdb, `revenue/${gameId}`);
@@ -925,10 +603,10 @@ const gameData = {
     }
   }
   // Start number drawing process
-  startNumberDrawing(roomId, gameId, room) {
+  startNumberDrawing(roomId, gameId, rooms ,roomData) {
     if (this.numberDrawIntervals.has(roomId)) {
 
-      if (room.gameStatus !== "playing" && room.roomStatus !== "playing" ) {
+      if (rooms.gameStatus !== "playing" ) {
         this.stopNumberDrawing(roomId);
         return;
       }
@@ -961,7 +639,7 @@ const gameData = {
 
         if (currentNumberIndex >= drawnNumbers.length) {
           // All numbers drawn, end game
-          this.endGame(roomId, gameId, "allNumbersDrawn");
+          this.stopGame(roomId, "allNumbersDrawn");
           return;
         }
 
@@ -988,7 +666,6 @@ const gameData = {
 
         // Auto-bingo for auto players
         try {
-          const roomData = await this.getFullRoom(roomId);
           const bingoCards = roomData?.bingoCards || {};
           const calledSet = new Set(newDrawnNumbers);
           const patterns = this.generateValidPatterns();
@@ -1031,106 +708,83 @@ const gameData = {
     this.numberDrawIntervals.set(roomId, drawInterval);
   }
 
-  async endGame(roomId, gameId, reason = "manual") {
-      const nextGameCountdownMs = 3000; // 5 seconds before reset
-    const nextGameCountdownEndAt = Date.now() + nextGameCountdownMs;
-
+  async stopGame(roomId, reason = "manual") {
     try {
-      // Stop drawing numbers and cleanup
+      // 🛑 Stop number drawing
       this.stopNumberDrawing(roomId);
-
-      // Clear countdown timer if active
-      if (this.countdownTimers.has(roomId)) {
-        clearTimeout(this.countdownTimers.get(roomId));
-        this.countdownTimers.delete(roomId);
+    
+      // 💰 Finalize payouts / revenue
+      await this.finalizeGame(roomId, reason);
+  
+      // 🔚 Mark game ended
+      await this.setRoomState(roomId, {
+        gameStatus: "ended",
+        countdownEndAt: null,
+        countdownStartedBy: null,
+      });
+  
+      if (this.io) {
+        this.io.to(roomId).emit("gameEnded", {
+          roomId,
+          reason,
+        });
       }
-
-      // Clear previous reset timer if active
-      if (this.resetRoomTimers.has(roomId)) {
-        clearTimeout(this.resetRoomTimers.get(roomId));
-        this.resetRoomTimers.delete(roomId);
-      }
-
-      // Schedule room reset after 5 seconds
+  
+      // ♻️ Reset room (auto cards only)
       const resetTimer = setTimeout(async () => {
         try {
           await this.lockRoom(roomId, async () => {
             await this.resetRoom(roomId);
           });
-
         } catch (e) {
-          console.error("Error in scheduled resetRoom:", e);
-        } finally {
-          this.resetRoomTimers.delete(roomId);
+          console.error("❌ resetRoom failed:", e);
         }
-      }, nextGameCountdownMs);
-
-      this.resetRoomTimers.set(roomId, resetTimer);
-
-      // Fetch game data from Redis
-      const gameData = await this.getGameState(gameId);
-      if (!gameData) return;
-
-      // ✅ Get current room state to check if already paid
-      const currentRoomState = await this.getRoomState(roomId);
-      const alreadyPaid = currentRoomState?.payed === true;
-
-      await this.setRoomState(roomId, {
-        gameStatus:"ended",
-        roomStatus: "ended",
-        nextGameCountdownEndAt,
-        countdownEndAt: null,
-        countdownStartedBy: null,
-      });
-
-      // ✅ Only process winners if not already paid (bingo winner was already paid in checkBingo)
-      if (!alreadyPaid) {
-        const hasConfirmedWinner = !!gameData.winner || (gameData.winners && gameData.winners.length > 0);
-        if (reason === "allNumbersDrawn" && !hasConfirmedWinner) {
-          // No winner - record revenue
-          const { winners, totalPayout, id } = gameData;
-      console.log(`REVENUE ADDING ***** winners=${JSON.stringify(winners)}, totalPayout=${totalPayout}, id=${id}`);
-
-      const revenue = Math.floor((totalPayout || 0) * 1.25);
-
-      await this.saveRevenueEntry(id, roomId, revenue);
-
-          await this.setRoomState(roomId, {
-            winner: null,
-            payout: gameData.totalPayout || 0,
-            payed: true,
-          });
-        } else if (gameData.winners && gameData.winners.length > 0 && reason !== "bingo") {
-          console.log("oricesswininer sstart")
-          // Multi-winner case (if not already handled in checkBingo)
-          await this.processWinners(roomId, gameData);
-        }
-      }
-
-      // Notify connected clients
-      if (this.io) {
-        this.io.to(roomId).emit("gameEnded", {
-          roomId,
-          gameId,
-          reason,
-          winners: gameData.winners || [],
-          nextGameCountdownEndAt,
-        });
-      }
-
-      // Clean up per-game Redis state
-      try {
-        await redis.del(`game:${gameId}`);
-      } catch (e) {
-        console.error(`⚠️ Failed to delete game state for ${gameId} from Redis:`, e);
-      }
-
-      console.log(`🔚 Game ended in room ${roomId}: ${reason}. Room will reset in 5s.`);
-    } catch (error) {
-      console.error("Error ending game:", error);
+      }, 3000);
+  
+      this.resetRoomTimers?.set(roomId, resetTimer);
+  
+      // 🧼 Clean per-game Redis
+      
+  
+      console.log(`🔚 Game stopped in room ${roomId} (${reason})`);
+    } catch (err) {
+      console.error(`❌ stopGame error (${roomId}):`, err);
     }
   }
-
+  
+  async finalizeGame(roomId, reason = "manual") {
+    const roomState = await this.getRoomState(roomId);
+    const gameId = roomState?.currentGameId;
+    if (!gameId) return;
+  
+    const gameData = await this.getGameState(gameId);
+    if (!gameData) return;
+  
+    const alreadyPaid = roomState?.payed === true;
+  
+    if (alreadyPaid) return;
+  
+    // 🎯 No winner case
+    if (reason === "allNumbersDrawn" && (!gameData.winners || gameData.winners.length === 0)) {
+      const revenue = Math.floor((gameData.totalPayout || 0) * 1.25);
+  
+      await this.saveRevenueEntry(gameId, roomId, revenue);
+  
+      await this.setRoomState(roomId, {
+        winner: null,
+        payout: gameData.totalPayout || 0,
+        payed: true,
+      });
+  
+      return;
+    }
+  
+    // 🏆 Winners exist
+    if (gameData.winners && gameData.winners.length > 0) {
+      await this.processWinners(roomId, gameData);
+    }
+  }
+  
 
   async processWinners(roomId, gameData) {
     try {
@@ -1200,134 +854,131 @@ async releaseBingoLock(roomId) {
   await redis.del(key);
 }
 
-  
-  // Check bingo claim
-  async checkBingo(roomId, cardId, userId, pattern) {
+async checkBingo(roomId, userId, pattern) {
+ const start = Date.now();
+while (Date.now() - start < 3000) {
+  if (await this.acquireBingoLock(roomId)) break;
+  await new Promise(r => setTimeout(r, 120));
+}
+if (Date.now() - start >= 3000) {
+  return { success: false, message: "Lock timeout" };
+}
 
-    // ------------------------------------
-    // 1) QUEUE: Only one bingo check at a time
-    // ------------------------------------
-    while (true) {
-      const got = await this.acquireBingoLock(roomId);
-      if (got) break;
-      await new Promise(res => setTimeout(res, 120)); 
+  try {
+    // 🔎 Load room + validate state
+    const room = await this.getFullRoom(roomId);
+    if (!room || room.gameStatus !== "playing") {
+      return { success: false, message: "Game not in playing state" };
     }
-  
-    try {
-      // 2) Load full room
-      const room = await this.getFullRoom(roomId);
-      if (!room || (room.roomStatus || room.gameStatus) !== "playing") {
-        return { success: false, message: "Game not in playing state" };
-      }
-  
-      // Pre-mark attempt to prevent spam
-      await this.updateRoomPlayer(roomId, userId, { attemptedBingo: true });
-  
-      const players = room.players || {};
-      const player = players[userId];
-  
-      if (player?.attemptedBingo) {
-        return { success: false, message: "Already attempted bingo" };
-      }
-  
-      const valid = this.validateBingoPattern(
-        cardId,
-        room,
-        pattern,
-        room.calledNumbers || []
-      );
-  
-      if (!valid) {
-        await this.updateRoomPlayer(roomId, userId, { attemptedBingo: true });
-        return { success: false, message: "Invalid bingo pattern" };
-      }
-  
-      // STOP NUMBER DRAWING
-      this.stopNumberDrawing(roomId);
-  
-      const gameId = room.currentGameId;
-      let gameData = await this.getGameState(gameId);
-      if (!gameData) return { success: false, message: "Game not found" };
-  
-      // Compute payout
-      const totalPlayers = Object.keys(players).length;
-      const bet = room.betAmount || 0;
-      const totalPayout = Math.floor(totalPlayers * bet * 0.8);
-  
-      // Set winner
-      gameData.winners = [{
-        id: uuidv4(),
-        cardId,
+
+    const gameId = room.currentGameId;
+    if (!gameId) {
+      return { success: false, message: "Game not found" };
+    }
+
+    // 🔎 Load claimed cards
+    const claimedCards = await this.getClaimedCards(roomId);
+    const cardEntry = Object.values(claimedCards).find(
+      c => c.claimedBy === userId
+    );
+
+    if (!cardEntry) {
+      return { success: false, message: "No claimed card found for user" };
+    }
+
+    const cardId = cardEntry.cardId;
+
+    // ❌ Prevent repeat attempts
+    if (cardEntry.attemptedBingo) {
+      return { success: false, message: "Bingo already attempted" };
+    }
+
+    // 🧠 Validate bingo pattern BEFORE mutating state
+    const isValid = this.validateBingoPattern(
+      cardId,
+      room,
+      pattern,
+      room.calledNumbers || []
+    );
+
+    // ❌ Invalid bingo → mark attempted, allow game to continue
+    if (!isValid) {
+      claimedCards[cardId].attemptedBingo = true;
+      await this.setClaimedCards(roomId, claimedCards);
+
+      return { success: false, message: "Invalid bingo pattern" };
+    }
+
+    // 🛑 Valid bingo → stop number drawing
+    this.stopNumberDrawing(roomId);
+
+    // 🔎 Load game state
+    const gameData = await this.getGameState(gameId);
+    if (!gameData || gameData.status !== "active") {
+      return { success: false, message: "Game not active" };
+    }
+
+    // 🧮 Compute payout ONCE
+    const totalPlayers = Object.keys(claimedCards).length;
+    const betAmount = room.betAmount || 0;
+    const totalPayout = Math.floor(totalPlayers * betAmount * 0.8);
+
+    // 🏆 Record winner ONLY (no payments here)
+    gameData.winners = [{
+      id: uuidv4(),
+      cardId,
+      userId,
+      username: cardEntry.username,
+      checked: true,
+      pattern
+    }];
+
+    gameData.totalPayout = totalPayout;
+    gameData.winner = userId;
+    gameData.status = "ended";
+
+    await this.setGameState(gameId, gameData);
+
+    // 🏁 Update room (settlement handled later)
+    await this.setRoomState(roomId, {
+      winner: userId,
+      winners: [userId],
+      payout: totalPayout,
+      payed: false
+    });
+
+    // 📣 Notify clients
+    if (this.io) {
+      this.io.to(roomId).emit("winnerConfirmed", {
+        roomId,
+        gameId,
         userId,
-        username: player?.username || "Unknown",
-        checked: true,
-      }];
-      gameData.totalPayout = totalPayout;
-      gameData.winner = userId;
-  
-      await this.setGameState(gameId, gameData);
-  
-      await this.saveRevenueEntry(gameId, roomId, Math.floor(totalPayout / 4));
-  
-      // Apply payout
-      await this.applyBalanceAdjustments({
-        [userId]: totalPayout,
-      });
-  
-      // Update gamesWon
-      try {
-        const userSnap = await get(ref(rtdb, `users/${userId}`));
-        const userData = userSnap.val() || {};
-        const currentGamesWon = userData.gamesWon || 0;
-  
-        await update(ref(rtdb, `users/${userId}`), {
-          gamesWon: currentGamesWon + 1,
-          lastWinDate: new Date().toISOString()
-        });
-      } catch (err) {
-        console.error("Failed updating gamesWon:", err);
-      }
-  
-      // Update room
-      await this.setRoomState(roomId, {
-        winner: userId,
-        winners: [userId],
-        payout: totalPayout,
-        payed: true,
-      });
-  
-      if (this.io) {
-        this.io.to(roomId).emit("winnerConfirmed", {
-          roomId,
-          gameId,
-          userId,
-          cardId,
-          patternIndices: pattern,
-          payout: totalPayout,
-        });
-      }
-  
-      await this.endGame(roomId, gameId, "bingo");
-  
-      return {
-        success: true,
-        isWinner: true,
-        payout: totalPayout,
-        winner: userId,
         cardId,
-      };
-  
-    } catch (e) {
-      console.error("checkBingo error:", e);
-      return { success: false, message: "Server error" };
-    } finally {
-      // ------------------------------------
-      // RELEASE LOCK ALWAYS
-      // ------------------------------------
-      await this.releaseBingoLock(roomId);
+        patternIndices: pattern,
+        payout: totalPayout
+      });
     }
+
+    // 🔚 End game → finalizeGame() will pay & record revenue
+    await this.stopGame(roomId, "bingo");
+
+    return {
+      success: true,
+      isWinner: true,
+      payout: totalPayout,
+      winner: userId,
+      cardId
+    };
+
+  } catch (err) {
+    console.error("❌ checkBingo error:", err);
+    return { success: false, message: "Server error" };
+  } finally {
+    await this.releaseBingoLock(roomId);
   }
-  
+}
+
+  // Check bingo clai
   validateBingoPattern(cardId, room, pattern, calledNumbers) {
     try {
       const card = room.bingoCards[cardId];
@@ -1388,50 +1039,49 @@ async releaseBingoLock(roomId) {
   }
 
   // Deduct bets from players
-  async deductBets(roomId, gameData) {
+  async deductBets(roomId, id) {
     try {
+      const storedGame = await this.getGameState(id);
+      if (!storedGame || storedGame.betsDeducted) {
+        console.log("ℹ️ Bets already deducted, skipping");
+        return;
+      }
+  
       const roomConfig = await this.getRoomConfig(roomId);
       const players = await this.getRoomPlayersrdtbs(roomId);
       if (!roomConfig || !players) return;
   
       const betAmount = roomConfig.betAmount || 0;
       const adjustments = {};
-      const updates = {}; // will store gamesPlayed increments
+      const updates = {};
   
       for (const playerId of Object.keys(players)) {
         const player = players[playerId];
-  
-        // Skip demo players
         if (!player || player.isDemo) continue;
   
-        // Deduct bet
         adjustments[playerId] = (adjustments[playerId] || 0) - betAmount;
-  
-        // Increase games played
         updates[playerId] = {
           gamesPlayed: (player.gamesPlayed || 0) + 1,
         };
       }
   
-      // Apply balance deductions
       await this.applyBalanceAdjustments(adjustments);
   
-      // Apply gamesPlayed increments
       for (const playerId of Object.keys(updates)) {
         await update(ref(rtdb, `users/${playerId}`), updates[playerId]);
       }
   
-      // Mark bets as deducted
-      const storedGame = await this.getGameState(gameData.id);
-      if (storedGame) {
-        storedGame.betsDeducted = true;
-        await this.setGameState(gameData.id, storedGame);
-      }
+      storedGame.betsDeducted = true;
+      await this.setGameState(id, storedGame);
+  
+      console.log(`💸 Bets deducted for game ${id}`);
   
     } catch (error) {
       console.error("Error deducting bets:", error);
+      throw error; // 🔑 fail hard so game does NOT start
     }
   }
+  
   
 
   async generateDrawnNumbersMultiWinner(roomId, cards = []) {
@@ -1477,7 +1127,8 @@ async releaseBingoLock(roomId) {
       const normalCount = normalCards.length;
   
       // --- Get players' gamesPlayed from DB ---
-      const playersData = await this.getRoomPlayers(roomId);  
+      const playersData = await this.getRoomPlayersrdtbs(roomId);
+
       // Expected structure: playersData[userId].gamesPlayed
   
       // --- Build list restricted by 5-game rule ---
@@ -1696,62 +1347,73 @@ async releaseBingoLock(roomId) {
 
   async resetRoom(roomId) {
     try {
-      if (this.resetRoomTimers && this.resetRoomTimers.has(roomId)) {
+      // Clear timers
+      if (this.resetRoomTimers?.has(roomId)) {
         clearTimeout(this.resetRoomTimers.get(roomId));
         this.resetRoomTimers.delete(roomId);
       }
-      if (this.countdownTimers && this.countdownTimers.has(roomId)) {
+      if (this.countdownTimers?.has(roomId)) {
         clearTimeout(this.countdownTimers.get(roomId));
         this.countdownTimers.delete(roomId);
       }
-
+  
       const roomConfig = await this.getRoomConfig(roomId);
       if (!roomConfig) {
         console.error(`❌ Room ${roomId} not found`);
         return;
       }
-
+  
       const betAmount = roomConfig.betAmount || 0;
-      const players = await this.getRoomPlayers(roomId);
       const claimedCards = await this.getClaimedCards(roomId);
-      const keepPlayers = new Set();
-
+  
+      const now = Date.now();
+      let keptAutoCards = 0;
+  
       for (const [cardId, card] of Object.entries(claimedCards)) {
-        if (!card?.claimed) continue;
-        const claimedBy = card.claimedBy;
-        let keepClaimed = false;
-        if (claimedBy && card.auto) {
-          const autoUntil = card.autoUntil || 0;
+        if (!card?.claimed) {
+          delete claimedCards[cardId];
+          continue;
+        }
+  
+        // ❌ Non-auto cards are always removed
+        if (!card.auto) {
+          delete claimedCards[cardId];
+          continue;
+        }
+  
+        // Auto card validation
+        const autoUntil = card.autoUntil || 0;
+        const autoActive = autoUntil > now;
+  
+        let hasEnoughBalance = false;
+        if (autoActive && card.claimedBy) {
           const balanceSnap = await get(
-            ref(rtdb, `users/${claimedBy}/balance`)
+            ref(rtdb, `users/${card.claimedBy}/balance`)
           );
           const balance = balanceSnap.val() || 0;
-          const autoActive =
-            autoUntil > Date.now() &&
-            autoUntil - Date.now() <= 24 * 60 * 60 * 1000;
-          const hasEnoughBalance = balance >= betAmount;
-          if (autoActive && hasEnoughBalance) {
-            await this.updateRoomPlayer(roomId, claimedBy, {
-              attemptedBingo: false,
-            });
-            keepClaimed = true;
-            keepPlayers.add(claimedBy);
-          }
+          hasEnoughBalance = balance >= betAmount;
         }
-        if (!keepClaimed) {
-          await this.unclaimCard(roomId, cardId);
+  
+        // ❌ Auto invalid → remove
+        if (!autoActive || !hasEnoughBalance) {
+          delete claimedCards[cardId];
+          continue;
         }
+  
+        // ✅ Keep auto card, reset per-game state
+        claimedCards[cardId] = {
+          ...card,
+          attemptedBingo: false,
+        };
+        keptAutoCards++;
       }
-
-      for (const playerId of Object.keys(players)) {
-        if (!keepPlayers.has(playerId)) {
-          await this.removeRoomPlayer(roomId, playerId);
-        }
-      }
-
+  
+      // Save cleaned cards
+      await this.setClaimedCards(roomId, claimedCards);
+  
+      // Reset room runtime state
       await this.setRoomState(roomId, {
-        roomStatus: "waiting",
-        gameStatus:"waiting",
+        gameStatus: "waiting",
         currentGameId: null,
         calledNumbers: [],
         countdownEndAt: null,
@@ -1760,18 +1422,34 @@ async releaseBingoLock(roomId) {
         payout: null,
         payed: false,
       });
-
+  
       if (this.io) {
-        this.io.to(roomId).emit("roomReset", { roomId });
+        this.io.to(roomId).emit("roomReset", {
+          roomId,
+          keptAutoCards,
+        });
+      }
+      // 🧼 Clean per-game Redis AFTER reset is complete
+      try {
+        const roomState = await this.getRoomState(roomId);
+        const gameId = roomState?.currentGameId;
+
+        if (gameId) {
+          await redis.del(`game:${gameId}`);
+          console.log(`🧹 Deleted game state game:${gameId}`);
+        }
+      } catch (e) {
+        console.error(`⚠️ Failed to cleanup game state for room ${roomId}`, e);
       }
 
       console.log(
-        `♻️ Room ${roomId} reset for next game (kept ${keepPlayers.size} players with valid auto-bet & balance)`
+        `♻️ Room ${roomId} reset (kept ${keptAutoCards} auto cards)`
       );
     } catch (error) {
-      console.error("Error resetting room:", error);
+      console.error("❌ resetRoom error:", error);
     }
   }
+  
 
 
 }

@@ -586,7 +586,6 @@ async setCardAutoState(roomId, cardId, options = {}) {
     const { drawnNumbers, winners } = 
       await this.generateDrawnNumbersMultiWinner(roomId, fullGameCards);
   console.log(drawnNumbers)
-  console.log(cards)
   console.log(winners)
     const gameState = {
       id: gameId,

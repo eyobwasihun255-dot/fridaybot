@@ -558,6 +558,7 @@ async setCardAutoState(roomId, cardId, options = {}) {
     
   const cards = Object.values(claimedCards); // Convert claimedCards map/object to array
   const { drawnNumbers } = await this.generateDrawnNumbersMultiWinner(roomId, cards);
+  console.log(drawnNumbers)
     const gameState = {
       id: gameId,
       roomId,

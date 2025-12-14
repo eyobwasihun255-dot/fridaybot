@@ -504,9 +504,12 @@ async setCardAutoState(roomId, cardId, options = {}) {
             });
             return;
           }
-  
+          const roomData= await this.getFullRoom(roomId);
+    const rooms = await this.getRoomState(roomId);
+    
+    const claimedCards = await this.getClaimedCards(roomId);
           // 🎮 START GAME
-          await this.startGame(roomId);
+          await this.startGame(roomId,roomData,rooms,claimedCards);
           return;
         }
   
@@ -539,11 +542,12 @@ async setCardAutoState(roomId, cardId, options = {}) {
     }
   }
 
-  async startGame(roomId) {
-    const claimedCards = await this.getClaimedCards(roomId);
+  async startGame(roomId, roomData,rooms,claimedCards) {
+    
+    const roomConfig = await this.getRoomConfig(roomId);
+    const players = await this.getRoomPlayersrdtbs(roomId);
     const playerCount = Object.keys(claimedCards).length;
-    const roomData= await this.getFullRoom(roomId);
-    const rooms = await this.getRoomState(roomId);
+    
     if (playerCount < 2) {
       await this.setRoomState(roomId, { gameStatus: "waiting" });
       return;
@@ -551,10 +555,13 @@ async setCardAutoState(roomId, cardId, options = {}) {
   
     const gameId = `game_${Date.now()}`
     const totalPayout = rooms.betAmount * playerCount;
+    
+  const cards = Object.values(claimedCards); // Convert claimedCards map/object to array
+  const { drawnNumbers } = await this.generateDrawnNumbersMultiWinner(roomId, cards);
     const gameState = {
       id: gameId,
       roomId,
-      drawnNumbers:[],
+      drawnNumbers,
       currentNumberIndex: 0,
       createdAt: Date.now(),
       startedAt: Date.now(),
@@ -565,7 +572,7 @@ async setCardAutoState(roomId, cardId, options = {}) {
   
     // ✅ Persist game
     await this.setGameState(gameId, gameState);
-    await this.deductBets(roomId, gameId );
+    await this.deductBets(roomId, gameId,roomConfig,players );
     await this.setRoomState(roomId, {
       gameStatus: "playing",
       currentGameId: gameId,
@@ -1039,7 +1046,7 @@ if (Date.now() - start >= 3000) {
   }
 
   // Deduct bets from players
-  async deductBets(roomId, id) {
+  async deductBets(roomId, id ,roomConfig,players) {
     try {
       const storedGame = await this.getGameState(id);
       if (!storedGame || storedGame.betsDeducted) {
@@ -1047,8 +1054,6 @@ if (Date.now() - start >= 3000) {
         return;
       }
   
-      const roomConfig = await this.getRoomConfig(roomId);
-      const players = await this.getRoomPlayersrdtbs(roomId);
       if (!roomConfig || !players) return;
   
       const betAmount = roomConfig.betAmount || 0;

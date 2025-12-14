@@ -776,6 +776,7 @@ useEffect(() => {
               return (
                 <div key={player.telegramId} className="bg-theme-light/20 rounded p-2">
                   <span>{maskedUsername}</span>
+                  <p> </p>
                   <span className="text-xs">Bet: {player.betAmount}</span>
                 </div>
               );

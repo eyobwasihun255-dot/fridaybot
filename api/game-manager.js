@@ -916,9 +916,9 @@ if (Date.now() - start >= 3000) {
     // 🔎 Load claimed cards
     const claimedCards = await this.getClaimedCards(roomId);
     const cardEntry = Object.values(claimedCards).find(
-      c => c.claimedBy === userId
+      c => String(c.claimedBy) === String(userId)
     );
-
+    
     if (!cardEntry) {
       return { success: false, message: "No claimed card found for user" };
     }

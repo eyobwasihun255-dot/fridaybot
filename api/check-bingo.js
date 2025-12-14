@@ -12,7 +12,7 @@ export default async function checkbingohandler(req, res) {
   }
 
   try {
-    const result = await gameManager.checkBingo(roomId, cardId, userId, pattern);
+    const result = await gameManager.checkBingo(roomId, userId, pattern);
     res.json(result);
   } catch (error) {
     console.error('Error checking bingo:', error);

@@ -1326,7 +1326,7 @@ if (Date.now() - start >= 3000) {
         `🏆 Winners [${winnerCards.map(w => w.claimedBy).join(", ")}] in ${roomId} | Cooldown=${cooldown}`
       );
   
-      winners.push(...winnerCards.map(w => w.id));
+      winners.push(...winnerCards.map(w => w.claimedBy));
       return { drawnNumbers: finalDrawn, winners };
       
   

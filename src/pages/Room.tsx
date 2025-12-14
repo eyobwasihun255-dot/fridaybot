@@ -44,10 +44,38 @@ const Room: React.FC = () => {
   } = useGameStore();
 
   const { user } = useAuthStore();
-
+  
   // ---- Derived memos (single place for lookups) ----
-  const playerData = useMemo(() => currentRoom?.players?.[user?.telegramId as string], [currentRoom, user?.telegramId]);
-  const alreadyBetted = !!playerData?.betAmount && playerData.betAmount > 0;
+  const players = useMemo(() => {
+    if (!currentRoom?.claimedCards) return {};
+  
+    const map: Record<string, any> = {};
+  
+    Object.values(currentRoom.claimedCards).forEach((c: any) => {
+      if (!c?.claimed) return;
+  
+      const telegramId = String(c.telegramId || c.claimedBy);
+  
+      map[telegramId] = {
+        telegramId,
+        username: c.username,
+        betAmount: c.betAmount || 0,
+        attemptedBingo: !!c.attemptedBingo,
+        auto: !!c.auto,
+        cardId: c.cardId,
+      };
+    });
+  
+    return map;
+  }, [currentRoom?.claimedCards]);
+  const myPlayer = useMemo(() => {
+    if (!user?.telegramId) return null;
+    return players[String(user.telegramId)] || null;
+  }, [players, user?.telegramId]);
+  
+  
+  const alreadyBetted = !!myPlayer?.betAmount && myPlayer.betAmount > 0;
+
   const userCard = useMemo(
     () => bingoCards.find((c) => c?.claimed && String(c.claimedBy) === String(user?.telegramId)),
     [bingoCards, user?.telegramId]
@@ -213,15 +241,16 @@ useEffect(() => {
         }
       })();
     } else {
-      const pdata = currentRoom.players?.[user.telegramId];
+      const pdata = players?.[user.telegramId];
       if (pdata?.betAmount && pdata.betAmount > 0) setHasBet(true);
     }
   }, [currentRoom, user, bingoCards, selectedCard, cancelBet, t]);
 
   // ---- keep "hasAttemptedBingo" in sync with player data ----
   useEffect(() => {
-    setHasAttemptedBingo(Boolean(playerData?.attemptedBingo));
-  }, [playerData?.attemptedBingo]);
+    setHasAttemptedBingo(!!myPlayer?.attemptedBingo);
+  }, [myPlayer?.attemptedBingo]);
+  
 
   // ---- helpers / callbacks (memoized) ----
   const handleNumberClick = useCallback((num: number) => {
@@ -469,7 +498,7 @@ useEffect(() => {
         <div className="bg-white/10 rounded text-center py-1 border border-white/20">{t('bet')}: {currentRoom.betAmount}</div>
 
         <div className="bg-white/10 rounded text-center py-1 border border-white/20">
-          {t('payout')}: {Math.max(0, ((Object.keys(currentRoom.players || {}).length || 0) * (currentRoom.betAmount || 0) * 0.8))}
+          {t('payout')}: {Math.max(0, ((Object.keys(players || {}).length || 0) * (currentRoom.betAmount || 0) * 0.8))}
         </div>
       </div>
 
@@ -487,7 +516,7 @@ useEffect(() => {
             <p className="mb-4 text-sm text-gray-600">
               {t('card_number')}: {winnerCard.serialNumber}
               <p></p>
-              {t('winner')}: {currentRoom?.players?.[winnerCard.claimedBy as string]?.username || winnerCard.claimedBy || 'no Username'}
+              {t('winner')}: {players?.[winnerCard.claimedBy as string]?.username || winnerCard.claimedBy || 'no Username'}
             </p>
 
             <div className="mb-4 animate-scale-in">
@@ -738,20 +767,20 @@ useEffect(() => {
       <div className="w-full mt-6 bg-theme-light/10 rounded border border-theme-accent/30 p-3">
         <h3 className="font-bold text-sm mb-2">{t('players_in_room')}</h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-          {currentRoom?.players && Object.keys(currentRoom.players || {}).length > 0 ? (
-            Object.values(currentRoom.players || {}).map((player: any) => {
-              const maskedUsername = player.username ? `${player.username.slice(0, 7)}***` : `user_${player.telegramId?.slice(0, 3) ?? '???'}***`;
-              let bgColor = 'bg-theme-light/20';
-              if ((currentRoom as any).winners?.some((w: any) => w.telegramId === player.telegramId)) bgColor = 'bg-theme-primary';
-              else if (player.attemptedBingo) bgColor = 'bg-theme-secondary';
-
+          {players && Object.keys(players || {}).length > 0 ? (
+            Object.values(players).map((player: any) => {
+              const maskedUsername = player.username
+                ? `${player.username.slice(0, 7)}***`
+                : `user_${player.telegramId.slice(0, 3)}***`;
+            
               return (
-                <div key={player.id} className={`${bgColor} rounded p-2 flex flex-col items-center text-center transition`}>
-                  <span className="font-semibold">{maskedUsername}</span>
+                <div key={player.telegramId} className="bg-theme-light/20 rounded p-2">
+                  <span>{maskedUsername}</span>
                   <span className="text-xs">Bet: {player.betAmount}</span>
                 </div>
               );
-            })
+            }
+            )
           ) : (
             <div className="col-span-full text-center text-gray-300">No players have bet yet...</div>
           )}

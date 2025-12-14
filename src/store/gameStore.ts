@@ -15,7 +15,26 @@
     auto?: boolean;
     autoUntil?: number | null;
   }
-
+  interface ClaimedCard {
+    cardId: string;
+    claimed: boolean;
+    claimedBy: string;        // telegramId
+    telegramId: string;
+    username?: string;
+    claimedAt: number;
+  
+    // game-related
+    betAmount: number;
+    attemptedBingo: boolean;
+  
+    // auto-bet
+    auto: boolean;
+    autoUntil: number | null;
+  
+    // optional game result
+    winningPatternIndices?: number[];
+  }
+  
   interface Room {
     id: string;
     name: string;
@@ -32,10 +51,22 @@
     payed: boolean;
     currentWinner?: string;
     countdownEndAt: number;
-    players?: { [id: string]: { id: string; username: string; betAmount: number; cardId: string ;attemptedBingo: boolean} };
     gameId?: string;
     nextGameCountdownEndAt?: number;
     bingoCards?: Record<string, any>;
+    claimedCards: Record<string, ClaimedCard>;
+
+  /** (Legacy – optional, can be removed later) */
+  players?: Record<
+    string,
+    {
+      id: string;
+      username: string;
+      betAmount: number;
+      cardId: string;
+      attemptedBingo: boolean;
+    }
+  >;
   }
 
   interface GameState {

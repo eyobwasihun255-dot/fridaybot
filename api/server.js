@@ -310,7 +310,6 @@ const processRoomCountdown = async (roomId, roomFromCache, now) => {
 
     await gameManager.startGamingProcess(
       roomId,
-      playerList,
       30000,  // countdown duration
       "auto"
     );}

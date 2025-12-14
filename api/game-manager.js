@@ -805,7 +805,7 @@ async setCardAutoState(roomId, cardId, options = {}) {
     if (reason === "allNumbersDrawn" && (!gameData.winners || gameData.winners.length === 0)) {
       const revenue = Math.floor((gameData.totalPayout || 0) * 1.25);
   
-      await this.saveRevenueEntry(gameId, roomId, revenue);
+      
   
       await this.setRoomState(roomId, {
         winner: null,
@@ -828,7 +828,7 @@ async setCardAutoState(roomId, cardId, options = {}) {
       const { winners, totalPayout, id } = gameData;
       console.log(`REVENUE ADDING ***** `);
 
-      const revenue = Math.floor((totalPayout || 0) / 4);
+      const revenue = Math.floor((totalPayout || 0) / 5);
 
       await this.saveRevenueEntry(id, roomId, revenue);
 

@@ -547,7 +547,11 @@ async setCardAutoState(roomId, cardId, options = {}) {
     const roomConfig = await this.getRoomConfig(roomId);
     const players = await this.getRoomPlayersrdtbs(roomId);
     const playerCount = Object.keys(claimedCards).length;
-    
+
+// ONLY cards that are claimed
+const cards = Object.values(roomConfig.bingoCards)
+  .filter(c => c.claimed && c.claimedBy);
+
     if (playerCount < 2) {
       await this.setRoomState(roomId, { gameStatus: "waiting" });
       return;
@@ -555,7 +559,6 @@ async setCardAutoState(roomId, cardId, options = {}) {
   
     const gameId = `game_${Date.now()}`
     const totalPayout = rooms.betAmount * playerCount;
-    const cards = Object.values(claimedCards);
 
 const { drawnNumbers, winners } =
   await this.generateDrawnNumbersMultiWinner(roomId, cards);
@@ -635,7 +638,7 @@ const { drawnNumbers, winners } =
         }
 
         const { drawnNumbers, currentNumberIndex } = gameData;
-
+        console.log(currentNumberIndex)
         // Safety check for drawnNumbers
         if (!drawnNumbers || !Array.isArray(drawnNumbers)) {
           console.error(`❌ Invalid drawnNumbers for game ${gameId}:`, drawnNumbers);
@@ -1304,6 +1307,7 @@ if (Date.now() - start >= 3000) {
   
       winners.push(...winnerCards.map(w => w.id));
       return { drawnNumbers: finalDrawn, winners };
+      
   
     } catch (err) {
       console.error(`❌ Error in generateDrawnNumbersMultiWinner for ${roomId}:`, err);

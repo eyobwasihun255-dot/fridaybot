@@ -1,18 +1,18 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Users, Coins, Play } from 'lucide-react';
 import { useLanguageStore } from '../store/languageStore';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { useEffect, useState } from 'react';
+
 interface Room {
   id: string;
   name: string;
   betAmount: number;
   maxPlayers: number;
-  players: { [id: string]: any } | number; // could be number or object
   gameStatus: string;
   isDemoRoom?: boolean;
-  countdownEndAt : number;
+  countdownEndAt: number;
+  claimedCards?: { [cardId: string]: any }; // new structure
 }
 
 interface RoomCardProps {
@@ -23,6 +23,8 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
   const { t } = useLanguageStore();
   const navigate = useNavigate();
   const { user } = useAuthStore.getState();
+
+  const [timeLeft, setTimeLeft] = useState(0);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -56,45 +58,46 @@ const RoomCard: React.FC<RoomCardProps> = ({ room }) => {
     }
   };
 
-  // ✅ Check if current user claimed a card in this room
+  // ✅ Check if current user claimed a card
   const hasClaimedCard =
-    room.players &&
-    typeof room.players === 'object' &&
+    room.claimedCards &&
     user &&
-    room.players[user.telegramId];
+    Object.values(room.claimedCards).some(card => card.claimedBy === user.telegramId);
+
+  // ✅ Count unique players
+  const uniquePlayers = room.claimedCards
+    ? new Set(Object.values(room.claimedCards).map(card => card.claimedBy))
+    : new Set();
+
+  const playerCount = uniquePlayers.size;
 
   // ✅ Calculate payout
-  const playerCount =
-    room.players && typeof room.players === 'object'
-      ? Object.keys(room.players).length
-      : 0;
-
   const payout =
     !room.isDemoRoom && playerCount > 1
-      ? Math.max(0, Math.floor((playerCount ) * room.betAmount * 0.8))
+      ? Math.max(0, Math.floor(playerCount * room.betAmount * 0.8))
       : 0;
-      const [timeLeft, setTimeLeft] = useState(0);
 
-useEffect(() => {
-        if (room.gameStatus === "countdown" && room.countdownEndAt) {
-          const updateTimer = () => {
-            const now = new Date().getTime();
-            const endTime = new Date(room.countdownEndAt).getTime();
-            const diff = Math.max(0, Math.floor((endTime - now) / 1000)); // in seconds
-            setTimeLeft(diff);
-          };
-    
-          updateTimer(); // initial call
-          const interval = setInterval(updateTimer, 1000);
-    
-          return () => clearInterval(interval); // cleanup
-        }
-      }, [room.gameStatus, room.countdownEndAt]);
-      const formatTime = (seconds) => {
-        const m = String(Math.floor(seconds / 60)).padStart(2, "0");
-        const s = String(seconds % 60).padStart(2, "0");
-        return `${m}:${s}`;
+  // Countdown timer
+  useEffect(() => {
+    if (room.gameStatus === 'countdown' && room.countdownEndAt) {
+      const updateTimer = () => {
+        const now = Date.now();
+        const diff = Math.max(0, Math.floor((room.countdownEndAt - now) / 1000)); // seconds
+        setTimeLeft(diff);
       };
+
+      updateTimer();
+      const interval = setInterval(updateTimer, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [room.gameStatus, room.countdownEndAt]);
+
+  const formatTime = (seconds: number) => {
+    const m = String(Math.floor(seconds / 60)).padStart(2, '0');
+    const s = String(seconds % 60).padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
   return (
     <div
       className={`relative rounded-xl overflow-hidden border border-white/20 shadow-lg hover:scale-105 transition-all duration-300
@@ -105,25 +108,18 @@ useEffect(() => {
         backgroundPosition: 'center',
       }}
     >
-      {/* Dark overlay */}
       <div className="absolute inset-0 bg-black/50" />
 
-      {/* Content */}
       <div className="relative p-6 flex flex-col justify-between h-full">
         <div className="flex items-center justify-between mb-4 space-x-3">
-          {/* Room Name */}
           <h3 className="text-white font-bold text-xl flex items-center space-x-2">
             <span>{room.name}</span>
-
-            {/* Bet Amount Badge */}
             {!room.isDemoRoom && (
               <span className="bg-yellow-400 text-black font-bold px-3 py-1 rounded-full shadow-lg animate-pulse">
                 {Number(room.betAmount ?? 0).toFixed(2)} {t('etb')}
               </span>
             )}
           </h3>
-
-          {/* Demo Room Badge */}
           {room.isDemoRoom && (
             <span className="bg-green-500 text-white text-xs px-2 py-1 rounded-full shadow-md">
               {t('free_play')}
@@ -143,24 +139,21 @@ useEffect(() => {
           </div>
 
           <div className="flex items-center justify-between" id="gamestatus">
-  <span className="text-white/80">{t("status")}:</span>
-  <span
-    className={`font-medium ${
-      room.gameStatus === "playing"
-        ? "bg-red-400 text-black font-bold px-3 py-1 rounded-full shadow-lg animate-pulse "
-        : getStatusColor(room.gameStatus)
-    }`}
-  >
-    {t(room.gameStatus)}
-    {room.gameStatus === "countdown" && timeLeft > 0 && (
-      <span className="ml-2 bg-red-400">{formatTime(timeLeft)}</span>
-    )}
-  </span>
-</div>
+            <span className="text-white/80">{t('status')}:</span>
+            <span
+              className={`font-medium ${
+                room.gameStatus === 'playing'
+                  ? 'bg-red-400 text-black font-bold px-3 py-1 rounded-full shadow-lg animate-pulse'
+                  : getStatusColor(room.gameStatus)
+              }`}
+            >
+              {t(room.gameStatus)}
+              {room.gameStatus === 'countdown' && timeLeft > 0 && (
+                <span className="ml-2 bg-red-400 px-2 py-1 rounded">{formatTime(timeLeft)}</span>
+              )}
+            </span>
+          </div>
 
-
-
-          {/* ✅ Payout Display */}
           {!room.isDemoRoom && (
             <div className="flex items-center justify-between">
               <span className="text-white/80">{t('payout')}:</span>
@@ -183,7 +176,6 @@ useEffect(() => {
         </button>
       </div>
 
-      {/* ✅ Tailwind Keyframes for green blinking */}
       <style>
         {`
           @keyframes green-blink {

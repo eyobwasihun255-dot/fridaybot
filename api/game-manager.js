@@ -726,7 +726,7 @@ async setCardAutoState(roomId, cardId, options = {}) {
               }
             }
             if (winningPattern) {
-              this.checkBingo(roomId, cardId, card.claimedBy, winningPattern);
+              this.checkBingo(roomId, card.claimedBy, winningPattern);
               break;
             }
           }

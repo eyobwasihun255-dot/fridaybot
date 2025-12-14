@@ -561,7 +561,8 @@ const { drawnNumbers, winners } =
   await this.generateDrawnNumbersMultiWinner(roomId, cards);
 
   console.log(drawnNumbers)
-  console.log(claimedCards)
+  console.log(cards)
+  console.log(winners)
     const gameState = {
       id: gameId,
       roomId,

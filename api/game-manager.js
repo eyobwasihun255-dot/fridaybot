@@ -547,11 +547,7 @@ async setCardAutoState(roomId, cardId, options = {}) {
     const roomConfig = await this.getRoomConfig(roomId);
     const players = await this.getRoomPlayersrdtbs(roomId);
     const playerCount = Object.keys(claimedCards).length;
-
-// ONLY cards that are claimed
-const cards = Object.values(roomConfig.bingoCards)
-  .filter(c => c.claimed && c.claimedBy);
-
+    
     if (playerCount < 2) {
       await this.setRoomState(roomId, { gameStatus: "waiting" });
       return;
@@ -559,6 +555,7 @@ const cards = Object.values(roomConfig.bingoCards)
   
     const gameId = `game_${Date.now()}`
     const totalPayout = rooms.betAmount * playerCount;
+    const cards = Object.values(claimedCards);
 
 const { drawnNumbers, winners } =
   await this.generateDrawnNumbersMultiWinner(roomId, cards);

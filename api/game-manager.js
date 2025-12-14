@@ -555,11 +555,36 @@ async setCardAutoState(roomId, cardId, options = {}) {
   
     const gameId = `game_${Date.now()}`
     const totalPayout = rooms.betAmount * playerCount;
-    const cards = Object.values(claimedCards);
+    // 1. Fetch the authoritative Room Data from RTDB
+   
 
-const { drawnNumbers, winners } =
-  await this.generateDrawnNumbersMultiWinner(roomId, cards);
+    if (!roomConfig || !roomConfig.bingoCards) {
+      console.error(`❌ Critical: No bingoCards found in RTDB for room ${roomId}`);
+      return; // Handle error appropriately
+    }
 
+    // 2. Map 'claimedCards' to the actual RTDB data
+    // We iterate over the keys of claimedCards (which are the Card IDs)
+    const fullGameCards = Object.keys(claimedCards).map(cardId => {
+      const masterCard = roomData.bingoCards[cardId]; // Get numbers from RTDB
+      const claimInfo = claimedCards[cardId];         // Get owner info from local state
+
+      // If the card exists in RTDB, merge the data
+      if (masterCard) {
+        return {
+          ...masterCard,          // spreads: numbers, serialNumber, id
+          ...claimInfo,           // spreads: claimedBy, userId, etc.
+          id: cardId              // Ensures ID matches the key
+        };
+      } else {
+        console.warn(`⚠️ Card ${cardId} claimed but not found in RTDB config.`);
+        return null;
+      }
+    }).filter(card => card !== null); // Remove any nulls
+
+    // 3. Now pass the merged, full-data cards to your generator
+    const { drawnNumbers, winners } = 
+      await this.generateDrawnNumbersMultiWinner(roomId, fullGameCards);
   console.log(drawnNumbers)
   console.log(cards)
   console.log(winners)

@@ -918,7 +918,7 @@ if (Date.now() - start >= 3000) {
     const cardEntry = Object.values(claimedCards).find(
       c => String(c.claimedBy) === String(userId)
     );
-    
+    console.log(cardEntry)
     if (!cardEntry) {
       return { success: false, message: "No claimed card found for user" };
     }

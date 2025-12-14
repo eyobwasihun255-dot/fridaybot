@@ -555,10 +555,13 @@ async setCardAutoState(roomId, cardId, options = {}) {
   
     const gameId = `game_${Date.now()}`
     const totalPayout = rooms.betAmount * playerCount;
-    
-  const cards = Object.values(claimedCards); // Convert claimedCards map/object to array
-  const { drawnNumbers } = await this.generateDrawnNumbersMultiWinner(roomId, claimedCards);
+    const cards = Object.values(claimedCards);
+
+const { drawnNumbers, winners } =
+  await this.generateDrawnNumbersMultiWinner(roomId, cards);
+
   console.log(drawnNumbers)
+  console.log(claimedCards)
     const gameState = {
       id: gameId,
       roomId,
@@ -578,6 +581,7 @@ async setCardAutoState(roomId, cardId, options = {}) {
       gameStatus: "playing",
       currentGameId: gameId,
       calledNumbers: [],
+      winners,
     });
   
     if (this.io) {

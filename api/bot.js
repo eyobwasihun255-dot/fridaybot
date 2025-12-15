@@ -1830,7 +1830,6 @@ if (pending?.type === "awaiting_room_reset_confirm") {
       JSON.stringify({
         gameStatus: "waiting",
         claimedCards: {},
-        players: {}
       })
     );
     

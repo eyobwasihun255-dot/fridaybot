@@ -79,7 +79,8 @@ class GameManager {
   async setRoomState(roomId, patch) {
     try {
       const current = (await this.getRoomState(roomId)) || {};
-      const next = { ...current, ...patch };
+      const next = { ...current, ...patch, stateUpdatedAt: Date.now() };
+
       await redis.set(`room:${roomId}`, JSON.stringify(next));
        // 1 hour
     } catch (e) {
@@ -249,7 +250,64 @@ async setCardAutoState(roomId, cardId, options = {}) {
     }
   }
 
-
+  async refundRoomBets(roomId) {
+    const claimedCards = await this.getClaimedCards(roomId);
+    if (!claimedCards || Object.keys(claimedCards).length === 0) return;
+  
+    const adjustments = {};
+  
+    for (const card of Object.values(claimedCards)) {
+      if (!card?.claimedBy || !card.betAmount) continue;
+  
+      adjustments[card.claimedBy] =
+        (adjustments[card.claimedBy] || 0) + card.betAmount;
+    }
+  
+    if (Object.keys(adjustments).length > 0) {
+      await this.applyBalanceAdjustments(adjustments);
+      console.log(`💸 Refunded bets for room ${roomId}`);
+    }
+  }
+  async forceStopRoom(roomId, reason = "stuck") {
+    console.warn(`⏱️ Force stopping room ${roomId}: ${reason}`);
+  
+    // Stop timers
+    this.stopNumberDrawing(roomId);
+  
+    if (this.countdownTimers.has(roomId)) {
+      clearTimeout(this.countdownTimers.get(roomId));
+      this.countdownTimers.delete(roomId);
+    }
+  
+    const roomState = await this.getRoomState(roomId);
+  
+    // 💸 REFUND ONLY IF PLAYING
+    if (roomState?.gameStatus === "playing") {
+      await this.refundRoomBets(roomId);
+    }
+  
+    // Reset room completely
+    await this.setRoomState(roomId, {
+      gameStatus: "waiting",
+      currentGameId: null,
+      calledNumbers: [],
+      winners: null,
+      payout: null,
+      payed: false,
+      countdownEndAt: null,
+    });
+  
+    // Remove claimed cards
+    await this.setClaimedCards(roomId, {});
+  
+    if (this.io) {
+      this.io.to(roomId).emit("roomForceReset", {
+        roomId,
+        reason,
+      });
+    }
+  }
+  
   async placeBet(roomId, cardId, user) {
     try {
       await this.ensureRoomExists(roomId);

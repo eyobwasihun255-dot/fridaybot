@@ -226,6 +226,42 @@ const server = createSocketServer(app);
 let roomCache = new Map();
 let lastCacheUpdate = 0;
 const CACHE_TTL = 5000; // 5 seconds cache
+const STUCK_LIMITS = {
+  playing: 7 * 60 * 1000,    // 7 minutes
+  countdown: 1 * 60 * 1000,  // 1 minute
+  ended: 1 * 60 * 1000       // 1 minute
+};
+
+const stuckRoomWatchdog = async () => {
+  try {
+    const roomsSnap = await get(ref(rtdb, "rooms"));
+    const rooms = roomsSnap.val() || {};
+
+    for (const roomId of Object.keys(rooms)) {
+      const state = await gameManager.getRoomState(roomId);
+      if (!state?.gameStatus || !state.stateUpdatedAt) continue;
+
+      const limit = STUCK_LIMITS[state.gameStatus];
+      if (!limit) continue; // waiting or unknown states
+
+      const age = Date.now() - state.stateUpdatedAt;
+
+      if (age > limit) {
+        console.error(
+          `🚨 STUCK ROOM DETECTED ${roomId} | ${state.gameStatus} | ${Math.floor(age / 1000)}s`
+        );
+
+        await gameManager.forceStopRoom(roomId, "stuck_state_timeout");
+      }
+    }
+  } catch (err) {
+    console.error("❌ stuckRoomWatchdog error:", err);
+  }
+};
+
+// 🔁 run every minute
+setInterval(stuckRoomWatchdog, 60 * 1000);
+
 
 const autoCountdownCheck = async () => {
   try {

@@ -55,6 +55,7 @@
     nextGameCountdownEndAt?: number;
     bingoCards?: Record<string, any>;
     claimedCards: Record<string, ClaimedCard>;
+    startedAt: number;
 
   /** (Legacy – optional, can be removed later) */
   players?: Record<

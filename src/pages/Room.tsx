@@ -96,7 +96,11 @@ const Room: React.FC = () => {
     const pool = (storeDisplayedCalledNumbers && (storeDisplayedCalledNumbers as any)[currentRoom.id]) || [];
     return Array.isArray(pool) ? pool : [];
   }, [storeDisplayedCalledNumbers, currentRoom?.id]);
-
+  const markStorageKey = useMemo(() => {
+    if (!currentRoom?.id || !displayedCard?.id) return null;
+    return `bingo_marks_${currentRoom.id}_${displayedCard.id}`;
+  }, [currentRoom?.id, displayedCard?.id]);
+  
   // UI local state
   const [cardPage, setCardPage] = useState(0);
   const [hasBet, setHasBet] = useState(false);
@@ -214,13 +218,40 @@ useEffect(() => {
 
   // ---- reset marks when game starts playing ----
   useEffect(() => {
-    if (currentRoom?.gameStatus === 'playing') {
-      setMarkedNumbers([]);
-      setHasAttemptedBingo(false);
-      setIsDisqualified(false);
+    if (!markStorageKey) return;
+  
+    const saved = localStorage.getItem(markStorageKey);
+    if (saved) {
+      try {
+        setMarkedNumbers(JSON.parse(saved));
+      } catch {
+        setMarkedNumbers([]);
+      }
     }
-  }, [currentRoom?.gameStatus]);
+  }, [markStorageKey]);
+  
+  const lastGameStartRef = React.useRef<number | null>(null);
 
+useEffect(() => {
+  if (currentRoom?.gameStatus !== 'playing') return;
+
+  // detect NEW game by countdownEndAt or startedAt
+  const gameStartTime = currentRoom.startedAt || currentRoom.countdownEndAt;
+
+  if (lastGameStartRef.current !== gameStartTime) {
+    lastGameStartRef.current = gameStartTime;
+
+    setMarkedNumbers([]);
+    setHasAttemptedBingo(false);
+    setIsDisqualified(false);
+
+    if (markStorageKey) {
+      localStorage.removeItem(markStorageKey);
+    }
+  }
+}, [currentRoom?.gameStatus, currentRoom?.startedAt, currentRoom?.countdownEndAt, markStorageKey]);
+
+  
   // ---- sync bet state with user balance/room info (single effect) ----
   useEffect(() => {
     if (!currentRoom || !user) return;
@@ -254,8 +285,19 @@ useEffect(() => {
 
   // ---- helpers / callbacks (memoized) ----
   const handleNumberClick = useCallback((num: number) => {
-    setMarkedNumbers((prev) => (prev.includes(num) ? prev.filter((n) => n !== num) : [...prev, num]));
-  }, []);
+    setMarkedNumbers((prev) => {
+      const next = prev.includes(num)
+        ? prev.filter((n) => n !== num)
+        : [...prev, num];
+  
+      if (markStorageKey) {
+        localStorage.setItem(markStorageKey, JSON.stringify(next));
+      }
+  
+      return next;
+    });
+  }, [markStorageKey]);
+  
 
   const handlePlaceBet = useCallback(async () => {
     if (!displayedCard || !currentRoom) return;

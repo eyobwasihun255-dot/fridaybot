@@ -699,13 +699,7 @@ async setCardAutoState(roomId, cardId, options = {}) {
   }
   // Start number drawing process
   startNumberDrawing(roomId, gameId, rooms ,roomData) {
-    if (this.numberDrawIntervals.has(roomId)) {
-
-      if (rooms.gameStatus !== "playing" ) {
-        this.stopNumberDrawing(roomId);
-        return;
-      }
-    }
+    
     const drawInterval = setInterval(() => {
         setImmediate(async () => {
       try {

@@ -733,11 +733,11 @@ async setCardAutoState(roomId, cardId, options = {}) {
         }
 
         if (currentNumberIndex >= drawnNumbers.length) {
-          // All numbers drawn, end game
-          this.stopGame(roomId, "allNumbersDrawn");
+          this.stopNumberDrawing(roomId);
+          await this.stopGame(roomId, "allNumbersDrawn");
           return;
         }
-
+        
         const currentNumber = drawnNumbers[currentNumberIndex];
         const newDrawnNumbers = drawnNumbers.slice(0, currentNumberIndex + 1);
 
@@ -806,10 +806,16 @@ async setCardAutoState(roomId, cardId, options = {}) {
   async stopGame(roomId, reason = "manual") {
     try {
       // 🛑 Stop number drawing
+      const roomState = await this.getRoomState(roomId);
+
+  // 🚫 Prevent double stop
+  if (roomState?.gameStatus === "ended") {
+    return;
+  }
       this.stopNumberDrawing(roomId);
     
       // 💰 Finalize payouts / revenue
-      await this.finalizeGame(roomId, reason);
+      
   
       // 🔚 Mark game ended
       await this.setRoomState(roomId, {
@@ -817,7 +823,7 @@ async setCardAutoState(roomId, cardId, options = {}) {
         countdownEndAt: null,
         countdownStartedBy: null,
       });
-  
+      await this.finalizeGame(roomId, reason);
       if (this.io) {
         this.io.to(roomId).emit("gameEnded", {
           roomId,
@@ -860,7 +866,7 @@ async setCardAutoState(roomId, cardId, options = {}) {
     if (alreadyPaid) return;
   
     // 🎯 No winner case
-    if (reason === "allNumbersDrawn" && (!gameData.winners || gameData.winners.length === 0)) {
+    if (reason === "allNumbersDrawn" ) {
       const revenue = Math.floor((gameData.totalPayout || 0) * 1.25);
   
       

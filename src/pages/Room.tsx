@@ -230,27 +230,27 @@ useEffect(() => {
     }
   }, [markStorageKey]);
   
-  const lastGameStartRef = React.useRef<number | null>(null);
+  
+  const lastEndedRef = React.useRef<string | null>(null);
 
-useEffect(() => {
-  if (currentRoom?.gameStatus !== 'playing') return;
-
-  // detect NEW game by countdownEndAt or startedAt
-  const gameStartTime = currentRoom.startedAt || currentRoom.countdownEndAt;
-
-  if (lastGameStartRef.current !== gameStartTime) {
-    lastGameStartRef.current = gameStartTime;
-
+  useEffect(() => {
+    if (currentRoom?.gameStatus !== 'ended') return;
+  
+    const endKey = currentRoom.endedAt || String(Date.now());
+  
+    if (lastEndedRef.current === endKey) return;
+    lastEndedRef.current = endKey;
+  
+    // FULL RESET
     setMarkedNumbers([]);
     setHasAttemptedBingo(false);
     setIsDisqualified(false);
-
+  
     if (markStorageKey) {
       localStorage.removeItem(markStorageKey);
     }
-  }
-}, [currentRoom?.gameStatus, currentRoom?.startedAt, currentRoom?.countdownEndAt, markStorageKey]);
-
+  }, [currentRoom?.gameStatus, currentRoom?.endedAt, markStorageKey]);
+  
   
   // ---- sync bet state with user balance/room info (single effect) ----
   useEffect(() => {

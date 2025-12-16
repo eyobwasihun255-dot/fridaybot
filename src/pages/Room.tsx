@@ -231,7 +231,8 @@ useEffect(() => {
   }, [markStorageKey]);
   
   
-  const lastEndedRef = React.useRef<string | null>(null);
+  const lastEndedRef = React.useRef<string | number | null>(null);
+
 
   useEffect(() => {
     if (currentRoom?.gameStatus !== 'ended') return;

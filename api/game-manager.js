@@ -993,7 +993,8 @@ if (Date.now() - start >= 3000) {
     if (cardEntry.attemptedBingo) {
       return { success: false, message: "Bingo already attempted" };
     }
-
+    claimedCards[cardId].attemptedBingo = true;
+    await this.setClaimedCards(roomId, claimedCards);
     // 🧠 Validate bingo pattern BEFORE mutating state
     const isValid = this.validateBingoPattern(
       cardId,
@@ -1004,8 +1005,6 @@ if (Date.now() - start >= 3000) {
 
     // ❌ Invalid bingo → mark attempted, allow game to continue
     if (!isValid) {
-      claimedCards[cardId].attemptedBingo = true;
-      await this.setClaimedCards(roomId, claimedCards);
 
       return { success: false, message: "Invalid bingo pattern" };
     }

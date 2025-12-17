@@ -797,7 +797,7 @@ async setCardAutoState(roomId, cardId, options = {}) {
     this.numberDrawIntervals.set(roomId, drawInterval);
   }
 
-  async stopGame(roomId, reason = "manual") {
+  async stopGame(roomId, reason = "manual") { 
     try {
       // 🛑 Stop number drawing
       const roomState = await this.getRoomState(roomId);
@@ -860,19 +860,24 @@ async setCardAutoState(roomId, cardId, options = {}) {
     if (alreadyPaid) return;
   
     // 🎯 No winner case
-    if (reason === "allNumbersDrawn" ) {
-      const revenue = Math.floor((gameData.totalPayout || 0) * 1.25);
-  
-      
-  
-      await this.setRoomState(roomId, {
-        winner: null,
-        payout: gameData.totalPayout || 0,
-        payed: true,
-      });
-  
-      return;
-    }
+    // 🎯 NO WINNER → HOUSE TAKES ALL
+if (reason === "allNumbersDrawn") {
+  const total = gameData.totalPayout || 0;
+
+  // ✅ Save 100% to revenue
+  await this.saveRevenueEntry(gameId, roomId, total);
+
+  await this.setRoomState(roomId, {
+    winner: null,
+    winners: [],
+    payout: 0,
+    payed: true,
+  });
+
+  console.log(`🏦 No winner in room ${roomId} — revenue=${total}`);
+  return;
+}
+
   
     // 🏆 Winners exist
     if (gameData.winners && gameData.winners.length > 0) {

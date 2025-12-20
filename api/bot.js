@@ -732,11 +732,12 @@ if (pending?.type === "awaiting_adddemo_count") {
         1
       )[0];
 
-    // ✅ ALWAYS < 1 HOUR
+    // ⏱ ALWAYS < 1 HOUR
     const minutes = Math.floor(Math.random() * 59) + 1;
     const demoAt = Date.now() + minutes * 60 * 1000;
 
-    await gameManager.placeBet(
+    // 1️⃣ Place demo bet
+    const betResult = await gameManager.placeBet(
       roomId,
       cardId,
       {
@@ -748,6 +749,14 @@ if (pending?.type === "awaiting_adddemo_count") {
         demoAt,
       }
     );
+
+    if (!betResult?.success) continue;
+
+    // 2️⃣ Enable AUTO for demo card
+    await gameManager.setCardAutoState(roomId, cardId, {
+      auto: true,
+      autoUntil: demoAt, // auto expires with demo
+    });
   }
 
   sendMessage(chatId, "🧪 Demo players added successfully.");

@@ -1266,125 +1266,68 @@ if (Date.now() - start >= 3000) {
         return { drawnNumbers: [], winners: [] };
       }
   
-      const validCards = cards.filter(c => c && Array.isArray(c.numbers) && c.claimedBy);
-      if (validCards.length === 0) {
-        console.warn(`⚠️ No valid cards for room ${roomId}`);
+      // Only include claimed cards with valid numbers and real players
+      const validCards = cards.filter(
+        c => c && Array.isArray(c.numbers) && c.claimedBy && !c.claimedBy.startsWith("demo")
+      );
+  
+      if (validCards.length < 2) {
+        console.warn(`⚠️ Not enough real players for room ${roomId}`);
         return { drawnNumbers: [], winners: [] };
       }
   
-      // --- Load recent cooldown memory ---
-      if (!this.recentWinnersByRoom) this.recentWinnersByRoom = new Map();
-      if (!this.recentWinnersByRoom.has(roomId)) this.recentWinnersByRoom.set(roomId, []);
-  
-      const recentWinners = this.recentWinnersByRoom.get(roomId);
       const playerIds = [...new Set(validCards.map(c => c.claimedBy))];
       const playerCount = playerIds.length;
+  
+      // --- Setup cooldown system ---
+      if (!this.recentWinnersByRoom) this.recentWinnersByRoom = new Map();
+      if (!this.recentWinnersByRoom.has(roomId)) this.recentWinnersByRoom.set(roomId, []);
+      const recentWinners = this.recentWinnersByRoom.get(roomId);
+  
       const cooldown = Math.max(1, Math.floor(playerCount / 2));
   
-      // --- Decide number of winners ---
+      // --- Decide number of winners per game ---
       let desiredWinners = 1;
-      if (playerCount > 150) {
-        desiredWinners = Math.random() < 0.4 ? 3 : 2;
-      } else if (playerCount > 80) {
-        desiredWinners = Math.random() < 0.5 ? 2 : 1;
-      }
+      if (playerCount > 150) desiredWinners = Math.random() < 0.4 ? 3 : 2;
+      else if (playerCount > 80) desiredWinners = Math.random() < 0.5 ? 2 : 1;
   
-      // --- Count demo vs normal players ---
-      const demoCards = validCards.filter(c => c.claimedBy.startsWith("demo"));
-      const normalCards = validCards.filter(c => !c.claimedBy.startsWith("demo"));
+      // --- Filter eligible cards (respect cooldown) ---
+      let eligibleCards = validCards.filter(c => !recentWinners.includes(c.claimedBy));
   
-      const demoCount = demoCards.length;
-      const normalCount = normalCards.length;
-  
-      // --- Get players' gamesPlayed from DB ---
-      const playersData = await this.getRoomPlayersrdtbs(roomId);
-
-      // Expected structure: playersData[userId].gamesPlayed
-  
-      // --- Build list restricted by 5-game rule ---
-      let fiveGameEligibleCards;
-  
-      if (demoCount > normalCount) {
-        console.log("🟡 Demo players > Normal players → enforcing 5-game minimum rule");
-  
-        fiveGameEligibleCards = validCards.filter(card => {
-          const userId = card.claimedBy;
-  
-          if (userId.startsWith("demo")) return true;
-  
-          const gamesPlayed = playersData[userId]?.gamesPlayed || 0;
-          return gamesPlayed >= 5;
-        });
-      } else {
-        fiveGameEligibleCards = [...validCards]; // no restriction
-      }
-  
-      // fallback: if all are removed (rare), allow all validCards
-      if (fiveGameEligibleCards.length === 0) {
-        console.log("⚠️ All players blocked by rules — fallback to validCards");
-        fiveGameEligibleCards = [...validCards];
-      }
-  
-      // --- Start picking winners ---
-      let eligibleCards = fiveGameEligibleCards.filter(c => !recentWinners.includes(c.claimedBy));
-      if (eligibleCards.length === 0) {
-        eligibleCards = fiveGameEligibleCards.filter(c => !recentWinners.includes(c.claimedBy));
-      }
+      // Fallback if all players are in cooldown
+      if (eligibleCards.length === 0) eligibleCards = [...validCards];
   
       const winnerCards = [];
       const winnerPlayers = new Set();
   
-      // -----------------------------
-      // Winner selection logic
-      // -----------------------------
+      // --- Winner selection ---
       const pickWinnerCard = () => {
-        // PRIMARY: eligible and unique
         let pool = eligibleCards.filter(c => !winnerPlayers.has(c.claimedBy));
-  
-        // SECOND: restricted fallback
-        if (pool.length === 0) {
-          pool = fiveGameEligibleCards.filter(c => !winnerPlayers.has(c.claimedBy));
-        }
-  
-        // FINAL: any allowed restricted card
-        if (pool.length === 0) {
-          pool = [...fiveGameEligibleCards];
-        }
-  
+        if (pool.length === 0) pool = validCards.filter(c => !winnerPlayers.has(c.claimedBy));
+        if (pool.length === 0) pool = [...validCards];
         if (pool.length === 0) return null;
         return pool[Math.floor(Math.random() * pool.length)];
       };
   
-      // Pick winner cards
       while (winnerCards.length < desiredWinners) {
         const next = pickWinnerCard();
         if (!next) break;
-  
         winnerCards.push(next);
         winnerPlayers.add(next.claimedBy);
-  
         eligibleCards = eligibleCards.filter(c => c.id !== next.id);
       }
   
-      // Absolute final fallback (never allow zero winners)
-      if (winnerCards.length === 0 && fiveGameEligibleCards.length > 0) {
-        const fallback = fiveGameEligibleCards[Math.floor(Math.random() * fiveGameEligibleCards.length)];
+      // Ensure at least one winner
+      if (winnerCards.length === 0) {
+        const fallback = validCards[Math.floor(Math.random() * validCards.length)];
         winnerCards.push(fallback);
         winnerPlayers.add(fallback.claimedBy);
       }
   
-      if (winnerCards.length === 0) {
-        console.error(`❌ Failed to select any winner for room ${roomId}`);
-        return { drawnNumbers: [], winners: [] };
-      }
-  
-      // ----------------------------
-      // Inject winning numbers
-      // ----------------------------
+      // --- Inject winning numbers for winner cards ---
       for (const winnerCard of winnerCards) {
         const winnerPatterns = this.pickPatternNumbers(winnerCard) || [];
         const winnerPattern = winnerPatterns[Math.floor(Math.random() * winnerPatterns.length)] || [];
-  
         for (const n of winnerPattern) {
           if (n > 0 && n <= 75 && !usedNumbers.has(n)) {
             usedNumbers.add(n);
@@ -1393,9 +1336,7 @@ if (Date.now() - start >= 3000) {
         }
       }
   
-      // ----------------------------
-      // Losers: one missing number
-      // ----------------------------
+      // --- Fill remaining numbers with loser cards (1 missing per pattern) ---
       const loserMissingNumbers = [];
       for (const card of validCards) {
         if (winnerCards.some(wc => wc.id === card.id)) continue;
@@ -1452,7 +1393,7 @@ if (Date.now() - start >= 3000) {
   
       const finalDrawn = [...first25, ...this.shuffleArray(after25)];
   
-      // --- Save updated cooldown history ---
+      // --- Update cooldown history ---
       const updated = [...recentWinners, ...winnerCards.map(w => w.claimedBy)];
       if (updated.length > cooldown) updated.splice(0, updated.length - cooldown);
       this.recentWinnersByRoom.set(roomId, updated);
@@ -1463,8 +1404,6 @@ if (Date.now() - start >= 3000) {
   
       winners.push(...winnerCards.map(w => w.claimedBy));
       return { drawnNumbers: finalDrawn, winners };
-      
-  
     } catch (err) {
       console.error(`❌ Error in generateDrawnNumbersMultiWinner for ${roomId}:`, err);
       return { drawnNumbers: [], winners: [] };

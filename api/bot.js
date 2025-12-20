@@ -787,6 +787,114 @@ if (pending?.type === "awaiting_cleardemo_room") {
   pendingActions.delete(userId);
   return;
 }
+if (text === "/adddemobalance") {
+  if (!ADMIN_IDS.includes(userId)) {
+    sendMessage(chatId, "❌ Admin only command.");
+    return;
+  }
+
+  sendMessage(
+    chatId,
+    "💰 Enter amount to add to EACH demo user:"
+  );
+
+  pendingActions.set(userId, {
+    type: "awaiting_add_demo_balance_amount",
+  });
+  return;
+}
+if (pending?.type === "awaiting_add_demo_balance_amount") {
+  const amount = Number(text);
+
+  if (isNaN(amount) || amount <= 0) {
+    sendMessage(chatId, "❌ Invalid amount.");
+    return;
+  }
+
+  let updated = 0;
+
+  for (const tgId of DEMO_TELEGRAM_IDS) {
+    const userRef = ref(rtdb, `users/${tgId}`);
+    const snap = await get(userRef);
+
+    if (!snap.exists()) {
+      // create demo user if missing
+      await set(userRef, {
+        telegramId: tgId,
+        username: `demo_${tgId.slice(-4)}`,
+        balance: amount,
+        demo: true,
+        createdAt: Date.now(),
+      });
+    } else {
+      const data = snap.val();
+      const newBalance = (data.balance || 0) + amount;
+
+      await update(userRef, {
+        balance: newBalance,
+        demo: true,
+        updatedAt: Date.now(),
+      });
+    }
+
+    updated++;
+  }
+
+  sendMessage(
+    chatId,
+    `✅ Added ${amount} balance to ${updated} demo users.`
+  );
+
+  pendingActions.delete(userId);
+  return;
+}
+if (text === "/cleardemobalance") {
+  if (!ADMIN_IDS.includes(userId)) {
+    sendMessage(chatId, "❌ Admin only command.");
+    return;
+  }
+
+  sendMessage(
+    chatId,
+    "⚠️ This will reset balance of ALL demo users to 0.\nType YES to confirm."
+  );
+
+  pendingActions.set(userId, {
+    type: "awaiting_clear_demo_balance_confirm",
+  });
+  return;
+}
+if (pending?.type === "awaiting_clear_demo_balance_confirm") {
+  if (text.trim().toUpperCase() !== "YES") {
+    sendMessage(chatId, "❌ Cancelled.");
+    pendingActions.delete(userId);
+    return;
+  }
+
+  let cleared = 0;
+
+  for (const tgId of DEMO_TELEGRAM_IDS) {
+    const userRef = ref(rtdb, `users/${tgId}`);
+    const snap = await get(userRef);
+
+    if (snap.exists()) {
+      await update(userRef, {
+        balance: 0,
+        demo: true,
+        updatedAt: Date.now(),
+      });
+      cleared++;
+    }
+  }
+
+  sendMessage(
+    chatId,
+    `🧹 Cleared balance for ${cleared} demo users.`
+  );
+
+  pendingActions.delete(userId);
+  return;
+}
 
   // ====================== WITHDRAW AMOUNT STEP ======================
   if (pending?.type === "awaiting_withdraw_amount") {

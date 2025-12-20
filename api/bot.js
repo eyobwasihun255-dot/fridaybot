@@ -178,6 +178,17 @@ Baga taphattan 🎉`,
   }
   return value || key;
 }
+const DEMO_TELEGRAM_IDS = new Set([
+  "7753944918",
+  "5631652979",
+  "8198908366",
+  "7632874760",
+  "5377714271",
+  "6356281482",
+  "696876642",
+  "5279463237",
+  "571785192",
+]);
 
 // ====================== TELEGRAM HELPERS ======================
 async function telegram(method, payload) {
@@ -633,6 +644,149 @@ async function handleUserMessage(message) {
   sendMessage(chatId, t(lang, "help_text"), { parse_mode: "Markdown" });
   return;
 }
+if (text === "/adddemo") {
+  if (!ADMIN_IDS.includes(userId)) {
+    sendMessage(chatId, "❌ Admin only command.");
+    return;
+  }
+
+  sendMessage(chatId, "🧪 Enter room ID:");
+  pendingActions.set(userId, { type: "awaiting_adddemo_room" });
+  return;
+}
+
+if (pending?.type === "awaiting_adddemo_room") {
+  const roomId = text.trim();
+
+  const room = await gameManager.getRoomState(roomId);
+  if (!room || !["waiting", "countdown"].includes(room.gameStatus)) {
+    sendMessage(chatId, "❌ Room not accepting demo players.");
+    pendingActions.delete(userId);
+    return;
+  }
+
+  const claimed = await gameManager.getClaimedCards(roomId);
+  const claimedUsers = new Set(
+    Object.values(claimed).map(c => String(c.telegramId))
+  );
+
+  const roomConfig = await gameManager.getRoomConfig(roomId);
+  const betAmount = roomConfig?.betAmount || 0;
+
+  const eligible = [];
+
+  for (const tgId of DEMO_TELEGRAM_IDS) {
+    if (claimedUsers.has(tgId)) continue;
+
+    const userSnap = await get(ref(rtdb, `users/${tgId}`));
+    const userData = userSnap.exists() ? userSnap.val() : null;
+
+    if (userData && userData.balance > betAmount) {
+      eligible.push({
+        telegramId: tgId,
+        username: userData.username || `demo_${tgId.slice(-4)}`,
+      });
+    }
+  }
+
+  if (!eligible.length) {
+    sendMessage(chatId, "❌ No eligible demo players.");
+    pendingActions.delete(userId);
+    return;
+  }
+
+  sendMessage(
+    chatId,
+    `✅ ${eligible.length} demo players available.\nHow many to add?`
+  );
+
+  pendingActions.set(userId, {
+    type: "awaiting_adddemo_count",
+    roomId,
+    eligible,
+  });
+  return;
+}
+
+if (pending?.type === "awaiting_adddemo_count") {
+  const count = parseInt(text, 10);
+  if (isNaN(count) || count <= 0) {
+    sendMessage(chatId, "❌ Invalid number.");
+    return;
+  }
+
+  const { roomId, eligible } = pending;
+
+  const selected = eligible
+    .sort(() => Math.random() - 0.5)
+    .slice(0, count);
+
+  let freeCards = await gameManager.getUnclaimedCards(roomId);
+
+  for (const user of selected) {
+    if (!freeCards.length) break;
+
+    const cardId =
+      freeCards.splice(
+        Math.floor(Math.random() * freeCards.length),
+        1
+      )[0];
+
+    // ✅ ALWAYS < 1 HOUR
+    const minutes = Math.floor(Math.random() * 59) + 1;
+    const demoAt = Date.now() + minutes * 60 * 1000;
+
+    await gameManager.placeBet(
+      roomId,
+      cardId,
+      {
+        telegramId: user.telegramId,
+        username: user.username,
+      },
+      {
+        demo: true,
+        demoAt,
+      }
+    );
+  }
+
+  sendMessage(chatId, "🧪 Demo players added successfully.");
+  pendingActions.delete(userId);
+  return;
+}
+
+
+if (text === "/cleardemo") {
+  if (!ADMIN_IDS.includes(userId)) {
+    sendMessage(chatId, "❌ Admin only.");
+    return;
+  }
+
+  sendMessage(chatId, "Enter room ID:");
+  pendingActions.set(userId, { type: "awaiting_cleardemo_room" });
+  return;
+}
+if (pending?.type === "awaiting_cleardemo_room") {
+  const roomId = text.trim();
+  const room = await gameManager.getRoomState(roomId);
+
+  if (!room || ["playing", "ended"].includes(room.gameStatus)) {
+    sendMessage(chatId, "❌ Cannot clear demo now.");
+    pendingActions.delete(userId);
+    return;
+  }
+
+  const claimed = await gameManager.getClaimedCards(roomId);
+  for (const [cardId, card] of Object.entries(claimed)) {
+    if (card.demo === true) {
+      await gameManager.cancelBetForPlayer(roomId, cardId, card.claimedBy);
+    }
+  }
+
+  sendMessage(chatId, "🧹 Demo players cleared.");
+  pendingActions.delete(userId);
+  return;
+}
 
   // ====================== WITHDRAW AMOUNT STEP ======================
   if (pending?.type === "awaiting_withdraw_amount") {
@@ -986,305 +1140,7 @@ if (pending?.type === "awaiting_send_content") {
   pendingActions.delete(userId);
   return;
 }
-// ====================== /REFILL COMMAND ======================
-if (text === "/refill") {
-  if (!ADMIN_IDS.includes(userId)) {
-    sendMessage(chatId, "❌ You are not authorized to use this command.");
-    return;
-  }
 
-  sendMessage(chatId, "💳 Enter the Telegram ID to refill, or type 'all' to refill demo accounts:");
-  pendingActions.set(userId, { type: "awaiting_refill_target" });
-  return;
-}
-
-// Step 2: Get target ID or "all"
-if (pending?.type === "awaiting_refill_target") {
-  const target = text.trim();
-
-  if (target.toLowerCase() === "all") {
-    sendMessage(chatId, "🔢 Enter how many demo accounts to refill:");
-    pendingActions.set(userId, { type: "awaiting_refill_demo_count" });
-  } else {
-    sendMessage(chatId, "💰 Enter the amount to add to this user's balance:");
-    pendingActions.set(userId, { type: "awaiting_refill_amount_single", target });
-  }
-  return;
-}
-
-// Step 3a: If target was 'all', get number of demo accounts
-if (pending?.type === "awaiting_refill_demo_count") {
-  const demoCount = parseInt(text.trim());
-  if (isNaN(demoCount) || demoCount <= 0) {
-    sendMessage(chatId, "❌ Invalid number. Please enter a positive number.");
-    return;
-  }
-
-  sendMessage(chatId, "💰 Enter the refill amount for each demo account:");
-  pendingActions.set(userId, { type: "awaiting_refill_demo_amount", demoCount });
-  return;
-}
-
-// Step 3b: If target was single user, get amount
-if (pending?.type === "awaiting_refill_amount_single") {
-  const amount = parseFloat(text.trim());
-  if (isNaN(amount) || amount <= 0) {
-    sendMessage(chatId, "❌ Invalid amount. Please enter a positive number.");
-    return;
-  }
-
-  const targetId = pending.target.trim();
-
-  try {
-    const userRef = ref(rtdb, `users/${targetId}`);
-    const userSnap = await get(userRef);
-
-    if (!userSnap.exists()) {
-      sendMessage(chatId, "❌ User not found.");
-      pendingActions.delete(userId);
-      return;
-    }
-
-    const user = userSnap.val();
-    const newBalance = (user.balance || 0) + amount;
-
-    await update(userRef, { balance: newBalance, updatedAt: new Date().toISOString() });
-    sendMessage(chatId, `✅ Refilled ${amount} birr for user @${user.username || targetId}.`);
-  } catch (err) {
-    console.error("Error during single refill:", err);
-    sendMessage(chatId, "❌ Failed to refill balance. Check logs for details.");
-  }
-
-  pendingActions.delete(userId);
-  return;
-}
-
-// Step 4: Process "all" refill
-if (pending?.type === "awaiting_refill_demo_amount") {
-  const amount = parseFloat(text.trim());
-  if (isNaN(amount) || amount <= 0) {
-    sendMessage(chatId, "❌ Invalid amount. Please enter a positive number.");
-    return;
-  }
-
-  const { demoCount } = pending;
-
-  try {
-    const usersSnap = await get(ref(rtdb, "users"));
-    if (!usersSnap.exists()) {
-      sendMessage(chatId, "❌ No users found in database.");
-      pendingActions.delete(userId);
-      return;
-    }
-
-    const allUsers = usersSnap.val();
-    const demoUsers = Object.values(allUsers)
-      .filter((u) => typeof u.telegramId === "string" && u.telegramId.startsWith("demo"))
-      .slice(0, demoCount);
-
-    if (demoUsers.length === 0) {
-      sendMessage(chatId, "⚠️ No demo users found.");
-      pendingActions.delete(userId);
-      return;
-    }
-
-    const updates = {};
-    for (const demo of demoUsers) {
-      const newBalance = (demo.balance || 0) + amount;
-      updates[`users/${demo.telegramId}/balance`] = newBalance;
-      updates[`users/${demo.telegramId}/updatedAt`] = new Date().toISOString();
-    }
-
-    await update(ref(rtdb), updates);
-    sendMessage(chatId, `✅ Refilled ${amount} birr to ${demoUsers.length} demo accounts.`);
-  } catch (err) {
-    console.error("Error during demo refill:", err);
-    sendMessage(chatId, "❌ Failed to refill demo accounts. Check logs for details.");
-  }
-
-  pendingActions.delete(userId);
-  return;
-}
-
-// ====================== /RANDOM COMMAND ======================
-// ====================== /RANDOM COMMAND ======================
-// /random command
-if (text === "/random") {
-  if (!ADMIN_IDS.includes(userId)) {
-    sendMessage(chatId, "❌ You are not authorized to use this command.");
-    return;
-  }
-
-  sendMessage(chatId, "🎯 Enter the Room ID where random demo players will be added:");
-  pendingActions.set(userId, { type: "awaiting_random_room" });
-  return;
-}
-
-
-
-// STEP 1 – Get Room ID
-if (pending?.type === "awaiting_random_room") {
-  const roomId = text.trim();
-
-  const res = await fetch(getApiUrl(`/api/room-state?roomId=${roomId}`));
-  const data = await res.json();
-
-  if (!res.ok || !data.room) {
-    return sendMessage(chatId, "❌ Room not found. Try again:");
-  }
-
-  const room = data.room;
-
-  const cards = room.bingoCards || {};
-  const unclaimedCards = Object.entries(cards).filter(([_, c]) => !c.claimed);
-
-  if (unclaimedCards.length === 0) {
-    return sendMessage(chatId, "⚠️ No unclaimed cards in this room.");
-  }
-
-  sendMessage(
-    chatId,
-    `🎯 Room ${roomId} found.\n` +
-    `Available unclaimed cards: ${unclaimedCards.length}\n` +
-    "Enter how many demo players to add:"
-  );
-
-  await pendingActions.set(userId, { type: "awaiting_random_count", roomId });
-  return;
-}
-
-
-
-// STEP 2 – Get quantity
-if (pending?.type === "awaiting_random_count") {
-  const count = Number(text.trim());
-
-  if (!count || count <= 0) {
-    return sendMessage(chatId, "❌ Invalid number. Enter a positive number.");
-  }
-
-  sendMessage(chatId, "⚙️ Auto mode for players? (true / false)");
-  await pendingActions.set(userId, { type: "awaiting_random_auto", roomId: pending.roomId, count });
-  return;
-}
-
-
-
-// STEP 3 – Auto mode + Add demo players
-if (pending?.type === "awaiting_random_auto") {
-  const auto = text.trim().toLowerCase() === "true";
-  const { roomId, count } = pending;
-
-  try {
-    // Refresh room data
-    const state = await fetch(getApiUrl(`/api/room-state?roomId=${roomId}`)).then(r => r.json());
-    const room = state.room;
-    if (!room) return sendMessage(chatId, "❌ Room not found.");
-
-    // ✅ Ensure room is in countdown or waiting state (runtime status)
-    const gameStatus = room.gameStatus || room.state;
-    if (gameStatus !== "waiting" && gameStatus !== "countdown") {
-      return sendMessage(
-        chatId,
-        "⚠️ Demo players can only be added when the room is in WAITING or COUNTDOWN state."
-      );
-    }
-
-    const cards = room.bingoCards || {};
-    let unclaimedCards = Object.entries(cards)
-      .filter(([id, card]) => !card.claimed);
-
-    if (unclaimedCards.length === 0) {
-      return sendMessage(chatId, "⚠️ No unclaimed cards left in this room.");
-    }
-
-    // Players already in room (avoid duplicates)
-    const roomPlayers = Object.values(room.players || {});
-    const usedUserIds = new Set(roomPlayers.map(p => p.telegramId || p.userId));
-
-    // Get demo users
-    const usersSnap = await get(ref(rtdb, "users"));
-    const users = usersSnap.val() || {};
-
-    let demoUsers = Object.values(users)
-      .filter(u =>
-        u.telegramId?.startsWith("demo") &&
-        (u.balance || 0) >= room.betAmount &&
-        !usedUserIds.has(u.telegramId)
-      )
-      .sort(() => Math.random() - 0.5);
-
-    if (demoUsers.length === 0) {
-      return sendMessage(chatId, "⚠️ No eligible demo users available.");
-    }
-
-    let successCount = 0;
-
-    // Mutable runtime card state
-    let runtimeCards = { ...(room.bingoCards || {}) };
-    const usedIds = new Set(roomPlayers.map(p => p.telegramId || p.userId));
-
-    for (let i = 0; i < demoUsers.length && successCount < count; i++) {
-
-      // Re-check free cards from runtime copy
-      unclaimedCards = Object.entries(runtimeCards)
-        .filter(([_, c]) => !c.claimed);
-
-      if (unclaimedCards.length < 1) break;
-
-      const user = demoUsers[i];
-      if (usedIds.has(user.telegramId)) continue;
-
-      const [cardId] = unclaimedCards[i];
-
-      // Place bet
-      const result = await fetch(getApiUrl("/api/place-bet"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          roomId,
-          cardId,
-          userId: user.telegramId
-        })
-      }).then(r => r.json());
-
-      if (!result.success) {
-        console.log("❌ Bet failed:", user.telegramId, result.message);
-        continue;
-      }
-
-      // Auto mode
-      if (auto) {
-        await fetch(getApiUrl("/api/toggle-auto"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ roomId, cardId, auto: true })
-        });
-      }
-
-      runtimeCards[cardId] = {
-        ...(runtimeCards[cardId] || {}),
-        claimed: true,
-        claimedBy: user.telegramId,
-      };
-      usedIds.add(user.telegramId);
-
-      successCount++;
-    }
-
-    sendMessage(
-      chatId,
-      `🎉 Successfully added ${successCount}/${count} demo players to room ${roomId}\nAUTO MODE: ${auto}`
-    );
-
-  } catch (err) {
-    console.error(err);
-    sendMessage(chatId, "❌ Error adding demo players");
-  }
-
-  await pendingActions.delete(userId);
-  return;
-}
 
 
 // ====================== /FIXBALANCE ======================
@@ -1334,235 +1190,6 @@ if (text === "/fixbalance") {
   return;
 }
 
-
-if (text === "/demo") {
-  if (!ADMIN_IDS.includes(userId)) {
-    sendMessage(chatId, "❌ You are not authorized to use this command.");
-    return;
-  }
-
-  try {
-    const usersSnap = await get(ref(rtdb, "users"));
-    if (!usersSnap.exists()) {
-      sendMessage(chatId, "❌ No users found in the database.");
-      return;
-    }
-
-    const allUsers = usersSnap.val();
-    const totalUsers = Object.keys(allUsers).length;
-
-    // Debug: Show all telegramId formats
-    const allTelegramIds = Object.values(allUsers).map(u => u.telegramId).filter(Boolean);
-    const uniquePrefixes = [...new Set(allTelegramIds.map(id => id.substring(0, 4)))];
-    
-    // Case-insensitive demo filter
-    const demoPlayers = Object.values(allUsers).filter(u =>
-      typeof u.telegramId === "string" && u.telegramId.toLowerCase().startsWith("demo")
-    );
-
-    const totalBalance = demoPlayers.reduce((sum, u) => sum + (u.balance || 0), 0);
-    const countAbove10 = demoPlayers.filter(u => (u.balance || 0) > 10).length;
-
-    // Show first few demo players for debugging
-    const sampleDemoPlayers = demoPlayers.slice(0, 5).map(p => ({
-      id: p.telegramId,
-      balance: p.balance
-    }));
-
-    sendMessage(
-      chatId,
-      `📊 Demo players info:\n` +
-      `- Total users in DB: ${totalUsers}\n` +
-      `- Total demo players: ${demoPlayers.length}\n` +
-      `- Total balance: ${totalBalance}\n` +
-      `- Players with balance > 10: ${countAbove10}\n` +
-      `- Sample demo players: ${JSON.stringify(sampleDemoPlayers)}\n` 
-    );
-
-  } catch (err) {
-    console.error("Error fetching demo players:", err);
-    sendMessage(chatId, "❌ Failed to fetch demo players. Check logs for details.");
-  }
-
-  return;
-}
-
-if (text.startsWith("/demoadd")) {
-  if (!ADMIN_IDS.includes(userId)) {
-    sendMessage(chatId, "❌ You are not authorized to use this command.");
-    return;
-  }
-
-  const parts = text.trim().split(/\s+/);
-  if (parts.length < 2) {
-    sendMessage(chatId, "❌ Usage: /demoadd <targetTelegramId>");
-    return;
-  }
-
-  const targetTelegramId = parts[1].toLowerCase();
-
-  try {
-    const usersRef = ref(rtdb, "users");
-
-    // 1️⃣ Read all users once
-    const snapshot = await get(usersRef);
-    const currentUsers = snapshot.val();
-
-    if (!currentUsers) {
-      sendMessage(chatId, "⚠️ No users found in database.");
-      return;
-    }
-
-    // 2️⃣ Filter demo users
-    const demoPlayers = Object.entries(currentUsers)
-      .filter(([_, u]) => typeof u?.telegramId === "string" && u.telegramId.toLowerCase().startsWith("demo"));
-
-    console.log("🧾 Demo players:", demoPlayers.map(([_, u]) => ({ id: u.telegramId, bal: u.balance })));
-
-    const targetEntry = demoPlayers.find(([_, u]) => u.telegramId.toLowerCase() === targetTelegramId);
-    if (!targetEntry) {
-      sendMessage(chatId, "❌ Target demo player not found.");
-      return;
-    }
-
-    const [targetKey, targetUser] = targetEntry;
-    let totalRedistribute = 0;
-    let anyDonor = false;
-
-    // 3️⃣ Collect balances only from demo users whose balance is below 10
-    for (const [key, u] of demoPlayers) {
-      if (key === targetKey) continue;
-      const bal = Number(u.balance) || 0;
-      if (bal > 0 && bal < 10) {  // ✅ only drain balances below 10
-        console.log(`→ Draining ${u.telegramId}: ${bal}`);
-        totalRedistribute += bal;
-        currentUsers[key].balance = 0;
-        anyDonor = true;
-      }
-    }
-
-    if (!anyDonor) {
-      sendMessage(chatId, "⚠️ No eligible demo users (balance < 10) to collect from. Nothing changed.");
-      return;
-    }
-
-    // 4️⃣ Update target balance
-    currentUsers[targetKey].balance = (Number(currentUsers[targetKey].balance) || 0) + totalRedistribute;
-
-    await set(usersRef, currentUsers);
-
-    console.log(`✅ Added ${totalRedistribute} to ${targetUser.telegramId}`);
-    sendMessage(chatId, `✅ Collected ${totalRedistribute} from demo users with <10 balance and added to ${targetTelegramId}.`);
-  } catch (err) {
-    console.error("Error in /demoadd:", err);
-    sendMessage(chatId, "❌ Failed to execute /demoadd. Check logs for details.");
-  }
-
-  return;
-}
-
-
-
-
-// ====================== /CLEARDemo BALANCES ======================
-if (text === "/cleardemo") {
-  if (!ADMIN_IDS.includes(userId)) {
-    return sendMessage(chatId, "❌ You are not authorized to use this command.");
-  }
-
-  sendMessage(
-    chatId,
-    "🧹 Clear demo balances:\n\n" +
-    "Reply with `all` to set all demo users' balances to 0,\n" +
-    "or reply with a single demo Telegram ID (e.g. `demo123`) to clear one user."
-  );
-  pendingActions.set(userId, { type: "awaiting_cleardemo_target" });
-  return;
-}
-
-if (pending?.type === "awaiting_cleardemo_target") {
-  const target = text.trim();
-
-  try {
-    const usersRef = ref(rtdb, "users");
-    const snap = await get(usersRef);
-    if (!snap.exists()) {
-      sendMessage(chatId, "⚠️ No users found in database.");
-      pendingActions.delete(userId);
-      return;
-    }
-
-    const allUsers = snap.val();
-
-    // Case 1: clear all demo balances
-    if (target.toLowerCase() === "all") {
-      const updates = {};
-      let clearedCount = 0;
-
-      for (const [key, u] of Object.entries(allUsers)) {
-        // defensively handle telegramId stored as string on user object
-        const tId = (u && u.telegramId) ? String(u.telegramId) : null;
-        if (tId && tId.toLowerCase().startsWith("demo")) {
-          updates[`users/${key}/balance`] = 0;
-          updates[`users/${key}/updatedAt`] = new Date().toISOString();
-          clearedCount++;
-        }
-      }
-
-      if (clearedCount === 0) {
-        sendMessage(chatId, "⚠️ No demo users found to clear.");
-      } else {
-        // apply all updates at once
-        await update(ref(rtdb), updates);
-        sendMessage(chatId, `✅ Cleared balances for ${clearedCount} demo users.`);
-      }
-
-      pendingActions.delete(userId);
-      return;
-    }
-
-    // Case 2: clear single demo id
-    // Accept either a direct key (user node key) or a telegramId that begins with 'demo'
-    const searchId = target; // e.g. "demo123"
-
-    // Try direct path first (users/<searchId>)
-    const directRef = ref(rtdb, `users/${searchId}`);
-    const directSnap = await get(directRef);
-
-    if (directSnap.exists() && String(directSnap.val().telegramId).toLowerCase().startsWith("demo")) {
-      await update(directRef, { balance: 0, updatedAt: new Date().toISOString() });
-      sendMessage(chatId, `✅ Cleared balance for ${searchId}.`);
-      pendingActions.delete(userId);
-      return;
-    }
-
-    // Otherwise, search by telegramId field
-    let foundKey = null;
-    for (const [key, u] of Object.entries(allUsers)) {
-      if (u && typeof u.telegramId === "string" && u.telegramId.toLowerCase() === searchId.toLowerCase()) {
-        foundKey = key;
-        break;
-      }
-    }
-
-    if (!foundKey) {
-      sendMessage(chatId, "❌ Demo user not found. Make sure you provided the correct demo id (e.g. demo123).");
-      pendingActions.delete(userId);
-      return;
-    }
-
-    await update(ref(rtdb, `users/${foundKey}`), { balance: 0, updatedAt: new Date().toISOString() });
-    sendMessage(chatId, `✅ Cleared balance for ${searchId}.`);
-    pendingActions.delete(userId);
-    return;
-
-  } catch (err) {
-    console.error("Error during /cleardemo:", err);
-    sendMessage(chatId, "❌ Failed to clear demo balances. Check server logs.");
-    pendingActions.delete(userId);
-    return;
-  }
-}
 
 
 // Step 1: User types /reset
@@ -1639,104 +1266,7 @@ if (pendingActions.has(userId)) {
   }
   
 }
-// ====================== /REMOVEDEMO ======================
-if (text === "/removedemo") {
-  if (!ADMIN_IDS.includes(userId)) {
-    return sendMessage(chatId, "❌ You are not authorized to use this command.");
-  }
 
-  sendMessage(chatId, "🏷 Enter the Room ID to remove demo players from:");
-  await pendingActions.set(userId, { type: "awaiting_removedemo_room" });
-  return;
-}
-
-
-// Step 2 — handle room input
-if (pending?.type === "awaiting_removedemo_room") {
-  const roomId = text.trim();
-
-  try {
-    // Fetch state from API instead of RTDB direct
-    const state = await fetch(getApiUrl(`/api/room-state?roomId=${roomId}`)).then(r=>r.json());
-
-    if (!state.room) {
-      return sendMessage(chatId, "❌ Room not found. Enter a valid Room ID:");
-    }
-
-    const room = state.room;
-
-    // check status
-    const status = (room.gameStatus || "").toLowerCase();
-    if (status === "playing") {
-      return sendMessage(chatId,"⚠️ Game is currently playing.\nStop the room first before removing demo players.");
-    }
-
-    sendMessage(chatId, `♻ Confirm to remove all demo users & reset balances in room *${roomId}*?\n\nReply: **yes** to proceed`);
-    await pendingActions.set(userId,{ type:"awaiting_removedemo_confirm", roomId });
-    return;
-
-  } catch (err) {
-    console.error(err);
-    return sendMessage(chatId,"❌ Failed to fetch room state.");
-  }
-}
-
-
-// Step 3 — confirmation & processing
-if (pending?.type === "awaiting_removedemo_confirm") {
-  if (text.trim().toLowerCase() !== "yes") {
-    await pendingActions.delete(userId);
-    return sendMessage(chatId,"❌ Operation cancelled.");
-  }
-
-  const roomId = pending.roomId;
-
-  sendMessage(chatId,"⏳ Removing demo players & clearing balances...");
-  // Re-check room status before final removal
-const state = await fetch(getApiUrl(`/api/room-state?roomId=${roomId}`)).then(r => r.json());
-if (!state.room) {
-  await pendingActions.delete(userId);
-  return sendMessage(chatId, "❌ Room not found.");
-}
-
-const status = (state.room.gameStatus || "").toLowerCase();
-if (status === "playing") {
-  await pendingActions.delete(userId);
-  return sendMessage(chatId, "⚠️ Cannot remove demo players while game is playing.");
-}
-
-  try {
-    // Pull fresh room state
-    const state = await fetch(getApiUrl(`/api/room-state?roomId=${roomId}`)).then(r=>r.json());
-    const room = state.room;
-    const cards = room.bingoCards || {};
-
-    // find demo-owned cards
-    const demoCards = Object.entries(cards)
-      .filter(([_,c])=>String(c.claimedBy).startsWith("demo"));
-
-    // cancel each card bet through Redis API
-    for (const [cardId,card] of demoCards) {
-      await fetch(getApiUrl("/api/cancel-bet"),{
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ roomId, cardId, userId: card.claimedBy })
-      }).catch(()=>{});
-    }
-
-    // Reset demo balances globally using API not Firebase
-    
-
-    sendMessage(chatId,`✅ Removed ${demoCards.length} demo bets  in room ${roomId}.`);
-
-  } catch(err) {
-    console.error(err);
-    sendMessage(chatId,"❌ Failed removing demo players.");
-  }
-
-  await pendingActions.delete(userId);
-  return;
-}
 
 
 if (text === "/reset") {

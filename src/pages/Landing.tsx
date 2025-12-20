@@ -221,7 +221,6 @@ const [loadingLeaders, setLoadingLeaders] = useState(false);
               className="bg-white/10 p-2 rounded flex justify-between pr-3"
             >
               <span>#{i + 1} {u.username || u.telegramId}</span>
-              <span>Wins: {u.gamesWon || 0}</span>
             </li>
           ))}
         </ul>

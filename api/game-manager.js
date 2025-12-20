@@ -175,7 +175,18 @@ class GameManager {
     }
   }
 
-
+async getUnclaimedCards(roomId) {
+    const roomConfig = await this.getRoomConfig(roomId);
+    if (!roomConfig?.bingoCards) return [];
+  
+    const claimedCards = await this.getClaimedCards(roomId);
+    const claimedIds = new Set(Object.keys(claimedCards));
+  
+    return Object.keys(roomConfig.bingoCards).filter(
+      cardId => !claimedIds.has(cardId)
+    );
+  }
+  
 // SET CARD AUTO STATE IN REDIS
 async setCardAutoState(roomId, cardId, options = {}) {
   try {
@@ -308,7 +319,7 @@ async setCardAutoState(roomId, cardId, options = {}) {
     }
   }
   
-  async placeBet(roomId, cardId, user) {
+  async placeBet(roomId, cardId, user, options = {}) {
     try {
       await this.ensureRoomExists(roomId);
   
@@ -359,6 +370,9 @@ async setCardAutoState(roomId, cardId, options = {}) {
         attemptedBingo: false,
         auto: false,
         autoUntil: null,
+
+        demo: options.demo === true,
+        demoAt: options.demoAt || null,
       };
   
       await this.setClaimedCards(roomId, claimedCards);
@@ -446,8 +460,61 @@ async setCardAutoState(roomId, cardId, options = {}) {
       return { success: false, message: "Server error" };
     }
   }
-  
+  async cancelBet(roomId, cardId) {
+  const claimedCards = await this.getClaimedCards(roomId);
+  if (!claimedCards[cardId]) return;
 
+  delete claimedCards[cardId];
+  await this.setClaimedCards(roomId, claimedCards);
+
+  if (this.io) {
+    this.io.to(roomId).emit("cardUnclaimed", { roomId, cardId });
+  }
+}
+
+  async checkDemoPlayers(roomId) {
+    const roomState = await this.getRoomState(roomId);
+    if (!roomState) return;
+  
+    if (!["waiting", "countdown"].includes(roomState.gameStatus)) return;
+  
+    const claimedCards = await this.getClaimedCards(roomId);
+    const now = Date.now();
+  
+    for (const [cardId, claim] of Object.entries(claimedCards)) {
+      if (claim.demo === true && claim.demoAt && claim.demoAt <= now) {
+  
+        // ❌ Demo expired → remove
+        await this.cancelBetForPlayer(roomId, cardId , claim.claimedBy);
+  
+        // ✅ Re-place demo bet on another free card
+        const freeCards = await this.getUnclaimedCards(roomId);
+        if (!freeCards.length) continue;
+  
+        const newCardId = freeCards[
+          Math.floor(Math.random() * freeCards.length)
+        ];
+  
+        const minutes = 1 + Math.floor(Math.random() * 59);
+const demoExpiry = Date.now() + minutes * 60 * 1000;
+
+  
+        await this.placeBet(
+          roomId,
+          newCardId,
+          {
+            telegramId: claim.telegramId,
+            username: claim.username,
+          },
+          {
+            demo: true,
+            demoAt: demoExpiry,
+          }
+        );
+      }
+    }
+  }
+  
   /**
    * Sync players and claimed cards to ensure:
    * 1. Number of players equals number of claimed cards

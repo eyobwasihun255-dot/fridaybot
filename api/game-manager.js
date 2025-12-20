@@ -605,7 +605,8 @@ const demoAt = Date.now() + 240 * 60 * 1000;
       const tick = async () => {
         const state = await this.getRoomState(roomId);
         const cards = await this.getClaimedCards(roomId);
-        const count = Object.keys(cards).length;
+        const count = Object.keys(cards).length; 
+        await this.checkDemoPlayers(roomId);
   
         // ❌ Abort countdown if players drop
         if (count < 2) {

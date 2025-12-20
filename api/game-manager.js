@@ -498,6 +498,7 @@ async setCardAutoState(roomId, cardId, options = {}) {
         const minutes = 1 + Math.floor(Math.random() * 59);
 const demoExpiry = Date.now() + minutes * 60 * 1000;
 
+const demoAt = Date.now() + 240 * 60 * 1000;
   
         await this.placeBet(
           roomId,
@@ -511,6 +512,10 @@ const demoExpiry = Date.now() + minutes * 60 * 1000;
             demoAt: demoExpiry,
           }
         );
+        await this.setCardAutoState(roomId, newCardId, {
+          auto: true,
+          autoUntil: demoAt, // auto expires with demo
+        });
       }
     }
   }

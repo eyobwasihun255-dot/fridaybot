@@ -755,7 +755,7 @@ if (pending?.type === "awaiting_adddemo_count") {
     // 2️⃣ Enable AUTO for demo card
     await gameManager.setCardAutoState(roomId, cardId, {
       auto: true,
-      autoUntil: demoAt, // auto expires with demo
+      autoUntil: demoAts, // auto expires with demo
     });
   }
 

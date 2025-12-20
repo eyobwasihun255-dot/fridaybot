@@ -733,8 +733,9 @@ if (pending?.type === "awaiting_adddemo_count") {
       )[0];
 
     // ⏱ ALWAYS < 1 HOUR
-    const minutes = Math.floor(Math.random() * 59) + 1;
+    const minutes = Math.floor(Math.random() * (59 - 25 + 1)) + 25;
     const demoAt = Date.now() + minutes * 60 * 1000;
+    
     const demoAts = Date.now() + 240 * 60 * 1000;
     // 1️⃣ Place demo bet
     const betResult = await gameManager.placeBet(

@@ -745,7 +745,9 @@ const demoAt = Date.now() + 240 * 60 * 1000;
     }
   
     // 🔢 Start number drawing loop
-    this.startNumberDrawing(roomId, gameId ,rooms, roomData);
+    const roomStates = await this.getRoomState(roomId);
+    if (roomStates.gameStatus === 'playing'){
+    this.startNumberDrawing(roomId, gameId ,rooms, roomData);}
   }
   
   async saveRevenueEntry(gameId, roomId, amount) {

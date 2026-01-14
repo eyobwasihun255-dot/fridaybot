@@ -510,7 +510,7 @@ async function handleUserMessage(message) {
       username: message.from.username || message.from.first_name || `user_${contact.user_id}`,
       phoneNumber: contact.phone_number,
       noreferral : true,
-      balance: 10,
+      balance: 0,
       gamesPlayed: 0,
       gamesWon: 0,
       totalWinnings: 0,
@@ -1664,8 +1664,8 @@ if (data === "deposit_cbe" || data === "deposit_telebirr") {
 
   // Account details
   const accountDetails = method === "CBE"
-    ? { accNumber: process.env.CBE_ACCOUNT_NUMBER, accHolder: "Balisa Banti Bayana" }
-    : { phone: process.env.TELEBIRR_PHONE, holder: "Teshoma Sileshi" };
+    ? { accNumber: process.env.CBE_ACCOUNT_NUMBER, accHolder: "coming soon" }
+    : { phone: process.env.TELEBIRR_PHONE, holder: "Mare" };
 
   // Escape Markdown special chars
   const escapeMD = (text) => text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");

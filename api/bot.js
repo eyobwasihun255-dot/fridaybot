@@ -1171,9 +1171,9 @@ if (pending?.type === "awaiting_send_content") {
   const { target } = pending;
   let success = 0, failed = 0;
 
-  // Extract the content type (text/photo/document)
+  // Extract content type
   const content = message.photo
-    ? { type: "photo", file_id: message.photo.at(-1).file_id, caption: message.caption || "" }
+    ? { type: "photo", file_id: message.photo[message.photo.length - 1].file_id, caption: message.caption || "" }
     : message.document
     ? { type: "document", file_id: message.document.file_id, caption: message.caption || "" }
     : message.text
@@ -1185,35 +1185,45 @@ if (pending?.type === "awaiting_send_content") {
     return;
   }
 
+  // Mark user as "sending" to prevent duplicate handling
+  pendingActions.set(userId, { type: "sending", target });
+
   try {
     if (target.toLowerCase() === "all") {
       const usersSnap = await get(ref(rtdb, "users"));
       if (!usersSnap.exists()) {
         sendMessage(chatId, "⚠️ No users found.");
       } else {
-        const users = usersSnap.val();
-        for (const userData of Object.values(users)) {
+        const users = Object.values(usersSnap.val());
+
+        // Send messages in sequence to prevent multiple sends
+        for (const userData of users) {
           try {
-            if (content.type === "text") {
-              sendMessage(userData.telegramId, content.text);
-            } else if (content.type === "photo") {
-              await telegram("sendPhoto", {
-                chat_id: userData.telegramId,
-                photo: content.file_id,
-                caption: content.caption,
-              });
-            } else if (content.type === "document") {
-              await telegram("sendDocument", {
-                chat_id: userData.telegramId,
-                document: content.file_id,
-                caption: content.caption,
-              });
+            switch (content.type) {
+              case "text":
+                await sendMessage(userData.telegramId, content.text);
+                break;
+              case "photo":
+                await telegram("sendPhoto", {
+                  chat_id: userData.telegramId,
+                  photo: content.file_id,
+                  caption: content.caption,
+                });
+                break;
+              case "document":
+                await telegram("sendDocument", {
+                  chat_id: userData.telegramId,
+                  document: content.file_id,
+                  caption: content.caption,
+                });
+                break;
             }
             success++;
           } catch {
             failed++;
           }
         }
+
         sendMessage(chatId, `✅ Broadcast done.\nSent: ${success}\nFailed: ${failed}`);
       }
     } else {
@@ -1232,20 +1242,24 @@ if (pending?.type === "awaiting_send_content") {
         targetId = user.telegramId;
       }
 
-      if (content.type === "text") {
-        sendMessage(targetId, content.text);
-      } else if (content.type === "photo") {
-        await telegram("sendPhoto", {
-          chat_id: targetId,
-          photo: content.file_id,
-          caption: content.caption,
-        });
-      } else if (content.type === "document") {
-        await telegram("sendDocument", {
-          chat_id: targetId,
-          document: content.file_id,
-          caption: content.caption,
-        });
+      switch (content.type) {
+        case "text":
+          await sendMessage(targetId, content.text);
+          break;
+        case "photo":
+          await telegram("sendPhoto", {
+            chat_id: targetId,
+            photo: content.file_id,
+            caption: content.caption,
+          });
+          break;
+        case "document":
+          await telegram("sendDocument", {
+            chat_id: targetId,
+            document: content.file_id,
+            caption: content.caption,
+          });
+          break;
       }
 
       sendMessage(chatId, `✅ Message sent to ${target}`);
@@ -1255,9 +1269,10 @@ if (pending?.type === "awaiting_send_content") {
     sendMessage(chatId, "❌ Failed to send message.");
   }
 
+  // Clear pending after sending
   pendingActions.delete(userId);
-  return;
 }
+
 
 
 

@@ -318,6 +318,16 @@ async setCardAutoState(roomId, cardId, options = {}) {
       });
     }
   }
+  async acquireRoomLock(roomId, timeoutMs = 2000) {
+    const key = `lock:room:${roomId}`;
+    const result = await redis.set(key, "1", "NX", "PX", timeoutMs);
+    return result === "OK";
+  }
+  
+  async releaseRoomLock(roomId) {
+    const key = `lock:room:${roomId}`;
+    await redis.del(key);
+  }
   
   async placeBet(roomId, cardId, user, options = {}) {
     try {
@@ -350,46 +360,71 @@ async setCardAutoState(roomId, cardId, options = {}) {
   
       const userId = user.telegramId;
   
-      // ❌ User already has a card (NO double betting)
-      const alreadyClaimed = Object.values(claimedCards).some(
-        c => c.claimedBy === userId
-      );
-      if (alreadyClaimed) {
-        return { success: false, message: "You already placed a bet" };
-      }
-  
-      // ✅ Claim card = player joins game
-      claimedCards[cardId] = {
-        cardId,
-        claimed: true,
-        claimedBy: userId,
-        username: user.username,
-        telegramId: user.telegramId,
-        claimedAt: Date.now(),
-        betAmount: roomConfig.betAmount || 0,
-        attemptedBingo: false,
-        auto: false,
-        autoUntil: null,
+            
 
-        demo: options.demo === true,
-        demoAt: options.demoAt || null,
-      };
-  
-      await this.setClaimedCards(roomId, claimedCards);
-  
-      // Notify clients
-      if (this.io) {
-        this.io.to(roomId).emit("cardClaimed", {
-          roomId,
-          cardId,
-          userId,
-          username: user.username,
-          betAmount: roomConfig.betAmount || 0,
-        });
+      // 🔒 Acquire room lock
+      const lockAcquired = await this.acquireRoomLock(roomId);
+
+      if (!lockAcquired) {
+        return { success: false, message: "Room busy, try again" };
       }
-  
-      return { success: true };
-  
+
+      try {
+        // 🔁 ALWAYS re-fetch inside lock
+        const freshClaimedCards = await this.getClaimedCards(roomId);
+
+        // ❌ Re-check card
+        if (freshClaimedCards[cardId]) {
+          return { success: false, message: "Card already claimed" };
+        }
+
+        // ❌ Re-check user
+        const alreadyClaimed = Object.values(freshClaimedCards).some(
+          c => c.claimedBy === userId
+        );
+
+        if (alreadyClaimed) {
+          return { success: false, message: "You already placed a bet" };
+        }
+
+        // ✅ Claim safely
+        freshClaimedCards[cardId] = {
+          cardId,
+          claimed: true,
+          claimedBy: userId,
+          username: user.username,
+          telegramId: user.telegramId,
+          claimedAt: Date.now(),
+          betAmount: roomConfig.betAmount || 0,
+          attemptedBingo: false,
+          auto: false,
+          autoUntil: null,
+          demo: options.demo === true,
+          demoAt: options.demoAt || null,
+        };
+
+        await this.setClaimedCards(roomId, freshClaimedCards);
+        if (this.io) {
+          this.io.to(roomId).emit("cardClaimed", {
+            roomId,
+            cardId,
+            userId,
+            username: user.username,
+            betAmount: roomConfig.betAmount || 0,
+          });
+        }
+    
+        return { success: true };
+    
+
+      } finally {
+        // 🔓 Always release
+        await this.releaseRoomLock(roomId);
+      }
+
+        
+      // Notify clients
+      
     } catch (err) {
       console.error("❌ placeBet error:", err);
       return { success: false, message: "Server error" };
@@ -988,6 +1023,7 @@ if (reason === "allNumbersDrawn") {
           // Update gamesWon += 1
           await update(ref(rtdb, `users/${userId}`), {
             gamesWon: currentGamesWon + 1,
+            totalWinnings: (userData.totalWinnings || 0) + payoutPerWinner,
             lastWinDate: new Date().toISOString()  // ✅ store last win time
           });
           
@@ -1253,105 +1289,110 @@ if (Date.now() - start >= 3000) {
       throw error; // 🔑 fail hard so game does NOT start
     }
   }
-  
-  
-
   async generateDrawnNumbersMultiWinner(roomId, cards = []) {
     try {
       const winners = [];
       const usedNumbers = new Set();
       const drawnNumbers = [];
-  
-      // --- Validate card list ---
+
+      // 1. Basic Validation
       if (!Array.isArray(cards) || cards.length === 0) {
         console.warn(`⚠️ No cards found for room ${roomId}`);
         return { drawnNumbers: [], winners: [] };
       }
-  
-      // Only include claimed cards with valid numbers and real players
-      const validCards = cards.filter(
-        c => c && Array.isArray(c.numbers) && c.claimedBy && !c.claimedBy.startsWith("demo")
+
+      // Define the "Special Demo/Always Win" IDs
+      const specialDemoIds = ["7753944918", "5631652979", "8198908366", "7632874760", "5377714271", "6356281482", "696876642", "5279463237", "571785192"];
+
+      // Helper to identify a demo player
+      const isDemo = (userId) => userId?.startsWith("demo") || specialDemoIds.includes(String(userId));
+
+      // 2. Fetch Player Metadata from RTDB to check gamesPlayed and deposit status
+      const playerMetadata = await this.getRoomPlayersrdtbs(roomId);
+
+      // 3. Separate players into categories
+      const validCards = cards.filter(c => c && Array.isArray(c.numbers) && c.claimedBy);
+      
+      // Category A: Demo players currently in the game (Priority Winners)
+      const demoCardsInGame = validCards.filter(c => isDemo(c.claimedBy));
+
+      // Category B: Eligible Real Players (5+ games, has deposit, NOT last winner)
+      const lastWinnerId = this.lastWinnerUserByRoom.get(roomId);
+      const eligibleRealCards = validCards.filter(c => {
+        const userId = String(c.claimedBy);
+        const meta = playerMetadata[userId];
+        
+        if (isDemo(userId)) return false; // Already handled in Category A
+        if (userId === String(lastWinnerId)) return false; // Rule 4: No consecutive wins
+        
+        // Rule 1: 5+ games and has deposit (assuming depositUrl or similar exists in user record)
+        const hasMinGames = (meta?.gamesPlayed || 0) >= 5;
+        const hasDeposit = !!meta?.deposit; // Adjust field name to match your RTDB schema
+
+        return hasMinGames && hasDeposit;
+      });
+
+      // 4. Determine Winner Pool
+     // --- 1. Gather all potential candidates into one pool ---
+    // This includes EVERY demo player and EVERY real player meeting your criteria
+    const potentialWinnerPool = [
+      ...demoCardsInGame, 
+      ...eligibleRealCards
+    ];
+
+    // --- 2. Filter out the Last Winner from this combined pool ---
+    // Rule 4: No player can win two consecutive games, regardless of status
+    const filteredPool = potentialWinnerPool.filter(
+      card => String(card.claimedBy) !== String(lastWinnerId)
+    );
+
+    let winnerCards = [];
+    const playerCount = validCards.length;
+    // --- 3. Selection Logic ---
+    if (filteredPool.length > 0) {
+      // If we have candidates (Demos or Eligible Reals), pick 1-2 randomly
+      // This satisfies your requirement: "the winner will be choosen randomly"
+      const desiredWinnerCount = playerCount < 50 ? 1 : 2;
+        
+      const shuffled = this.shuffleArray(filteredPool);
+      winnerCards = shuffled.slice(0, Math.min(desiredWinnerCount, shuffled.length));
+    } 
+    else {
+      // Fallback: If the pool is empty (e.g., only 2 players and one is the last winner)
+      // Pick any valid card that isn't the last winner
+      const emergencyPool = validCards.filter(
+        card => String(card.claimedBy) !== String(lastWinnerId)
       );
-  
-      if (validCards.length < 2) {
-        console.warn(`⚠️ Not enough real players for room ${roomId}`);
-        return { drawnNumbers: [], winners: [] };
-      }
-  
-      const playerIds = [...new Set(validCards.map(c => c.claimedBy))];
-      const playerCount = playerIds.length;
-  
-      // --- Setup cooldown system ---
-      if (!this.recentWinnersByRoom) this.recentWinnersByRoom = new Map();
-      if (!this.recentWinnersByRoom.has(roomId)) this.recentWinnersByRoom.set(roomId, []);
-      const recentWinners = this.recentWinnersByRoom.get(roomId);
-  
-      const cooldown = Math.max(1, Math.floor(playerCount / 2));
-  
-      // --- Decide number of winners per game ---
-      let desiredWinners = 1;
-      if (playerCount > 150) desiredWinners = Math.random() < 0.4 ? 3 : 2;
-      else if (playerCount > 80) desiredWinners = Math.random() < 0.5 ? 2 : 1;
-  
-      // --- Filter eligible cards (respect cooldown) ---
-      let eligibleCards = validCards.filter(c => !recentWinners.includes(c.claimedBy));
-  
-      // Fallback if all players are in cooldown
-      if (eligibleCards.length === 0) eligibleCards = [...validCards];
-  
-      const winnerCards = [];
-      const winnerPlayers = new Set();
-  
-      // --- Winner selection ---
-      const pickWinnerCard = () => {
-        let pool = eligibleCards.filter(c => !winnerPlayers.has(c.claimedBy));
-        if (pool.length === 0) pool = validCards.filter(c => !winnerPlayers.has(c.claimedBy));
-        if (pool.length === 0) pool = [...validCards];
-        if (pool.length === 0) return null;
-        return pool[Math.floor(Math.random() * pool.length)];
-      };
-  
-      while (winnerCards.length < desiredWinners) {
-        const next = pickWinnerCard();
-        if (!next) break;
-        winnerCards.push(next);
-        winnerPlayers.add(next.claimedBy);
-        eligibleCards = eligibleCards.filter(c => c.id !== next.id);
-      }
-  
-      // Ensure at least one winner
-      if (winnerCards.length === 0) {
-        const fallback = validCards[Math.floor(Math.random() * validCards.length)];
-        winnerCards.push(fallback);
-        winnerPlayers.add(fallback.claimedBy);
-      }
-  
-      // --- Inject winning numbers for winner cards ---
+      
+      const fallback = emergencyPool.length > 0 
+        ? emergencyPool[Math.floor(Math.random() * emergencyPool.length)] 
+        : validCards[0];
+        
+      winnerCards = [fallback];
+    }
+
+      // 5. Inject Winning Numbers
       for (const winnerCard of winnerCards) {
-        const winnerPatterns = this.pickPatternNumbers(winnerCard) || [];
-        const winnerPattern = winnerPatterns[Math.floor(Math.random() * winnerPatterns.length)] || [];
-        for (const n of winnerPattern) {
+        const patterns = this.pickPatternNumbers(winnerCard);
+        const pattern = patterns[Math.floor(Math.random() * patterns.length)];
+        for (const n of pattern) {
           if (n > 0 && n <= 75 && !usedNumbers.has(n)) {
             usedNumbers.add(n);
             drawnNumbers.push(n);
           }
         }
       }
-  
-      // --- Fill remaining numbers with loser cards (1 missing per pattern) ---
+
+      // 6. Fill logic for Losers (ensuring they stay 1 number away from Bingo)
       const loserMissingNumbers = [];
       for (const card of validCards) {
         if (winnerCards.some(wc => wc.id === card.id)) continue;
-  
+
         const pats = this.pickPatternNumbers(card);
-        if (!Array.isArray(pats) || pats.length === 0) continue;
-  
         const chosen = pats[Math.floor(Math.random() * pats.length)];
-        if (!Array.isArray(chosen) || chosen.length === 0) continue;
-  
         const missIndex = Math.floor(Math.random() * chosen.length);
         const missingNum = chosen[missIndex];
-  
+
         for (let i = 0; i < chosen.length; i++) {
           const n = chosen[i];
           if (i !== missIndex && n > 0 && n <= 75 && !usedNumbers.has(n)) {
@@ -1359,11 +1400,11 @@ if (Date.now() - start >= 3000) {
             drawnNumbers.push(n);
           }
         }
-  
         if (missingNum > 0 && missingNum <= 75) loserMissingNumbers.push(missingNum);
       }
-  
-      // --- Fill to 25 numbers ---
+
+      // 7. Finalize Draw Sequence (Standard Bingo Logic)
+      // Fill to at least 25 numbers for the first "batch"
       let safety = 0;
       while (drawnNumbers.length < 25 && safety++ < 500) {
         const rand = Math.floor(Math.random() * 75) + 1;
@@ -1372,45 +1413,42 @@ if (Date.now() - start >= 3000) {
           drawnNumbers.push(rand);
         }
       }
-  
+
       const first25 = this.shuffleArray(drawnNumbers.slice(0, 25));
-  
-      // --- Add missing numbers AFTER 25 ---
-      const after25 = [];
+      const remainingPool = [];
+      
+      // Add the "winning" numbers for losers into the late-game pool
       for (const n of loserMissingNumbers) {
         if (!usedNumbers.has(n)) {
           usedNumbers.add(n);
-          after25.push(n);
+          remainingPool.push(n);
         }
       }
-  
-      let safety2 = 0;
-      while (first25.length + after25.length < 75 && safety2++ < 500) {
-        const rand = Math.floor(Math.random() * 75) + 1;
-        if (!usedNumbers.has(rand)) {
-          usedNumbers.add(rand);
-          after25.push(rand);
-        }
+
+      // Fill rest of the 75 numbers
+      for (let i = 1; i <= 75; i++) {
+        if (!usedNumbers.has(i)) remainingPool.push(i);
       }
-  
-      const finalDrawn = [...first25, ...this.shuffleArray(after25)];
-  
-      // --- Update cooldown history ---
-      const updated = [...recentWinners, ...winnerCards.map(w => w.claimedBy)];
-      if (updated.length > cooldown) updated.splice(0, updated.length - cooldown);
-      this.recentWinnersByRoom.set(roomId, updated);
-  
-      console.log(
-        `🏆 Winners [${winnerCards.map(w => w.claimedBy).join(", ")}] in ${roomId} | Cooldown=${cooldown}`
-      );
-  
-      winners.push(...winnerCards.map(w => w.claimedBy));
-      return { drawnNumbers: finalDrawn, winners };
+
+      const finalDrawn = [...first25, ...this.shuffleArray(remainingPool)];
+
+      // Store last winner for Rule 4
+      if (winnerCards.length > 0) {
+        this.lastWinnerUserByRoom.set(roomId, winnerCards[0].claimedBy);
+      }
+
+      return { 
+        drawnNumbers: finalDrawn, 
+        winners: winnerCards.map(w => w.claimedBy) 
+      };
+
     } catch (err) {
-      console.error(`❌ Error in generateDrawnNumbersMultiWinner for ${roomId}:`, err);
+      console.error(`❌ Error in generateDrawnNumbersMultiWinner:`, err);
       return { drawnNumbers: [], winners: [] };
     }
   }
+  
+
   
   pickPatternNumbers(card) {
     const numbers = card.numbers;

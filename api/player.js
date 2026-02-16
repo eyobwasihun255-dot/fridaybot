@@ -71,8 +71,8 @@ export default async function handler(req, res) {
       username: user.username,
       balance: user.balance || 0,
       lang: user.lang || "en",
-      gamesPlayed,         // now calculated from deductRdbs
-      gamesWon,
+      gamesPlayed : user.gamesPlayed || 0,         // now calculated from deductRdbs
+      gamesWon : user.gamesWon || 0,
       totalWinnings,       // total amount won in ETB
       totalDeposits,       // total deposits in ETB
       totalLosses,         // total losses in ETB (deductions for games not won)

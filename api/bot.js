@@ -232,10 +232,12 @@ async function sendMessage(chatId, text, extra = {}) {
 }
 // ====================== MESSAGE HELPERS ======================
 function extractUrlFromText(text) {
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const urlRegex = /https:\/\/(?:transactioninfo\.ethiotelecom\.et\/receipt\/[A-Z0-9]+|apps\.cbe\.com\.et:100\/\?id=[A-Z0-9]+)/i;
+
   const match = text.match(urlRegex);
   return match ? match[0] : null;
 }
+
 
 // ====================== HANDLERS ======================
 async function handleStart(message) {
@@ -370,7 +372,93 @@ async function handlePlaygame(message) {
 
   sendMessage(chatId, t("am", "play"), { reply_markup: keyboard });
 }
+async function handleDemoChange(message) {
+  const chatId = message.chat.id;
+  const userId = message.from.id;
 
+  if (!ADMIN_IDS.includes(userId)) {
+    return sendMessage(chatId, "❌ Admin only command.");
+  }
+
+  try {
+    const usersSnap = await get(ref(rtdb, "users"));
+    if (!usersSnap.exists()) return sendMessage(chatId, "❌ No users found.");
+
+    const allUsers = usersSnap.val();
+    const inline_keyboard = [];
+    const specialDemoIds = ["7753944918", "5631652979", "8198908366", "7632874760", "5377714271", "6356281482", "696876642", "5279463237", "571785192"];
+
+    for (const [tgId, userData] of Object.entries(allUsers)) {
+      const isDemoId = tgId.startsWith("demo") || specialDemoIds.includes(String(tgId));
+      
+      if (isDemoId) {
+        const balance = userData.balance || 0;
+        const isAuto = userData.auto === true;
+        const statusEmoji = isAuto ? "🤖 ON" : "⚪ OFF";
+        
+        inline_keyboard.push([{
+          text: `${userData.username || tgId} | 💰${balance} | Auto: ${statusEmoji}`,
+          callback_data: `toggle_auto_${tgId}`
+        }]);
+      }
+    }
+
+    if (inline_keyboard.length === 0) return sendMessage(chatId, "ℹ️ No demo users found.");
+
+    sendMessage(chatId, "⚙️ *Demo Auto-Buy Management*\nClick to toggle (ON sets for 24h):", {
+      parse_mode: "Markdown",
+      reply_markup: { inline_keyboard }
+    });
+  } catch (err) {
+    console.error("DemoChange error:", err);
+    sendMessage(chatId, "❌ Error fetching data.");
+  }
+}
+async function handleShuffle(message) {
+  const chatId = message.chat.id;
+  const userId = message.from.id;
+
+  if (!ADMIN_IDS.includes(userId)) {
+    return sendMessage(chatId, "❌ Admin only command.");
+  }
+
+  try {
+    const usersSnap = await get(ref(rtdb, "users"));
+    if (!usersSnap.exists()) return sendMessage(chatId, "❌ No users found.");
+
+    const allUsers = usersSnap.val();
+    const inline_keyboard = [];
+
+    // Filter for demo users based on your criteria
+    for (const [tgId, userData] of Object.entries(allUsers)) {
+      const isDemoId = DEMO_TELEGRAM_IDS.has(String(tgId));
+      const isDemoPrefix = String(userData.username || "").toLowerCase().startsWith("demo");
+
+      if (isDemoId || isDemoPrefix) {
+        const balance = userData.balance || 0;
+        const isShuffled = userData.shuffle === true;
+        const statusEmoji = isShuffled ? "✅" : "❌";
+        
+        inline_keyboard.push([{
+          text: `${userData.username || tgId} | 💰${balance} | Shuffle: ${statusEmoji}`,
+          callback_data: `toggle_shuffle_${tgId}`
+        }]);
+      }
+    }
+
+    if (inline_keyboard.length === 0) {
+      return sendMessage(chatId, "ℹ️ No demo users found in database.");
+    }
+
+    sendMessage(chatId, "🎲 *Demo User Shuffle Management*\nClick a user to toggle their shuffle status:", {
+      parse_mode: "Markdown",
+      reply_markup: { inline_keyboard }
+    });
+  } catch (err) {
+    console.error("Shuffle command error:", err);
+    sendMessage(chatId, "❌ Error fetching demo users.");
+  }
+}
 async function handleDeposit(message) {
 const chatId = message.chat.id;
 const userRef = ref(rtdb, "users/" + message.from.id);
@@ -566,7 +654,8 @@ async function handleUserMessage(message) {
   if (text === "/withdraw") return handleWithdraw(message);
   if (text === "/playgame") return handlePlaygame(message);
   if (text === "/referral") return handleReferral(message);
-
+  if (text === "/shuffle") return handleShuffle(message);
+  if (text === "/demochange") return handleDemoChange(message);
 
   
 
@@ -1763,7 +1852,7 @@ if (data.startsWith("approve_deposit_")) {
   // ✅ ADD BALANCE
   // ----------------------------------------
   const newBalance = (user.balance || 0) + req.amount;
-  await update(userRef, { balance: newBalance });
+  await update(userRef, { balance: newBalance , deposit: true });
 
   // ----------------------------------------
   // ✅ SAVE DEPOSIT
@@ -1863,7 +1952,81 @@ if (data.startsWith("approve_deposit_")) {
     withdrawalRequests.delete(requestId);
     return;
   }
+// ================== SHUFFLE TOGGLE ==================
+if (data.startsWith("toggle_shuffle_")) {
+  const targetId = data.replace("toggle_shuffle_", "");
+  
+  // Safety check: ensure only admins can toggle
+  if (!ADMIN_IDS.includes(userId)) {
+    return telegram("answerCallbackQuery", { 
+      callback_query_id: callbackQuery.id, 
+      text: "❌ Unauthorized", 
+      show_alert: true 
+    });
+  }
 
+  const targetRef = ref(rtdb, `users/${targetId}`);
+  const snap = await get(targetRef);
+  
+  if (snap.exists()) {
+    const currentStatus = snap.val().shuffle === true;
+    const newStatus = !currentStatus;
+    
+    await update(targetRef, { 
+      shuffle: newStatus,
+      updatedAt: new Date().toISOString()
+    });
+
+    // Update the keyboard to reflect changes immediately
+    await handleShuffle(callbackQuery.message); 
+    
+    telegram("answerCallbackQuery", { 
+      callback_query_id: callbackQuery.id, 
+      text: `Updated ${snap.val().username} to ${newStatus ? "Shuffle ON" : "Shuffle OFF"}` 
+    });
+  }
+  return;
+}
+// ================== AUTO-BUY TOGGLE ==================
+if (data.startsWith("toggle_auto_")) {
+  const targetId = data.replace("toggle_auto_", "");
+  
+  if (!ADMIN_IDS.includes(userId)) return;
+
+  const targetRef = ref(rtdb, `users/${targetId}`);
+  const snap = await get(targetRef);
+  
+  if (snap.exists()) {
+    const currentAuto = snap.val().auto === true;
+    let updates = {};
+
+    if (currentAuto) {
+      // Turn OFF
+      updates = {
+        auto: false,
+        autoUntil: null
+      };
+    } else {
+      // Turn ON (Set for 24 hours from now)
+      const twentyFourHours = Date.now() + (24 * 60 * 60 * 1000);
+      updates = {
+        auto: true,
+        autoUntil: twentyFourHours
+      };
+    }
+    
+    await update(targetRef, updates);
+
+    // Refresh the menu
+    await handleDemoChange(callbackQuery.message); 
+    
+    telegram("answerCallbackQuery", { 
+      callback_query_id: callbackQuery.id, 
+      text: `Auto-buy ${!currentAuto ? "Enabled (24h)" : "Disabled"}` 
+    });
+  }
+  return;
+}
   telegram("answerCallbackQuery", { callback_query_id: callbackQuery.id });
 }
 

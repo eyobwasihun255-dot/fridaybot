@@ -614,7 +614,11 @@ const demoAt = Date.now() + 240 * 60 * 1000;
       if (room.gameStatus !== "waiting") {
         return { success: false, message: "Room not in waiting state" };
       }
-  
+     
+   
+    const countdownStartAt = Date.now();
+    
+
       if (playerCount < 2) {
         return { success: false, message: "Not enough players" };
       }

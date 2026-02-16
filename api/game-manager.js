@@ -640,6 +640,7 @@ const demoAt = Date.now() + 240 * 60 * 1000;
       const tick = async () => {
         const state = await this.getRoomState(roomId);
         const cards = await this.getClaimedCards(roomId);
+        const now = Date.now();
         const count = Object.keys(cards).length; 
         const timeLeft = countdownEndAt - now;
         const timeElapsed = now - countdownStartAt;

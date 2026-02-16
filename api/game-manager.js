@@ -641,6 +641,12 @@ const demoAt = Date.now() + 240 * 60 * 1000;
         const state = await this.getRoomState(roomId);
         const cards = await this.getClaimedCards(roomId);
         const count = Object.keys(cards).length; 
+        const timeLeft = countdownEndAt - now;
+        const timeElapsed = now - countdownStartAt;
+
+        const roomState = await this.getRoomState(roomId);
+        const claimedCards = await this.getClaimedCards(roomId);
+        const playerCount = Object.keys(claimedCards).length;
         await this.checkDemoPlayers(roomId);
   
         // ❌ Abort countdown if players drop

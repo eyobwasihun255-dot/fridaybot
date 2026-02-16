@@ -498,9 +498,6 @@ async function handleUserMessage(message) {
     const contact = message.contact;
     const chatId = message.chat.id;
   
-    // Ignore demo players
-    if (String(contact.user_id).startsWith("demo")) return;
-  
     const userRef = ref(rtdb, `users/${contact.user_id}`);
     const snap = await get(userRef);
   
@@ -734,9 +731,10 @@ if (pending?.type === "awaiting_adddemo_count") {
 
     // ⏱ ALWAYS < 1 HOUR
     const minutes = Math.floor(Math.random() * (59 - 25 + 1)) + 25;
-    const demoAt = Date.now() + minutes * 60 * 1000;
-    
-    const demoAts = Date.now() + 240 * 60 * 1000;
+    const demoAt = Date.now();
+
+// 2️⃣ autoUntil should be 24 hours after now
+    const autoUntil = Date.now() + 24 * 60 * 60 * 1000; 
     // 1️⃣ Place demo bet
     const betResult = await gameManager.placeBet(
       roomId,
@@ -756,7 +754,7 @@ if (pending?.type === "awaiting_adddemo_count") {
     // 2️⃣ Enable AUTO for demo card
     await gameManager.setCardAutoState(roomId, cardId, {
       auto: true,
-      autoUntil: demoAts, // auto expires with demo
+      autoUntil: autoUntil, // auto expires with demo
     });
   }
 
@@ -1016,7 +1014,7 @@ if (pending?.type === "awaiting_player_lookup") {
 🗓 Created At: ${playerData.createdAt}
 🗓 Updated At: ${playerData.updatedAt}
     `;
-
+  
     sendMessage(chatId, info);
   } catch (err) {
     console.error("Error fetching player:", err);

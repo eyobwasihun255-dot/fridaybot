@@ -341,7 +341,12 @@ autoReconnectToServer: () => {
         const { currentRoom } = get();
         if (!currentRoom || data.roomId !== currentRoom.id) return;
         try {
-          const { roomId, userId, cardId, patternIndices } = data as any;
+          const { roomId, userId, cardId, patternIndices, emittedAt } = data as any;
+          const now = Date.now();
+          if (!emittedAt || now - emittedAt > 10000) {
+            console.log('Ignoring old winnerConfirmed event');
+            return;
+          }
           const { user } = useAuthStore.getState();
 
           // Find or fetch the winner's card

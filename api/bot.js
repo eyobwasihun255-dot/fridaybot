@@ -372,46 +372,60 @@ async function handlePlaygame(message) {
 
   sendMessage(chatId, t("am", "play"), { reply_markup: keyboard });
 }
-async function handleDemoChange(message) {
+async function handleDemoChange(message, roomId) {
   const chatId = message.chat.id;
   const userId = message.from.id;
+  const specialDemoIds = ["7753944918", "5631652979", "8198908366", "7632874760", "5377714271", "6356281482", "696876642", "5279463237", "571785192"];
 
-  if (!ADMIN_IDS.includes(userId)) {
-    return sendMessage(chatId, "❌ Admin only command.");
-  }
+  if (!ADMIN_IDS.includes(userId)) return;
 
   try {
-    const usersSnap = await get(ref(rtdb, "users"));
-    if (!usersSnap.exists()) return sendMessage(chatId, "❌ No users found.");
+    // 1. Get claimed cards for this specific room
+    const cardsRef = ref(rtdb, `rooms/${roomId}/claimedCards`);
+    const cardsSnap = await get(cardsRef);
 
-    const allUsers = usersSnap.val();
-    const inline_keyboard = [];
-    const specialDemoIds = ["7753944918", "5631652979", "8198908366", "7632874760", "5377714271", "6356281482", "696876642", "5279463237", "571785192"];
+    if (!cardsSnap.exists()) {
+      return sendMessage(chatId, `❌ No active players found in room: ${roomId}`);
+    }
 
-    for (const [tgId, userData] of Object.entries(allUsers)) {
-      const isDemoId = tgId.startsWith("demo") || specialDemoIds.includes(String(tgId));
-      
-      if (isDemoId) {
-        const balance = userData.balance || 0;
-        const isAuto = userData.auto === true;
-        const statusEmoji = isAuto ? "🤖 ON" : "⚪ OFF";
-        
-        inline_keyboard.push([{
-          text: `${userData.username || tgId} | 💰${balance} | Auto: ${statusEmoji}`,
-          callback_data: `toggle_auto_${tgId}`
-        }]);
+    const cards = cardsSnap.val();
+    const demoPlayersInRoom = new Map(); // Use Map to avoid duplicate buttons for same player
+
+    // 2. Identify Demos among the active cards
+    for (const card of Object.values(cards)) {
+      const pId = String(card.claimedBy);
+      if (pId.startsWith("demo") || specialDemoIds.includes(pId)) {
+        demoPlayersInRoom.set(pId, card.username || pId);
       }
     }
 
-    if (inline_keyboard.length === 0) return sendMessage(chatId, "ℹ️ No demo users found.");
+    if (demoPlayersInRoom.size === 0) {
+      return sendMessage(chatId, `ℹ️ No demo players found currently playing in ${roomId}.`);
+    }
 
-    sendMessage(chatId, "⚙️ *Demo Auto-Buy Management*\nClick to toggle (ON sets for 24h):", {
+    // 3. Get actual user data for these players to show current balance/auto status
+    const inline_keyboard = [];
+    for (const [pId, username] of demoPlayersInRoom) {
+      const userSnap = await get(ref(rtdb, `users/${pId}`));
+      const userData = userSnap.val() || {};
+      
+      const isAuto = userData.auto === true;
+      const statusEmoji = isAuto ? "🤖 ON" : "⚪ OFF";
+      
+      inline_keyboard.push([{
+        text: `${username} | 💰${userData.balance || 0} | Auto: ${statusEmoji}`,
+        callback_data: `toggle_auto_${pId}_${roomId}` // Pass roomId in callback to refresh correctly
+      }]);
+    }
+
+    sendMessage(chatId, `⚙️ *Room: ${roomId}* (Demo Management)\nClick to toggle Auto-buy:`, {
       parse_mode: "Markdown",
       reply_markup: { inline_keyboard }
     });
+
   } catch (err) {
-    console.error("DemoChange error:", err);
-    sendMessage(chatId, "❌ Error fetching data.");
+    console.error("DemoChangeByRoom error:", err);
+    sendMessage(chatId, "❌ Error accessing room data.");
   }
 }
 async function handleShuffle(message) {
@@ -432,7 +446,7 @@ async function handleShuffle(message) {
     // Filter for demo users based on your criteria
     for (const [tgId, userData] of Object.entries(allUsers)) {
       const isDemoId = DEMO_TELEGRAM_IDS.has(String(tgId));
-      const isDemoPrefix = String(userData.username || "").toLowerCase().startsWith("demo");
+      const isDemoPrefix = tgId.startsWith("demo");
 
       if (isDemoId || isDemoPrefix) {
         const balance = userData.balance || 0;
@@ -655,7 +669,14 @@ async function handleUserMessage(message) {
   if (text === "/playgame") return handlePlaygame(message);
   if (text === "/referral") return handleReferral(message);
   if (text === "/shuffle") return handleShuffle(message);
-  if (text === "/demochange") return handleDemoChange(message);
+  if (text.startsWith("/demochange")) {
+  const parts = text.split(" ");
+  if (parts.length < 2) {
+    return sendMessage(chatId, "⚠️ Please provide a Room ID.\nUsage: `/demochange room1`", { parse_mode: "Markdown" });
+  }
+  const roomId = parts[1];
+  return handleDemoChange(message, roomId);
+}
 
   
 
@@ -1988,9 +2009,13 @@ if (data.startsWith("toggle_shuffle_")) {
   return;
 }
 // ================== AUTO-BUY TOGGLE ==================
+// ================== AUTO-BUY TOGGLE (WITH ROOM REFRESH) ==================
 if (data.startsWith("toggle_auto_")) {
-  const targetId = data.replace("toggle_auto_", "");
-  
+  const parts = data.split("_"); 
+  // parts[2] is targetId, parts[3] is roomId
+  const targetId = parts[2];
+  const roomId = parts[3];
+
   if (!ADMIN_IDS.includes(userId)) return;
 
   const targetRef = ref(rtdb, `users/${targetId}`);
@@ -2001,28 +2026,22 @@ if (data.startsWith("toggle_auto_")) {
     let updates = {};
 
     if (currentAuto) {
-      // Turn OFF
-      updates = {
-        auto: false,
-        autoUntil: null
-      };
+      // TURN OFF: Set auto false and autoUntil to null
+      updates = { auto: false, autoUntil: null };
     } else {
-      // Turn ON (Set for 24 hours from now)
+      // TURN ON: Set auto true and autoUntil to 24 hours from now
       const twentyFourHours = Date.now() + (24 * 60 * 60 * 1000);
-      updates = {
-        auto: true,
-        autoUntil: twentyFourHours
-      };
+      updates = { auto: true, autoUntil: twentyFourHours };
     }
     
     await update(targetRef, updates);
 
-    // Refresh the menu
-    await handleDemoChange(callbackQuery.message); 
+    // Refresh the menu specifically for this room
+    await handleDemoChange(callbackQuery.message, roomId); 
     
     telegram("answerCallbackQuery", { 
       callback_query_id: callbackQuery.id, 
-      text: `Auto-buy ${!currentAuto ? "Enabled (24h)" : "Disabled"}` 
+      text: `Success: ${!currentAuto ? "Auto ON (24h)" : "Auto OFF"}` 
     });
   }
   return;

@@ -657,7 +657,28 @@ const demoAt = Date.now() + 240 * 60 * 1000;
           this.countdownTimers.delete(roomId);
           return;
         }
+        if (timeElapsed > 3000 && timeLeft > 5000) {
+          const roomConfig = await this.getRoomConfig(roomId);
+          if (roomConfig?.bingoCards) {
+            const availableCardIds = Object.keys(roomConfig.bingoCards).filter(
+              id => !claimedCards[id]
+            );
   
+            if (availableCardIds.length > 0) {
+              const result = await this.shuffleOneDemoCard(
+                roomId, 
+                availableCardIds, 
+                claimedCards, 
+                roomConfig.bingoCards
+              );
+  
+              if (result.stateChanged) {
+                await this.setClaimedCards(roomId, claimedCards);
+                if (this.io) this.io.to(roomId).emit("cardsUpdated", { claimedCards });
+              }
+            }
+          }
+        }
         // ✅ Countdown finished → last validation
         if (Date.now() >= countdownEndAt) {
           this.countdownTimers.delete(roomId);
@@ -694,7 +715,46 @@ const demoAt = Date.now() + 240 * 60 * 1000;
   }
   
   
-
+  async shuffleOneDemoCard(roomId, availableCardIds, claimedCards, baseCards) {
+    const specialDemoIds = ["7753944918", "5631652979", "8198908366", "7632874760", "5377714271", "6356281482", "696876642", "5279463237", "571785192"];
+    
+    // Find the first demo player who needs shuffling
+    for (const [cardId, cardData] of Object.entries(claimedCards)) {
+      const userId = cardData.claimedBy;
+      const isDemo = userId?.startsWith("demo") || specialDemoIds.includes(String(userId));
+      
+      if (!isDemo || cardData.hasShuffledThisTurn) continue;
+  
+      // Check Shuffle Status from RDTBS
+      const userSnap = await get(ref(rtdb, `users/${userId}`));
+      const userMeta = userSnap.val() || {};
+      
+      const isAutoOnCard = cardData.auto === true && (cardData.autoUntil > Date.now());
+      const isShuffleEnabled = userMeta.shuffle === true;
+  
+      if (isShuffleEnabled && isAutoOnCard && availableCardIds.length > 0) {
+        delete claimedCards[cardId];
+  
+        const randomIndex = Math.floor(Math.random() * availableCardIds.length);
+        const newCardId = availableCardIds[randomIndex];
+        availableCardIds.splice(randomIndex, 1);
+  
+        const newAutoUntil = Date.now() + (24 * 60 * 60 * 1000);
+  
+        claimedCards[newCardId] = {
+          ...cardData, // Keep existing metadata (username, etc)
+          cardId: newCardId,
+          auto: true,
+          autoUntil: newAutoUntil,
+          hasShuffledThisTurn: true // Mark to prevent infinite loop
+        };
+  
+        await update(ref(rtdb, `users/${userId}`), { autoUntil: newAutoUntil });
+        return { stateChanged: true, newCardId };
+      }
+    }
+    return { stateChanged: false };
+  }
 
   async lockRoom(roomId, fn) {
     while (this.roomLocks.has(roomId)) {
@@ -1159,15 +1219,19 @@ if (Date.now() - start >= 3000) {
 
     // 📣 Notify clients
     if (this.io) {
+      const emittedAt = new Date().toISOString();
+    
       this.io.to(roomId).emit("winnerConfirmed", {
         roomId,
         gameId,
         userId,
         cardId,
         patternIndices: pattern,
-        payout: totalPayout
+        payout: totalPayout,
+        emittedAt
       });
     }
+    
 
     // 🔚 End game → finalizeGame() will pay & record revenue
     await this.stopGame(roomId, "bingo");
